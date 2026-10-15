@@ -4,6 +4,9 @@
 extension с единственной кнопкой синхронизации и без редактора операций.
 Актуальные [план и этапы](docs/refactor/README.md),
 [состояние](docs/refactor/05-progress.md), [контракт API v1](docs/sync-api-v1.md).
+B1 завершён: самостоятельный [ZenImportBackend](../ZenImportBackend/README.md)
+с сохранённой историей, отдельной Docker-сборкой и проверками находится рядом.
+Дальнейшие этапы backend выполняются в этом новом проекте.
 Описание ниже относится к пока работающему прежнему приложению.
 
 Личная интеграция вьетнамских банков с ZenMoney: backend и Chrome Extension Manifest V3 с отдельной SPA. Рабочая папка: `/Users/vaslv/Projects/Vaslv/ZenImport`.

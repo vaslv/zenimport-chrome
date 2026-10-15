@@ -4,6 +4,11 @@
 маршруты ещё не подключены. Модели: `backend/sync_contracts.py`; примеры:
 `fixtures/sync-v1/`. Схемы: `json_schemas()`, JSON Schema 2020-12.
 
+После B1 реализация и актуальные модели контракта находятся в самостоятельном
+ZenImportBackend (commit e856175); там подключены health/info, добавлены коды
+method_not_allowed/internal_error. Этот файл и модели исходного проекта —
+снимок B0. Новые этапы API выполняются в ZenImportBackend.
+
 ## Границы и извлечение проектов
 
 SDK `/Users/vaslv/Projects/Vaslv/ZenMoneyAPI` остаётся универсальным. Backend
