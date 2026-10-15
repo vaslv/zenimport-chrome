@@ -1,6 +1,6 @@
 # ZenImport: передача рефакторинга исполнителю
 
-Дата: 15 октября 2026. Статус: реализация разрешена пользователем; B0, S1 и B1–B4 завершены. Следующий этап — B5.
+Дата: 15 октября 2026. Статус: реализация разрешена пользователем; B0, S1 и B1–B5 завершены. Следующий этап — B6 (E5-интеграция после готовности расширения).
 
 ## Читать небольшими порциями
 
@@ -44,4 +44,4 @@ ZenImportBackend уже выделен в самостоятельный сос�
 
 Использовать новый обычный чат с этими файлами для самостоятельного этапа; форк всей беседы не нужен. Создание новых чатов и переключение модели этим комплектом не выполнялись.
 
-После B1 этапы backend ведутся в ZenImportBackend. Ближайший — B5. Зеркало и прогноз: [mirror-predictions.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/mirror-predictions.md). Подробная карта переноса: [extraction-map.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/extraction-map.md); факт Docker-проверок: [b1-validation.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/b1-validation.md).
+После B1 этапы backend ведутся в ZenImportBackend. Ближайший — B6. Доставка: [delivery.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/delivery.md). Зеркало и прогноз: [mirror-predictions.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/mirror-predictions.md). Подробная карта переноса: [extraction-map.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/extraction-map.md); факт Docker-проверок: [b1-validation.md](/Users/vaslv/Projects/Vaslv/ZenImportBackend/docs/b1-validation.md).
