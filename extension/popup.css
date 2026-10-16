@@ -56,3 +56,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
   outline: 2px solid #2563eb; outline-offset: 2px;
 }
 [hidden] { display: none !important; }
+
+#connection-settings > summary { font-weight: 600; color: #24252b; }

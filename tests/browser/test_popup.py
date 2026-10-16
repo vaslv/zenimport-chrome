@@ -1,4 +1,5 @@
 from pathlib import Path
+from uuid import uuid4
 import pytest
 from playwright.sync_api import sync_playwright, expect
 from support import PopupBackend, http_server, installed, connect, TOKEN
@@ -12,6 +13,7 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         expect(popup.locator('#sync')).to_be_disabled()
         connect(popup,bank,url)
         expect(popup.locator('.account')).to_have_count(1)
+        expect(popup.locator('#server-form')).to_be_hidden()
         expect(popup.locator('.account select option')).to_have_count(3) # unset, ignored, same currency
         assert popup.locator('.account input[type=date]').input_value()
         popup.get_by_role('button',name='6 месяцев',exact=True).is_hidden() # unset, no accidental default target
@@ -24,10 +26,12 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         assert popup.locator('.account input[type=date]').input_value()==first_date
         popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
+        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        popup.locator('#settings > summary').click()
         popup.set_viewport_size({'width':390,'height':700})
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-settings.png',full_page=True)
         assert popup.evaluate('document.documentElement.scrollWidth<=innerWidth')
-        popup.locator('#settings summary').focus();popup.keyboard.press('Space')
+        popup.locator('#settings > summary').focus();popup.keyboard.press('Space')
         expect(popup.locator('#server-form')).to_be_hidden()
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-compact.png',clip=popup.locator('main').bounding_box())
         assert not bank.locator('[id*=zenimport], [class*=zenimport]').count()
@@ -131,3 +135,37 @@ def test_connection_draft_survives_popup_closure_and_failed_connection(first):
         expect(popup.locator('#url')).to_have_value(url)
         expect(popup.locator('#token')).to_have_value('')
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
+
+
+def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
+    service=PopupBackend()
+    with http_server(service) as url, sync_playwright() as p, installed(p,url) as (context,worker,bank,popup,identifier):
+        connect(popup,bank,url)
+        expect(popup.locator('.account')).to_have_count(1)
+        expect(popup.locator('#settings')).to_have_attribute('open','')
+        expect(popup.locator('#server-form')).to_be_hidden()
+        popup.locator('.account select').select_option('target-vnd')
+        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        popup.reload()
+        expect(popup.locator('#sync')).to_be_enabled()
+        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        popup.locator('#settings > summary').click()
+        expect(popup.locator('#server-form')).to_be_hidden()
+        popup.locator('#connection-settings > summary').click()
+        expect(popup.locator('#server-form')).to_be_visible()
+        # A later-discovered account needs a decision; the server connection does not.
+        service.accounts['87654321']=dict(next(iter(service.accounts.values())),id=str(uuid4()),source_key='87654321',
+            label='Second fixture account',masked_number='••4321',selection='unconfigured',settings_version=0,
+            zenmoney_account_id=None,import_start=None)
+        popup.reload()
+        expect(popup.locator('.account')).to_have_count(2)
+        expect(popup.locator('#settings')).to_have_attribute('open','')
+        expect(popup.locator('#server-form')).to_be_hidden()
+        popup.locator('.account').nth(1).locator('select').select_option('ignored')
+        popup.locator('.account').nth(1).get_by_role('button',name='Сохранить счёт',exact=True).click()
+        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        service.version=2
+        popup.reload()
+        expect(popup.locator('#status')).to_contain_text('несовместимы')
+        expect(popup.locator('#server-form')).to_be_visible()

@@ -18,7 +18,13 @@ const messages={
   capture_context_changed:'Страница или счёт изменились. Повторите синхронизацию.',validation_error:'Проверьте выбранные счета и дату.',
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
-const showError=error=>status(messages[error.code] || 'Не удалось выполнить действие. Повторите позже.','error');
+const showError=error=>{
+  status(messages[error.code] || 'Не удалось выполнить действие. Повторите позже.','error');
+  if(['not_configured','unauthorized','invalid_server','unsupported_api_version'].includes(error.code)){
+    $('settings').open=true;$('connection-settings').open=true;
+  }else if(['account_unconfigured','settings_conflict','zenmoney_account_unavailable'].includes(error.code))$('settings').open=true;
+};
+let connectionDraftPending=false;
 let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='';
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
 function updateButton() {
@@ -49,6 +55,10 @@ function progress(state) {
         : `История сохранена. ${messages[job.errors?.at(-1)?.code] || 'Отправка приостановлена на сервере.'}`
       : `История сохранена. Сервер отправляет операции: ${d.pending}.`,job.delivery_state==='complete'?'success':job.delivery_state==='blocked'?'error':'loading');
   }
+}
+function accountNeedsSetup(account) {
+  return account.selection==='unconfigured' || account.selection==='enabled' &&
+    (!account.supported || !account.import_start || !catalog.some(item=>item.id===account.zenmoney_account_id && item.currency===account.currency));
 }
 function dateInput(value) {return node('input','',{type:'date',value,max:today(),required:true});}
 function accountForm(account) {
@@ -82,6 +92,7 @@ function accountForm(account) {
         import_start:target.value==='ignored'?null:date.value}});
       view.connection.accounts=view.connection.accounts.map(a=>a.id===account.id?result.account:a);
       status('Счёт сохранён.','success');renderAccounts();updateButton();
+      if(!connectionDraftPending && !view.connection.accounts.some(accountNeedsSetup))$('settings').open=false;
     } catch(error){showError(error);}finally{save.disabled=false;}
   });
   return form;
@@ -103,15 +114,15 @@ async function refreshData() {
     view=await rpc({type:'inspect'});compatible=true;
     $('bank').textContent=view.bank==='vietinbank'?'VietinBank':view.bank;
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
-    const pending=view.connection.accounts.some(a=>a.selection==='unconfigured');
+    const pending=view.connection.accounts.some(accountNeedsSetup);
     if(pending){$('settings').open=true;status('Выберите счета для загрузки.');}
-    else if(!capture)status('Готово к синхронизации.');
+    else if(!capture)status(view.connection.accounts.some(a=>a.selection==='enabled' && a.supported)?'Готово к синхронизации.':messages.account_disabled);
     else progress(capture);
   } catch(error){showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
 }
 let connectionEdited=false;
 for(const id of ['url','token'])$(id).addEventListener('input',()=>{
-  connectionEdited=true;
+  connectionEdited=true;connectionDraftPending=true;
   // Issue the write on input, before the popup can close; no debounce/unload hook.
   chrome.storage.session.set({connectionDraft:{url:$('url').value,token:$('token').value}})
     .catch(()=>status('Не удалось сохранить введённые настройки. Повторите ввод.','error'));
@@ -121,7 +132,8 @@ $('server-form').addEventListener('submit',async event=>{
   try {
     if(!await chrome.permissions.request({origins:[permissionOrigin($('url').value)]}))throw Object.assign(Error(),{code:'invalid_server'});
     await rpc({type:'configure',url:$('url').value,token:$('token').value});
-    $('token').value='';configured=true;capture=null;await refresh();
+    $('token').value='';configured=true;connectionDraftPending=false;capture=null;
+    $('connection-settings').open=false;$('settings').open=false;await refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('refresh-accounts').addEventListener('click',refresh);
@@ -148,7 +160,9 @@ try {
  if(!connectionEdited){$('url').value=connectionDraft?.url ?? state.url;$('token').value=connectionDraft?.token ?? '';}
  $('reimport').value=state.reimportFrom;
  reimportSaved=state.reimportFrom;
- $('settings').open=!state.configured || !!connectionDraft;capture=state.capture;
+ connectionDraftPending=connectionEdited || !!connectionDraft;
+ $('connection-settings').open=!state.configured || connectionDraftPending;
+ $('settings').open=!state.configured || connectionDraftPending;capture=state.capture;
  if(state.configured)await refresh();else status(messages.not_configured);
  if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}

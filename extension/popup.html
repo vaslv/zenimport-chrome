@@ -11,12 +11,13 @@
   <button id="sync" class="primary" type="button" disabled>Синхронизировать</button>
   <p id="status" role="status" aria-live="polite"></p>
   <details id="settings"><summary>Настройки</summary>
-    <form id="server-form" class="settings-section">
-      <h2>Подключение</h2>
+    <details id="connection-settings" class="settings-section"><summary>Подключение</summary>
+    <form id="server-form">
       <label>Адрес сервера<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
       <label>Токен сервера<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
       <button id="connect" type="submit">Подключить</button>
     </form>
+    </details>
     <section id="account-settings" class="settings-section" hidden>
       <h2>Счета банка</h2>
       <section id="accounts" aria-label="Привязка счетов"></section>
