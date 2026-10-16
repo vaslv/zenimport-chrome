@@ -1,5 +1,6 @@
 import {historyAccount} from './parser.js';
 export {parsePage} from './parser.js';
+export {historyAccount as accountFromUrl} from './parser.js';
 
 export const id = 'vietinbank';
 export const version = '3.0.0';

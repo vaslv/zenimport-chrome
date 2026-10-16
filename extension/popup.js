@@ -18,7 +18,7 @@ const messages={
   capture_context_changed:'Страница или счёт изменились. Повторите синхронизацию.',validation_error:'Проверьте выбранные счета и дату.',
 };
 const showError=error=>{$('status').textContent=messages[error.code] || 'Не удалось выполнить действие. Повторите позже.';};
-let view=null,catalog=[],capture=null,compatible=false,busy=false;
+let view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='';
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
 function updateButton() {
   const active=['planned','collecting'].includes(capture?.phase);
@@ -68,7 +68,7 @@ function accountForm(account) {
     event.preventDefault();
     if(!target.value){showError({code:'account_unconfigured'});return;}
     if(target.value!=='ignored' && (!validDate(date.value) || date.value>today())){showError({code:'validation_error'});return;}
-    save.disabled=true;
+    save.disabled=true;$('status').textContent='Сохраняем счёт…';
     try {
       const result=await rpc({type:'settings',accountId:account.id,settings:{expected_version:account.settings_version,
         selection:target.value==='ignored'?'ignored':'enabled',zenmoney_account_id:target.value==='ignored'?null:target.value,
@@ -86,8 +86,12 @@ function renderAccounts() {
   for(const account of view.connection.accounts)$('accounts').append(accountForm(account));
   $('accounts').append(node('p','Новый счёт ZenMoney создайте в мобильном приложении.',{className:'muted'}));
 }
-async function refresh() {
-  compatible=false;updateButton();
+function refresh() {
+  if(!refreshTask)refreshTask=refreshData().finally(()=>{refreshTask=null;});
+  return refreshTask;
+}
+async function refreshData() {
+  compatible=false;$('refresh-accounts').disabled=true;$('accounts').inert=true;for(const control of $('accounts').querySelectorAll('input,select,button'))control.disabled=true;updateButton();
   try {
     view=await rpc({type:'inspect'});compatible=true;
     $('bank').textContent=view.bank==='vietinbank'?'VietinBank':view.bank;
@@ -95,7 +99,7 @@ async function refresh() {
     const pending=view.connection.accounts.some(a=>a.selection==='unconfigured');
     if(pending){$('settings').open=true;$('status').textContent='Настройте новые счета. Остальные можно синхронизировать.';}
     else if(!capture)$('status').textContent='Готово к синхронизации.';
-  } catch(error){showError(error);}finally{updateButton();}
+  } catch(error){showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
 }
 $('server-form').addEventListener('submit',async event=>{
   event.preventDefault();busy=true;updateButton();
@@ -113,10 +117,11 @@ $('sync').addEventListener('click',async()=>{
     if(['planned','collecting'].includes(capture?.phase)){await rpc({type:'stop'});}
     else {
       // Request only this bank, from the explicit click, not broad HTTPS access.
-      if(!await chrome.permissions.request({origins:['https://ipay.vietinbank.vn/*']}))throw Object.assign(Error(),{code:'unsupported_bank'});
+      if(!view?.origin || !await chrome.permissions.request({origins:[view.origin]}))throw Object.assign(Error(),{code:'unsupported_bank'});
       const date=$('reimport').value;
       if(date && (!validDate(date) || date>today()))throw Object.assign(Error(),{code:'validation_error'});
       await rpc({type:'reimport',date});
+      reimportSaved=date;
       $('status').textContent='Начинаем синхронизацию…';await rpc({type:'start'});
     }
     const state=await rpc({type:'status'});progress(state.capture);
@@ -124,12 +129,14 @@ $('sync').addEventListener('click',async()=>{
 });
 try {
  const state=await rpc({type:'status'});$('url').value=state.url;$('reimport').value=state.reimportFrom;
+ reimportSaved=state.reimportFrom;
  $('settings').open=!state.configured;capture=state.capture;
  if(state.configured)await refresh();else $('status').textContent=messages.not_configured;
- if(capture)progress(capture);
+ if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}
 setInterval(async()=>{
  try{const state=await rpc({type:'status'});if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
-  if(!state.reimportFrom)$('reimport').value='';
+  if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value='';
+  reimportSaved=state.reimportFrom;
  }catch{}
 },1500);

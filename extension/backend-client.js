@@ -15,7 +15,7 @@ export function serverAddress(value) {
 export function permissionOrigin(url) { return new URL(serverAddress(url)).origin + '/*'; }
 
 export class Backend {
-  constructor(config, fetcher = fetch) { this.url = serverAddress(config.url); this.token = config.token; this.fetcher = fetcher; }
+  constructor(config, fetcher = (...args) => fetch(...args)) { this.url = serverAddress(config.url); this.token = config.token; this.fetcher = fetcher; }
   async request(path, method = 'GET', body) {
     if (!this.token) throw new SyncError('unauthorized');
     let response;

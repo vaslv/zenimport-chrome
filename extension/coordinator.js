@@ -11,8 +11,16 @@ export class Coordinator {
   async start({connection, bank, tabId, reimportFrom = null}) {
     let state = await this.store.get();
     if (state && unfinished(state.phase)) {
-      if (state.connection.id !== connection.id || state.tabId !== tabId) throw new SyncError('account_busy');
+      if (state.connection.id !== connection.id || (state.phase!=='paused' && state.tabId!==tabId)) throw new SyncError('account_busy');
       // A manual retry keeps the same command ID after a lost HTTP response.
+      if (state.phase === 'paused' && state.job) {
+        // A known paused job needs a NEW resume command. Repeating its original
+        // request_id only fetches the original idempotent result on the server.
+        state.command = {...state.command,request_id:this.uuid()};
+        state.phase='planned';state.error=null;state.lease=null;
+        state.connection=connection;state.tabId=tabId;
+        await this.store.set(state);
+      }
     } else {
       state = {phase:'planned', connection, bank, tabId, workerId:this.uuid(),
         command:{connection_id:connection.id,request_id:this.uuid(),reimport_from:reimportFrom}, driver:null};
@@ -55,6 +63,7 @@ export class Coordinator {
     state.driver = {runId:this.uuid(),documentId,account:account.source_key,interval:next.interval,
       total:null,size:null};
     state.phase = 'collecting';
+    state.received = 0;
     await this.store.set(state); // crash here is recoverable: running() is false
     await adapter.launch(state.tabId,state.driver);
     return state;
@@ -105,7 +114,8 @@ export class Coordinator {
   }
   async stop() {
     const state = await this.store.get();
-    if (!state?.job) return;
+    if (!state) return;
+    if (!state.job) {state.phase='cancelled';state.driver=null;await this.store.set(state);return;}
     await this.backend.request(`/jobs/${state.job.id}/stop`,'POST',{});
     await this.connector(state.bank).abort(state.tabId).catch(()=>{});
     state.phase='cancelled'; state.driver=null; await this.store.set(state);

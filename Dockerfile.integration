@@ -1,0 +1,15 @@
+# syntax=docker/dockerfile:1
+FROM mcr.microsoft.com/playwright/python:v1.58.0-noble@sha256:678457c4c323b981d8b4befc57b95366bb1bb6aa30057b1269f6b171e8d9975a
+WORKDIR /app
+COPY --from=backend requirements.runtime.lock.txt ./
+RUN pip install --no-cache-dir -r requirements.runtime.lock.txt playwright==1.58.0 pytest==8.3.5
+COPY --from=backend vendor ./vendor
+RUN cd vendor && sha256sum -c SHA256SUMS && pip install --no-cache-dir --no-deps ./*.whl
+COPY --from=backend backend ./backend
+COPY --from=backend tests/capture_factory.py tests/mirror_factory.py tests/delivery_factory.py ./fixture_helpers/
+COPY extension ./extension
+COPY scripts/build.py ./scripts/build.py
+RUN python scripts/build.py
+COPY tests/browser ./tests/browser
+ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app:/app/fixture_helpers
+CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/browser"]

@@ -4,3 +4,4 @@
 !extension/**
 !scripts/build.py
 !tests/**
+!Dockerfile.integration

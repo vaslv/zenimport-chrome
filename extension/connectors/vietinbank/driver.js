@@ -3,9 +3,17 @@
   const config=globalThis.__zenImportCaptureConfig;delete globalThis.__zenImportCaptureConfig;
   if(!config)return;
   globalThis.__zenImportCaptureAbort?.();
-  let stopped=false,accountReady=false,gate=Infinity,inbox=[],completed=false;
+  let stopped=false,accountReady=false,gate=Infinity,inbox=[],completed=false,filterReady=false;
   globalThis.__zenImportCaptureRun=config.runId;
-  const rpc=async(type,extra={})=>{const r=await chrome.runtime.sendMessage({type,runId:config.runId,account:config.account,...extra});if(!r?.ok)throw Error(r?.error||'Связь с загрузчиком потеряна.');return r;};
+  const rpc=async(type,extra={})=>{
+    for(let attempt=0;attempt<4;attempt++){
+      let result;
+      try{result=await chrome.runtime.sendMessage({type,runId:config.runId,account:config.account,...extra});}
+      catch{if(attempt===3)throw Error('Связь с расширением потеряна.');await new Promise(resolve=>setTimeout(resolve,300));continue;}
+      if(!result?.ok)throw Error(result?.error||'Связь с загрузчиком потеряна.');
+      return result;
+    }
+  };
   const event=async()=>{};
   const visible=e=>{if(!e||e.closest('[aria-hidden="true"]'))return false;const r=e.getBoundingClientRect();return !!(r.width&&r.height)&&getComputedStyle(e).visibility!=='hidden';};
   const text=e=>e?.textContent?.replace(/\s+/g,' ').trim()||'';
@@ -14,6 +22,13 @@
     if(location.pathname!=='/payment-history'||new URL(location.href).searchParams.get('accountNo')!==config.account)throw Error('Банк сменил страницу или завершил сессию.');
     const selected=text(document.querySelector('.vt-select__single-value .cus-option'));
     if(accountReady&&(!selected.startsWith(config.account+' - ')||!selected.endsWith(' - Current account')))throw Error('Выбран другой или неподдерживаемый счёт.');
+    if(filterReady){
+      const expected=[config.interval.period.start,config.interval.period.end].map(display).join(' - ');
+      if(document.querySelector('input[placeholder="Choose time range"]')?.value!==expected)throw Error('Период изменился.');
+      for(const placeholder of ['Input keyword to search','From','To'])if(document.querySelector(`input[placeholder="${placeholder}"]`)?.value)throw Error('Фильтры изменились.');
+      const all=[...document.querySelectorAll('input[type="radio"]')].find(r=>text(r.closest('label')||r.parentElement)==='All');
+      if(!all?.checked)throw Error('Фильтр операций изменился.');
+    }
   }
   async function wait(check,action,limit=30000){
     const start=Date.now();let polls=0;await event('wait',{action});
@@ -54,7 +69,7 @@
     await pick(period.from,'start_date');await pick(period.to,'end_date');
     await click(button('Chọn'),'apply_dates');
     await wait(()=>input.value===`${display(period.from)} - ${display(period.to)}`,'dates_applied');
-    await event('filter',period);
+    filterReady=true;await event('filter',period);
   }
   const accept=(data,startedAt,error)=>{
     if(stopped||!(startedAt>=gate))return;
@@ -63,7 +78,7 @@
   const onWindow=e=>{if(e.source===window&&e.origin===location.origin&&!e.data?.replayed&&['zenimport-history','zenimport-inline-history'].includes(e.data?.source))accept(e.data.data,e.data.startedAt,e.data.error);};
   const onExtension=m=>{if(m?.type==='capture-abort')cleanup();};
   window.addEventListener('message',onWindow);chrome.runtime.onMessage.addListener(onExtension);
-  function cleanup(){stopped=true;globalThis.__zenImportCaptureRun=null;window.removeEventListener('message',onWindow);chrome.runtime.onMessage.removeListener(onExtension);}
+  function cleanup(){stopped=true;if(globalThis.__zenImportCaptureRun===config.runId)globalThis.__zenImportCaptureRun=null;window.removeEventListener('message',onWindow);chrome.runtime.onMessage.removeListener(onExtension);}
   globalThis.__zenImportCaptureAbort=cleanup;
   async function response(page){return wait(()=>{
     const found=inbox.find(e=>e.error||e.data?.currentPage===page);

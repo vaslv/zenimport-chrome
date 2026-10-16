@@ -36,7 +36,7 @@ test('ACK-before-checkpoint, worker re-creation, lost ACK replay and ignored acc
  const f=fixture();let engine=f.create();await engine.start(f.start);
  let state=await f.store.get();const run=state.driver.runId;
  f.loseAck();await assert.rejects(engine.page(run,f.source,{currentPage:0}));
- assert.equal((await f.store.get()).received,undefined);assert.equal(f.pages.size,1);
+ assert.equal((await f.store.get()).received,0);assert.equal(f.pages.size,1);
  engine=f.create(); // New service-worker module, same durable store and server.
  await engine.page(run,f.source,{currentPage:0});assert.equal((await f.store.get()).received,1);
  await engine.complete(run,f.source);await engine.pump();
@@ -61,4 +61,11 @@ test('popup closure does not own capture; pause/cancel do not delete acknowledge
 test('a persisted driver not actually launched is restarted from server checkpoint',async()=>{
  const f=fixture();await f.create().start(f.start);const old=(await f.store.get()).driver.runId;
  f.stopDriver();await f.create().pump();assert.notEqual((await f.store.get()).driver.runId,old);
+});
+test('manual resume rebinds a paused job to a reopened bank tab with a new command UUID',async()=>{
+ const f=fixture();const engine=f.create();await engine.start(f.start);
+ const old=(await f.store.get()).command.request_id;
+ await engine.pause();await engine.start({...f.start,tabId:77});
+ const state=await f.store.get();assert.equal(state.tabId,77);assert.notEqual(state.command.request_id,old);
+ assert.equal(state.job.id,'job');
 });
