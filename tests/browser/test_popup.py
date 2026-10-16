@@ -28,6 +28,7 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         assert popup.evaluate('document.documentElement.scrollWidth<=innerWidth')
         popup.locator('#settings summary').focus();popup.keyboard.press('Space')
         expect(popup.locator('#server-form')).to_be_hidden()
+        if Path('/results').is_dir():popup.screenshot(path='/results/popup-compact.png',clip=popup.locator('main').bounding_box())
         assert not bank.locator('[id*=zenimport], [class*=zenimport]').count()
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
         # The content world cannot read backend configuration.

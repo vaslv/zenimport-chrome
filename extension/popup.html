@@ -1,15 +1,31 @@
 <!doctype html>
-<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>ZenImport</title><link rel="stylesheet" href="popup.css"></head>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZenImport</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
 <body><main>
   <header><h1>ZenImport</h1><span id="bank"></span></header>
-  <button id="sync" type="button" disabled>Синхронизировать</button>
+  <button id="sync" class="primary" type="button" disabled>Синхронизировать</button>
   <p id="status" role="status" aria-live="polite"></p>
   <details id="settings"><summary>Настройки</summary>
-    <form id="server-form"><label>Адрес сервера<input id="url" type="url" placeholder="http://localhost:8000" required></label>
-    <label>Токен backend<input id="token" type="password" autocomplete="off" required></label>
-    <button type="submit">Подключить</button></form>
-    <button id="refresh-accounts" type="button">Обновить список счетов</button>
-    <section id="accounts"></section>
-    <label>Перечитать старую историю один раз<input id="reimport" type="date"></label>
+    <form id="server-form" class="settings-section">
+      <h2>Подключение</h2>
+      <label>Адрес сервера<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
+      <label>Токен сервера<input id="token" type="password" autocomplete="off" spellcheck="false" required></label>
+      <button id="connect" type="submit">Подключить</button>
+    </form>
+    <section id="account-settings" class="settings-section" hidden>
+      <h2>Счета банка</h2>
+      <section id="accounts" aria-label="Привязка счетов"></section>
+      <button id="refresh-accounts" type="button">Обновить список счетов</button>
+    </section>
+    <section id="history-settings" class="settings-section" hidden>
+      <label>Разовая загрузка истории с даты<input id="reimport" type="date" aria-describedby="reimport-hint"></label>
+      <p id="reimport-hint" class="muted">Необязательно. Применится при следующей синхронизации.</p>
+    </section>
   </details>
-</main><script type="module" src="popup.js"></script></body></html>
+</main><script type="module" src="popup.js"></script></body>
+</html>
