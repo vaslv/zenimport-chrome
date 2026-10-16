@@ -58,7 +58,20 @@ export async function prepare(tabId) {
     await chrome.scripting.registerContentScripts([{id:identifier,matches:[origin],
       js:['connectors/vietinbank/observer.js'],world:'MAIN',runAt:'document_start',persistAcrossSessions:true}]);
     // Required once: the bank caches fetch before a late script injection.
+    const [old] = await chrome.scripting.executeScript({target:{tabId},func:()=>true});
     await chrome.tabs.reload(tabId);
+    const deadline = Date.now() + 30000;
+    while (Date.now() < deadline) {
+      try {
+        const current = await chrome.tabs.get(tabId);
+        if (current.status === 'complete') {
+          const [fresh] = await chrome.scripting.executeScript({target:{tabId},func:()=>true});
+          if (fresh.documentId !== old.documentId) return;
+        }
+      } catch {}
+      await new Promise(resolve=>setTimeout(resolve,300));
+    }
+    throw Object.assign(Error(),{code:'bank_login_required'});
   }
 }
 export async function running(tabId, driver) {
