@@ -1,5 +1,6 @@
 from pathlib import Path
 from uuid import uuid4
+import threading
 import pytest
 from playwright.sync_api import sync_playwright, expect
 from support import PopupBackend, http_server, installed, connect, TOKEN
@@ -169,3 +170,48 @@ def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
         popup.reload()
         expect(popup.locator('#status')).to_contain_text('несовместимы')
         expect(popup.locator('#server-form')).to_be_visible()
+
+
+def test_account_save_shows_pending_error_and_confirmation_at_the_button():
+    class SlowSettings(PopupBackend):
+        def __init__(self):
+            super().__init__();self.started=threading.Event();self.release=threading.Event();self.reject=True
+        def request(self,method,path,body):
+            if path.endswith('/settings'):
+                self.started.set()
+                assert self.release.wait(10)
+                if self.reject:raise AssertionError('fixture failure')
+            return super().request(method,path,body)
+    service=SlowSettings()
+    with http_server(service) as url, sync_playwright() as p, installed(p,url) as (_,worker,bank,popup,_):
+        connect(popup,bank,url)
+        expect(popup.locator('.account')).to_have_count(1)
+        popup.locator('.account select').select_option('target-vnd')
+        popup.set_viewport_size({'width':390,'height':300})
+        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        expect(popup.get_by_role('button',name='Сохраняем…',exact=True)).to_be_disabled()
+        expect(popup.locator('.account-status')).to_be_visible()
+        expect(popup.locator('.account-status')).to_contain_text('Сохраняем счёт')
+        expect(popup.locator('.account select')).to_be_disabled()
+        assert service.started.is_set()
+        if Path('/results').is_dir():popup.screenshot(path='/results/account-saving.png')
+        service.release.set()
+        expect(popup.locator('.account-status')).to_have_attribute('data-tone','error')
+        expect(popup.locator('.account-status')).to_be_visible()
+        expect(popup.get_by_role('button',name='Сохранить счёт',exact=True)).to_be_enabled()
+        expect(popup.locator('.account select')).to_have_value('target-vnd')
+        service.reject=False
+        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        popup.locator('#settings > summary').click()
+        expect(popup.get_by_role('button',name='Сохранено',exact=True)).to_be_disabled()
+        expect(popup.locator('.account-status')).to_contain_text('Счёт сохранён')
+        expect(popup.locator('.account-status')).to_have_attribute('data-tone','success')
+        popup.reload()
+        expect(popup.locator('#sync')).to_be_enabled()
+        popup.locator('#settings > summary').click()
+        expect(popup.get_by_role('button',name='Сохранено',exact=True)).to_be_disabled()
+        popup.locator('.account input[type=date]').fill('2026-04-16')
+        expect(popup.get_by_role('button',name='Сохранить счёт',exact=True)).to_be_enabled()
+        expect(popup.locator('.account-status')).to_be_hidden()
+        assert not [call for call in service.calls if call[1]=='/api/v1/jobs']

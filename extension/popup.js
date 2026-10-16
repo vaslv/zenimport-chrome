@@ -62,6 +62,8 @@ function accountNeedsSetup(account) {
 }
 function dateInput(value) {return node('input','',{type:'date',value,max:today(),required:true});}
 function accountForm(account) {
+  const saved=!accountNeedsSetup(account);
+  let saving=false;
   const form=node('form','',{className:'account'}), title=node('strong',account.label || account.masked_number);
   form.append(title,node('small',`${account.masked_number} · ${account.currency}`));
   const target=node('select','',{'ariaLabel':`Счёт ZenMoney для ${account.label}`});
@@ -76,24 +78,37 @@ function accountForm(account) {
   const date=dateInput(account.import_start || daysAgo(30)), dateLabel=node('label','Первый импорт — с даты');dateLabel.append(date);form.append(dateLabel);
   const shortcuts=node('div','',{className:'shortcuts'});
   for(const [text,value] of [['30 дней',()=>daysAgo(30)],['6 месяцев',()=>monthsAgo(6)]]){
-    const button=node('button',text,{type:'button'});button.addEventListener('click',()=>{date.value=value();});shortcuts.append(button);
+    const button=node('button',text,{type:'button'});button.addEventListener('click',()=>{date.value=value();date.dispatchEvent(new Event('input',{bubbles:true}));});shortcuts.append(button);
   }
   const syncFields=()=>{const enabled=target.value && target.value!=='ignored';date.disabled=!enabled;dateLabel.hidden=!enabled;shortcuts.hidden=!enabled;};
   target.addEventListener('change',syncFields);syncFields();form.append(shortcuts);
-  const save=node('button','Сохранить счёт',{type:'submit'});form.append(save);
+  const save=node('button',saved?'Сохранено':'Сохранить счёт',{type:'submit',disabled:saved});
+  const feedback=node('p',saved?'Счёт сохранён.':'',{className:'account-status',role:'status',ariaLive:'polite',hidden:!saved});
+  feedback.dataset.tone='success';form.append(save,feedback);
+  const localStatus=(text,tone)=>{feedback.textContent=text;feedback.dataset.tone=tone;feedback.hidden=false;};
+  form.addEventListener('input',()=>{if(!saving){save.textContent='Сохранить счёт';save.disabled=false;feedback.hidden=true;}});
+  form.addEventListener('change',()=>{if(!saving){save.textContent='Сохранить счёт';save.disabled=false;feedback.hidden=true;}});
+  form.addEventListener('invalid',()=>localStatus('Проверьте выбранный счёт и дату начала загрузки.','error'),true);
   form.addEventListener('submit',async event=>{
-    event.preventDefault();
-    if(!target.value){showError({code:'account_unconfigured'});return;}
-    if(target.value!=='ignored' && (!validDate(date.value) || date.value>today())){showError({code:'validation_error'});return;}
-    save.disabled=true;status('Сохраняем счёт…','loading');
+    event.preventDefault();if(saving)return;
+    if(!target.value){localStatus('Выберите счёт ZenMoney или «Не загружать».','error');return;}
+    if(target.value!=='ignored' && (!validDate(date.value) || date.value>today())){localStatus(messages.validation_error,'error');return;}
+    saving=true;save.textContent='Сохраняем…';localStatus('Сохраняем счёт…','loading');status('Сохраняем счёт…','loading');
+    const controls=[...form.querySelectorAll('input,select,button')];for(const control of controls)control.disabled=true;
     try {
       const result=await rpc({type:'settings',accountId:account.id,settings:{expected_version:account.settings_version,
         selection:target.value==='ignored'?'ignored':'enabled',zenmoney_account_id:target.value==='ignored'?null:target.value,
         import_start:target.value==='ignored'?null:date.value}});
       view.connection.accounts=view.connection.accounts.map(a=>a.id===account.id?result.account:a);
-      status('Счёт сохранён.','success');renderAccounts();updateButton();
+      form.replaceWith(accountForm(result.account));
+      status('Счёт сохранён.','success');updateButton();
       if(!connectionDraftPending && !view.connection.accounts.some(accountNeedsSetup))$('settings').open=false;
-    } catch(error){showError(error);}finally{save.disabled=false;}
+    } catch(error){
+      showError(error);
+      localStatus(error.code==='backend_unavailable'?'Не удалось подтвердить сохранение. Обновите список счетов.':messages[error.code] || 'Не удалось сохранить счёт. Повторите позже.','error');
+    }finally{
+      saving=false;for(const control of controls)control.disabled=false;syncFields();save.textContent='Сохранить счёт';
+    }
   });
   return form;
 }
