@@ -48,6 +48,8 @@ async function popup(data) {
     if (!config.token || config.token.length > 4096) throw new SyncError('unauthorized');
     await new Backend(config).info();
     await chrome.storage.local.set({config});
+    // Clear even when the popup closed while the connection was being checked.
+    await chrome.storage.session.remove('connectionDraft');
     await chrome.storage.local.remove(['view','capture']);
     return {configured:true};
   }

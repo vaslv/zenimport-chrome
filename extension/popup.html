@@ -14,7 +14,7 @@
     <form id="server-form" class="settings-section">
       <h2>Подключение</h2>
       <label>Адрес сервера<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
-      <label>Токен сервера<input id="token" type="password" autocomplete="off" spellcheck="false" required></label>
+      <label>Токен сервера<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
       <button id="connect" type="submit">Подключить</button>
     </form>
     <section id="account-settings" class="settings-section" hidden>

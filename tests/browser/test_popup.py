@@ -1,6 +1,7 @@
 from pathlib import Path
+import pytest
 from playwright.sync_api import sync_playwright, expect
-from support import PopupBackend, http_server, installed, connect
+from support import PopupBackend, http_server, installed, connect, TOKEN
 
 
 def test_popup_setup_keyboard_dates_and_no_bank_ui():
@@ -93,3 +94,40 @@ def test_native_action_popup_keeps_intrinsic_width():
         if Path('/results').is_dir():
             screenshot=command('Page.captureScreenshot',{'captureBeyondViewport':True})['data']
             Path('/results/popup-native.png').write_bytes(base64.b64decode(screenshot))
+
+
+@pytest.mark.parametrize('first', ['url', 'token'])
+def test_connection_draft_survives_popup_closure_and_failed_connection(first):
+    service=PopupBackend()
+    with http_server(service) as url, sync_playwright() as p, installed(p,url) as (context,worker,bank,popup,identifier):
+        values={'url':url,'token':TOKEN}
+        def reopen(old):
+            old.close()
+            fresh=context.new_page();fresh.goto(f'chrome-extension://{identifier}/popup.html')
+            bank.bring_to_front()
+            return fresh
+        # Close immediately after each paste, without waiting for a save button.
+        popup.locator('#'+first).fill(values[first])
+        popup=reopen(popup)
+        expect(popup.locator('#'+first)).to_have_value(values[first])
+        second='token' if first=='url' else 'url'
+        popup.locator('#'+second).fill(values[second])
+        popup=reopen(popup)
+        for field,value in values.items():expect(popup.locator('#'+field)).to_have_value(value)
+        assert not worker.evaluate("async()=> (await chrome.storage.local.get('config')).config")
+        assert not service.calls # Drafts do not connect or authorize synchronization.
+        assert worker.evaluate("async()=>{const [{result}]=await chrome.scripting.executeScript({target:{tabId:(await chrome.tabs.query({url:'https://ipay.vietinbank.vn/*'}))[0].id},func:async()=>{try{return !(await chrome.storage.session.get('connectionDraft')).connectionDraft}catch{return true}}});return result}")
+        service.version=2
+        popup.locator('#connect').click()
+        expect(popup.locator('#status')).to_contain_text('несовместимы')
+        popup=reopen(popup)
+        for field,value in values.items():expect(popup.locator('#'+field)).to_have_value(value)
+        service.version=1
+        popup.locator('#connect').click()
+        expect(popup.locator('.account')).to_have_count(1)
+        expect(popup.locator('#token')).to_have_value('')
+        assert not worker.evaluate("async()=> (await chrome.storage.session.get('connectionDraft')).connectionDraft")
+        popup=reopen(popup)
+        expect(popup.locator('#url')).to_have_value(url)
+        expect(popup.locator('#token')).to_have_value('')
+        assert not [call for call in service.calls if call[1]=='/api/v1/jobs']

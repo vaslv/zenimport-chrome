@@ -26,6 +26,7 @@ function updateButton() {
   $('account-settings').hidden=!configured;
   $('history-settings').hidden=!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported);
   $('connect').disabled=busy;
+  $('url').disabled=busy;$('token').disabled=busy;
   $('sync').textContent=active?'Остановить сбор':'Синхронизировать';
   $('sync').disabled=busy || (!active && (!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported)));
 }
@@ -108,6 +109,13 @@ async function refreshData() {
     else progress(capture);
   } catch(error){showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
 }
+let connectionEdited=false;
+for(const id of ['url','token'])$(id).addEventListener('input',()=>{
+  connectionEdited=true;
+  // Issue the write on input, before the popup can close; no debounce/unload hook.
+  chrome.storage.session.set({connectionDraft:{url:$('url').value,token:$('token').value}})
+    .catch(()=>status('Не удалось сохранить введённые настройки. Повторите ввод.','error'));
+});
 $('server-form').addEventListener('submit',async event=>{
   event.preventDefault();busy=true;status('Подключаемся к серверу…','loading');updateButton();
   try {
@@ -135,9 +143,12 @@ $('sync').addEventListener('click',async()=>{
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 try {
- const state=await rpc({type:'status'});configured=state.configured;$('url').value=state.url;$('reimport').value=state.reimportFrom;
+ const [state,{connectionDraft}]=await Promise.all([rpc({type:'status'}),chrome.storage.session.get('connectionDraft')]);
+ configured=state.configured;
+ if(!connectionEdited){$('url').value=connectionDraft?.url ?? state.url;$('token').value=connectionDraft?.token ?? '';}
+ $('reimport').value=state.reimportFrom;
  reimportSaved=state.reimportFrom;
- $('settings').open=!state.configured;capture=state.capture;
+ $('settings').open=!state.configured || !!connectionDraft;capture=state.capture;
  if(state.configured)await refresh();else status(messages.not_configured);
  if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}
