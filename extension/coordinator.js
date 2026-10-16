@@ -22,7 +22,7 @@ export class Coordinator {
         await this.store.set(state);
       }
     } else {
-      state = {phase:'planned', connection, bank, tabId, workerId:this.uuid(),
+      state = {phase:'planned', connection, bank, tabId, startedAt:new Date(this.clock()).toISOString(), workerId:this.uuid(),
         command:{connection_id:connection.id,request_id:this.uuid(),reimport_from:reimportFrom}, driver:null};
       await this.store.set(state);
     }
@@ -48,6 +48,9 @@ export class Coordinator {
     state.job = await this.backend.request(`/jobs/${state.job.id}`);
     if (!unfinished(state.job.capture_state)) {
       state.phase = state.job.capture_state; state.driver = null;
+      if (state.startedAt && !state.completedAt && state.phase==='complete' && state.job.delivery_state==='complete') {
+        state.completedAt = new Date(this.clock()).toISOString();
+      }
       await this.store.set(state); return state;
     }
     if (state.phase === 'paused') { await this.store.set(state); return state; }

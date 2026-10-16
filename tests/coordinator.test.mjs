@@ -28,7 +28,7 @@ function fixture(bank='synthetic-second-bank') {
  const store={get:async()=>structuredClone(state),set:async value=>{state=structuredClone(value);persisted.push(structuredClone(value));}};
  const adapter={running:async()=>running,selectAccount:async(tab,source)=>{events.push({select:source});return 'document';},
    launch:async()=>{running=true;},abort:async()=>{running=false;},parsePage:async()=>({records:[{external_id:'fixture'}],total:1,size:100,totalPages:1})};
- const create=()=>new Coordinator({store,backend,connector:name=>{assert.equal(name,bank);return adapter;},uuid:()=>`uuid-${++count}`});
+ const create=(options={})=>new Coordinator({store,backend,...options,connector:name=>{assert.equal(name,bank);return adapter;},uuid:()=>`uuid-${++count}`});
  return {create,store,events,persisted,pages,job,connection,start:{connection,bank,tabId:42},source:{tabId:42,documentId:'document',account:'source-a'},
    loseAck:()=>{failAck=true;},stopDriver:()=>{running=false;}};
 }
@@ -68,4 +68,21 @@ test('manual resume rebinds a paused job to a reopened bank tab with a new comma
  await engine.pause();await engine.start({...f.start,tabId:77});
  const state=await f.store.get();assert.equal(state.tabId,77);assert.notEqual(state.command.request_id,old);
  assert.equal(state.job.id,'job');
+});
+
+test('completion time is recorded once, only after capture and delivery succeed',async()=>{
+ const f=fixture();let now=Date.parse('2026-10-16T05:00:00Z');
+ const engine=f.create({clock:()=>now});
+ f.job.capture_state='complete';await engine.start(f.start);
+ assert.equal((await f.store.get()).completedAt,undefined);
+ f.job.delivery_state='blocked';await engine.pump();
+ assert.equal((await f.store.get()).completedAt,undefined);
+ f.job.delivery_state='complete';now+=120000;await engine.pump();
+ const completed=(await f.store.get()).completedAt;
+ assert.equal(completed,'2026-10-16T05:02:00.000Z');
+ now+=3600000;await f.create({clock:()=>now}).pump();
+ assert.equal((await f.store.get()).completedAt,completed);
+ // Do not invent completion time for captures made before timestamp tracking.
+ const old=await f.store.get();delete old.startedAt;delete old.completedAt;await f.store.set(old);
+ await engine.pump();assert.equal((await f.store.get()).completedAt,undefined);
 });

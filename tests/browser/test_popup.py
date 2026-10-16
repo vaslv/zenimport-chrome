@@ -3,7 +3,7 @@ from uuid import uuid4
 import threading
 import pytest
 from playwright.sync_api import sync_playwright, expect
-from support import PopupBackend, http_server, installed, connect, TOKEN
+from support import PopupBackend, http_server, installed, connect, TOKEN, run_clock
 
 
 def test_popup_setup_keyboard_dates_and_no_bank_ui():
@@ -215,3 +215,62 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.get_by_role('button',name='Сохранить счёт',exact=True)).to_be_enabled()
         expect(popup.locator('.account-status')).to_be_hidden()
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
+
+
+def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_connection():
+    class SyncBackend(PopupBackend):
+        def __init__(self):
+            super().__init__()
+            self.job={'id':'fixture-job','capture_state':'complete','delivery_state':'waiting','accounts':[],
+                'delivery':{'delivered':0,'suppressed':0,'pending':1,'uncertain':0},'errors':[]}
+        def request(self,method,path,body):
+            if path=='/api/v1/jobs/fixture-job':return self.job
+            return super().request(method,path,body)
+    service=SyncBackend()
+    with http_server(service) as url, sync_playwright() as p, installed(p,url) as (_,worker,bank,popup,_):
+        connect(popup,bank,url)
+        expect(popup.locator('.account')).to_have_count(1)
+        popup.locator('.account select').select_option('target-vnd')
+        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        expect(popup.locator('#sync')).to_be_enabled()
+        expect(popup.locator('#last-sync')).to_be_hidden()
+        worker.evaluate("""async()=>{
+          const {view}=await chrome.storage.local.get('view');
+          Date.now=()=>Date.parse('2026-10-16T05:00:00Z');
+          await chrome.storage.local.set({capture:{phase:'complete',connection:view.connection,bank:view.bank,
+            startedAt:'2026-10-16T04:00:00Z',command:{},job:{id:'fixture-job',delivery_state:'waiting'}}});
+        }""")
+        # Fire via real alarm without a long wall-clock wait.
+        run_clock(popup,worker)
+        expect(popup.locator('#status')).to_contain_text('Сервер отправляет')
+        expect(popup.locator('#last-sync')).to_be_hidden()
+        service.job['delivery_state']='complete'
+        service.job['delivery'].update(pending=0)
+        run_clock(popup,worker)
+        expect(popup.locator('#last-sync')).to_contain_text('16 октября 2026')
+        expect(popup.locator('#last-sync')).to_contain_text('только что')
+        saved=worker.evaluate("async()=> (await chrome.storage.local.get('syncHistory')).syncHistory")
+        assert list(saved.values())==['2026-10-16T05:00:00.000Z']
+        popup.reload()
+        expect(popup.locator('#last-sync')).to_contain_text('16 октября 2026')
+        popup.evaluate("Date.now=()=>Date.parse('2026-10-16T07:00:00Z')")
+        expect(popup.locator('#last-sync')).to_contain_text('2 часа назад')
+        if Path('/results').is_dir():popup.screenshot(path='/results/popup-last-sync.png',clip=popup.locator('main').bounding_box())
+        worker.evaluate("""async()=>{
+          const {capture}=await chrome.storage.local.get('capture');
+          await chrome.storage.local.set({capture:{...capture,completedAt:undefined,phase:'failed',error:'history_incomplete'}});
+        }""")
+        expect(popup.locator('#status')).to_contain_text('Сбор прерван')
+        expect(popup.locator('#last-sync')).to_contain_text('2 часа назад')
+        assert worker.evaluate("async()=> (await chrome.storage.local.get('syncHistory')).syncHistory")==saved
+        service.connection_id=str(uuid4())
+        popup.reload()
+        expect(popup.locator('#sync')).to_be_enabled()
+        expect(popup.locator('#last-sync')).to_be_hidden()
+        service.connection_id=next(iter(saved)).split('|')[-1]
+        popup.reload()
+        expect(popup.locator('#last-sync')).to_contain_text('16 октября 2026')
+        bank.goto('about:blank');bank.bring_to_front();popup.reload()
+        expect(popup.locator('#status')).to_contain_text('Откройте историю')
+        expect(popup.locator('#last-sync')).to_be_hidden()
+        assert not [call for call in service.calls if call[0]=='POST' and call[1]=='/api/v1/jobs']

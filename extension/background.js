@@ -6,7 +6,14 @@ const secureStorage = Promise.all(['local','session'].map(area =>
   chrome.storage[area].setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'})));
 const store = {
   get: async () => (await chrome.storage.local.get('capture')).capture,
-  set: async capture => chrome.storage.local.set({capture}),
+  set: async capture => {
+    const {config,syncHistory={}}=await chrome.storage.local.get(['config','syncHistory']);
+    if(config && capture.completedAt){
+      const key=config.url+'|'+capture.connection.id;
+      if(!syncHistory[key] || capture.completedAt>syncHistory[key])syncHistory[key]=capture.completedAt;
+    }
+    await chrome.storage.local.set({capture,syncHistory});
+  },
 };
 let queue = Promise.resolve();
 function serial(operation) {
@@ -32,14 +39,16 @@ async function inspect() {
   if (!profiles[key]) { profiles[key] = crypto.randomUUID(); await chrome.storage.local.set({profiles}); }
   const detected = await adapter.inspect(tab,profiles[key]);
   const connection = await client.request('/connections/discover','POST',detected.discovery);
-  const view={tabId:tab.id,bank:adapter.id,origin:adapter.origin,connection};
+  const {syncHistory={}}=await chrome.storage.local.get('syncHistory');
+  const view={tabId:tab.id,bank:adapter.id,origin:adapter.origin,connection,lastSyncedAt:syncHistory[config.url+'|'+connection.id] || null};
   await chrome.storage.local.set({view});
   return view;
 }
 async function popup(data) {
   if (data.type === 'status') {
-    const {config,view,capture,reimportFrom} = await chrome.storage.local.get(['config','view','capture','reimportFrom']);
-    return {configured:!!config,url:config?.url || '',view,capture,reimportFrom:reimportFrom || ''};
+    const {config,view,capture,reimportFrom,syncHistory={}} = await chrome.storage.local.get(['config','view','capture','reimportFrom','syncHistory']);
+    return {configured:!!config,url:config?.url || '',view,capture,reimportFrom:reimportFrom || '',
+      lastSyncedAt:config && view ? syncHistory[config.url+'|'+view.connection.id] || null : null};
   }
   if (data.type === 'configure') {
     const capture = await store.get();

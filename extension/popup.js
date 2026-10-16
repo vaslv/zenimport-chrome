@@ -1,5 +1,5 @@
 import {permissionOrigin} from './backend-client.js';
-import {today,daysAgo,monthsAgo,validDate} from './dates.js';
+import {today,daysAgo,monthsAgo,validDate,syncTime} from './dates.js';
 const $ = id => document.getElementById(id);
 const rpc = async data => {
   const result=await chrome.runtime.sendMessage(data);
@@ -24,6 +24,13 @@ const showError=error=>{
     $('settings').open=true;$('connection-settings').open=true;
   }else if(['account_unconfigured','settings_conflict','zenmoney_account_unavailable'].includes(error.code))$('settings').open=true;
 };
+let lastSyncedAt=null;
+function renderLastSync(value=lastSyncedAt) {
+  lastSyncedAt=value;
+  const time=syncTime(value), element=$('last-sync');
+  element.hidden=!time;
+  element.textContent=time ? `Последняя синхронизация: ${time.date} · ${time.ago}.` : '';
+}
 let connectionDraftPending=false;
 let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='';
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
@@ -124,9 +131,9 @@ function refresh() {
   return refreshTask;
 }
 async function refreshData() {
-  compatible=false;status('Получаем настройки счетов…','loading');$('refresh-accounts').disabled=true;$('accounts').inert=true;for(const control of $('accounts').querySelectorAll('input,select,button'))control.disabled=true;updateButton();
+  compatible=false;renderLastSync(null);status('Получаем настройки счетов…','loading');$('refresh-accounts').disabled=true;$('accounts').inert=true;for(const control of $('accounts').querySelectorAll('input,select,button'))control.disabled=true;updateButton();
   try {
-    view=await rpc({type:'inspect'});compatible=true;
+    view=await rpc({type:'inspect'});compatible=true;renderLastSync(view.lastSyncedAt);
     $('bank').textContent=view.bank==='vietinbank'?'VietinBank':view.bank;
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
@@ -148,7 +155,7 @@ $('server-form').addEventListener('submit',async event=>{
     if(!await chrome.permissions.request({origins:[permissionOrigin($('url').value)]}))throw Object.assign(Error(),{code:'invalid_server'});
     await rpc({type:'configure',url:$('url').value,token:$('token').value});
     $('token').value='';configured=true;connectionDraftPending=false;capture=null;
-    $('connection-settings').open=false;$('settings').open=false;await refresh();
+    $('connection-settings').open=false;$('settings').open=false;renderLastSync(null);await refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('refresh-accounts').addEventListener('click',refresh);
@@ -182,7 +189,7 @@ try {
  if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}
 setInterval(async()=>{
- try{const state=await rpc({type:'status'});if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
+ try{const state=await rpc({type:'status'});renderLastSync(compatible?state.lastSyncedAt:null);if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
   if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value='';
   reimportSaved=state.reimportFrom;
  }catch{}
