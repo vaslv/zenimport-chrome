@@ -1,0 +1,31 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {Backend, serverAddress} from '../extension/backend-client.js';
+import fs from 'node:fs';
+
+test('server address prevents credentials, paths, insecure remote and token redirects', async () => {
+  for (const url of ['http://server.example','https://user:pass@example.com','https://example.com/api','https://example.com/?token=x']) {
+    assert.throws(() => serverAddress(url));
+  }
+  assert.equal(serverAddress(' http://localhost:8000/ '), 'http://localhost:8000');
+  let sent;
+  const client = new Backend({url:'https://example.com',token:'fixture-secret'}, async (url, options) => {
+    sent = {url, ...options}; return Response.json({api_version:1});
+  });
+  await client.info();
+  assert.equal(sent.redirect, 'error'); assert.equal(sent.credentials, 'omit');
+  assert.equal(sent.headers.Authorization, 'Bearer fixture-secret');
+  assert.equal(sent.url, 'https://example.com/api/v1/info');
+});
+test('server errors are coded and never expose response contents', async () => {
+  const config = {url:'http://localhost:8000', token:'fixture'};
+  await assert.rejects(new Backend(config, async()=>Response.json({api_version:2})).info(), {code:'unsupported_api_version'});
+  await assert.rejects(new Backend(config, async()=>Response.json({error:{code:'unauthorized',message:'secret'}},{status:401})).info(), {code:'unauthorized',message:'unauthorized'});
+  await assert.rejects(new Backend(config, async()=>new Response('sensitive',{status:500})).info(), {code:'invalid_response'});
+});
+test('standalone manifest has no editor or automatic bank content injection', () => {
+  const manifest = JSON.parse(fs.readFileSync('extension/manifest.json'));
+  assert.equal(manifest.manifest_version,3);
+  for(const key of ['options_page','devtools_page','content_scripts','web_accessible_resources','host_permissions']) assert.equal(manifest[key],undefined);
+  assert.equal(fs.existsSync('extension/app.html'),false);
+});

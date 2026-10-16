@@ -1,12 +1,7 @@
-.env
-.venv/
-data/
+dist/
+test-results/
 __pycache__/
-.pytest_cache/
-*.pyc
-node_modules/
-debug-*.json
 .idea/
 .DS_Store
-*.egg-info/
-test-results/
+.env
+*.sqlite3*

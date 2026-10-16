@@ -1,28 +1,12 @@
 #!/bin/sh
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-# This project is unique to this run. Cleanup cannot remove the normal app volume.
-project="zenimport-check-$$"
-dc() { docker compose -p "$project" -f "$root/compose.yaml" -f "$root/compose.test.yaml" "$@"; }
-cleanup() {
-  status=$?
-  trap - EXIT
-  if ! dc --profile test down --volumes --rmi local --remove-orphans; then
-    printf '%s\n' "WARNING: test cleanup failed for $project" >&2
-    [ "$status" -ne 0 ] || status=1
-  fi
-  exit "$status"
-}
+name="zenimport-chrome-test-$$"
+cleanup() { docker image rm "$name-unit" "$name-browser" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-trap 'exit 130' INT
-trap 'exit 143' TERM
-dc --profile test build backend backend-tests parser-tests smoke browser-backend operation-backend browser-tests
-dc up -d --wait --wait-timeout 90 backend
-dc run --rm backend-tests
-dc run --rm parser-tests
-dc run --rm smoke python tests/container_smoke.py seed
-dc up -d --force-recreate --wait --wait-timeout 90 backend
-dc run --rm smoke python tests/container_smoke.py verify
-dc up -d --wait --wait-timeout 90 browser-backend operation-backend
-dc run --rm browser-tests
-printf '%s\n' 'PASS: all Docker checks; only this run’s disposable containers and volume will be removed.'
+docker build --target unit-tests -t "$name-unit" "$root"
+docker run --rm --network none "$name-unit"
+if [ "${1:-}" != '--unit-only' ]; then
+ docker build --target browser-tests -t "$name-browser" "$root"
+ docker run --rm --network none --ipc=private --shm-size=512m "$name-browser"
+fi
