@@ -85,6 +85,11 @@ def account(popup,target,source="12345678"):
     form.get_by_role('button',name='Сохранить счёт',exact=True).click()
     expect(popup.locator('#status')).to_contain_text('Счёт сохранён')
 
+def refresh_accounts(popup):
+    # Ready settings collapse after saving; the user explicitly expands them.
+    popup.locator('#settings').evaluate('(e)=>e.open=true')
+    popup.locator('#refresh-accounts').click()
+
 def state(worker):return worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
 
 def start_sync(popup,bank,worker):
@@ -98,9 +103,9 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (context,worker,bank,popup,identifier):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
         # Add selected accounts on successive visits; accounts_complete stays false.
-        bank.goto(ORIGIN+'/payment-history?accountNo=87654321');bank.bring_to_front();popup.locator('#refresh-accounts').click()
+        bank.goto(ORIGIN+'/payment-history?accountNo=87654321');bank.bring_to_front();refresh_accounts(popup)
         expect(popup.locator('.account')).to_have_count(2);account(popup,SECOND,"87654321")
-        bank.goto(ORIGIN+'/payment-history?accountNo=11112222');bank.bring_to_front();popup.locator('#refresh-accounts').click()
+        bank.goto(ORIGIN+'/payment-history?accountNo=11112222');bank.bring_to_front();refresh_accounts(popup)
         expect(popup.locator('.account')).to_have_count(3);account(popup,'ignored',"11112222")
         with storage.transaction(path,read_only=True) as db:
             identifier_a=db.execute("SELECT id FROM bank_accounts WHERE source_key='12345678'").fetchone()[0]
@@ -110,7 +115,7 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
             record['outcomeAccount']=record['incomeAccount']=TARGET;remote.transactions[record['id']]=record
         # A possible historical match must not suppress an ambiguous new row.
         remote.transactions['ambiguous-old']=movement('ambiguous-old',amount=200,date='2026-10-12',incomeAccount=TARGET,outcomeAccount=TARGET)
-        bank.goto(ORIGIN+'/payment-history?accountNo=12345678');bank.bring_to_front();popup.locator('#refresh-accounts').click()
+        bank.goto(ORIGIN+'/payment-history?accountNo=12345678');bank.bring_to_front();refresh_accounts(popup)
         expect(popup.locator('#sync')).to_be_enabled()
         start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
@@ -240,3 +245,24 @@ def test_zenmoney_outage_does_not_stop_bank_capture_or_claim_uncertain_writes(tm
         assert not remote.writes
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM captured_records').fetchone()[0]==3
+
+
+def test_discrepancy_page_reads_actual_backend_and_refreshes_mobile_deletion(tmp_path):
+    bank_api=Bank(count=1)
+    with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (context,worker,bank,popup,_):
+        connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
+        start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
+        remote.transactions['unlinked-extra']=movement('unlinked-extra',amount=50,date='2026-10-13',
+            incomeAccount=TARGET,outcomeAccount=TARGET,payee='Extra fixture',comment='Manual duplicate')
+        writes=len(remote.writes)
+        with context.expect_page() as opened:popup.locator('#discrepancies').click()
+        page=opened.value
+        expect(page.locator('.operation')).to_have_count(1)
+        expect(page.locator('.operation')).to_contain_text('Extra fixture')
+        expect(page.locator('.totals')).to_contain_text('Разница: −50 VND')
+        del remote.transactions['unlinked-extra']
+        remote.deletions.append({'object':'transaction','id':'unlinked-extra'})
+        page.locator('#refresh').click()
+        expect(page.locator('#summary')).to_contain_text('лишние операции не найдены')
+        assert len(remote.writes)==writes

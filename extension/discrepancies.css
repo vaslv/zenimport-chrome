@@ -1,0 +1,29 @@
+:root { font: 15px/1.5 system-ui,sans-serif; color: #24252b; color-scheme: light; background: #f8fafc; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+main { max-width: 1100px; padding: 36px 24px; margin: auto; }
+header > span, #freshness, .categories, .coverage { color: #64748b; font-size: 13px; }
+h1 { margin: 8px 0; font-size: 28px; letter-spacing: -.5px; }
+header p { max-width: 800px; color: #64748b; }
+h2 { font-size: 18px; }
+form { display: flex; align-items: end; flex-wrap: wrap; gap: 12px; margin: 28px 0 20px; }
+label { font-size: 13px; color: #475569; min-width: 0; }
+label:first-child { flex: 1 1 280px; }
+input, select, button { font: inherit; color: #24252b; background: white; border: 1px solid #cbd5e1; padding: 10px 12px; border-radius: 8px; min-height: 44px; max-width: 100%; }
+input,select { display: block; width: 100%; margin-top: 6px; }
+button { cursor: pointer; color: white; background: #e96158; border-color: transparent; }
+button:disabled { opacity: .6; cursor: default; }
+:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+#status[data-tone="error"] { color: #b42318; }
+#status:empty, #summary:empty { display: none; }
+.coverage { margin: 6px 0; overflow-wrap: anywhere; }
+.coverage[data-warning="true"] { color: #92400e; }
+details { background: white; border: 1px solid #e2e8f0; border-radius: 12px; margin-top: 20px; }
+summary { padding: 18px 20px; cursor: pointer; overflow-wrap: anywhere; }
+.day-title { font-weight: 600; }
+.totals { display: block; margin-top: 6px; color: #64748b; font-size: 13px; }
+.operation { display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 8px 20px; padding: 16px 20px; border-top: 1px solid #e2e8f0; }
+.description { overflow-wrap: anywhere; white-space: pre-wrap; }
+.amount { font-weight: 600; white-space: nowrap; }
+.categories { margin-top: 6px; }
+@media (max-width: 550px) { main { padding: 20px 14px; } h1 { font-size: 24px; } label:not(:first-child) { flex: 1 1 130px; } .operation { grid-template-columns: minmax(0,1fr); gap: 6px; } }

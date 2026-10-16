@@ -38,6 +38,7 @@ function updateButton() {
   const active=['planned','collecting'].includes(capture?.phase);
   $('account-settings').hidden=!configured;
   $('history-settings').hidden=!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported);
+  $('discrepancies').disabled=busy || !compatible;
   $('connect').disabled=busy;
   $('url').disabled=busy;$('token').disabled=busy;
   $('sync').textContent=active?'Остановить сбор':'Синхронизировать';
@@ -158,6 +159,7 @@ $('server-form').addEventListener('submit',async event=>{
     $('connection-settings').open=false;$('settings').open=false;renderLastSync(null);await refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
+$('discrepancies').addEventListener('click',async()=>{try{await rpc({type:'open-discrepancies'});}catch(error){showError(error);}});
 $('refresh-accounts').addEventListener('click',refresh);
 $('reimport').max=today();
 $('sync').addEventListener('click',async()=>{

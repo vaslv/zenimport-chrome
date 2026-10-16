@@ -60,3 +60,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 #connection-settings > summary { font-weight: 600; color: #24252b; }
 
 .account-status { margin: 8px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+
+#discrepancies { width: 100%; margin: 0 0 16px; }

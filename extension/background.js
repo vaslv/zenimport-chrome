@@ -62,6 +62,12 @@ async function popup(data) {
     await chrome.storage.local.remove(['view','capture']);
     return {configured:true};
   }
+  if (data.type === 'open-discrepancies') {
+    const {view}=await chrome.storage.local.get('view');
+    if(!view?.connection?.id)throw new SyncError('unsupported_bank');
+    await chrome.tabs.create({url:chrome.runtime.getURL('discrepancies.html')+'?connection='+encodeURIComponent(view.connection.id)});
+    return {};
+  }
   if (data.type === 'inspect') return inspect();
   if (data.type === 'catalog') return new Backend(await configuration()).request('/zenmoney/accounts');
   if (data.type === 'settings') {
@@ -86,6 +92,16 @@ async function popup(data) {
   }
   if (data.type === 'stop') { await (await coordinator()).stop(); await chrome.alarms.clear('capture'); return {}; }
   throw new SyncError('unsupported_command');
+}
+async function discrepancyReport(data,sender) {
+  if(data.type!=='discrepancies')throw new SyncError('unauthorized');
+  const connection=new URL(sender.url).searchParams.get('connection');
+  if(!/^[0-9a-f-]{36}$/i.test(connection || ''))throw new SyncError('validation_error');
+  const query=new URLSearchParams();
+  for(const key of ['from_date','to_date','account_id'])if(data[key])query.set(key,data[key]);
+  if(data.refresh)query.set('refresh','true');
+  const client=new Backend(await configuration());await client.info();
+  return {report:await client.request('/connections/'+connection+'/discrepancies?'+query)};
 }
 async function captured(data,sender) {
   const state = await store.get(), adapter = connectorById(state?.bank);
@@ -129,7 +145,8 @@ chrome.runtime.onMessage.addListener((data,sender,reply) => {
     await secureStorage;
     if (sender.id !== chrome.runtime.id) throw new SyncError('unauthorized');
     const isPopup = sender.url === chrome.runtime.getURL('popup.html');
-    return isPopup ? popup(data) : captured(data,sender);
+    const isReport=sender.url?.split('?')[0]===chrome.runtime.getURL('discrepancies.html');
+    return isPopup ? popup(data) : isReport ? discrepancyReport(data,sender) : captured(data,sender);
   }).then(value=>reply({ok:true,...value}),async error=>{
     const current=await store.get();
     const ownsCapture=current?.driver?.runId===data.runId && current?.tabId===sender.tab?.id && current?.driver?.documentId===sender.documentId;

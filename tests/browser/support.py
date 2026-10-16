@@ -70,8 +70,9 @@ def installed(playwright, url, bank_api=None):
         (extension/'manifest.json').write_text(json.dumps(manifest))
         context=playwright.chromium.launch_persistent_context(str(Path(temporary)/'profile'),channel='chromium',headless=True,
             args=[f'--disable-extensions-except={extension}',f'--load-extension={extension}','--no-sandbox'],viewport={'width':1000,'height':800})
-        # Stable calendar without freezing elapsed time or timeout guards.
-        context.add_init_script("""(() => {const Original=Date;const skew=Original.parse('2026-10-16T05:00:00Z')-Original.now();globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[Original.now()+skew]));}static now(){return Original.now()+skew;}};})();""")
+        # Stable calendar; bank MAIN and ISOLATED worlds must share real elapsed time.
+        # Only extension pages need a shifted Date.now for relative-date assertions.
+        context.add_init_script("""(() => {const Original=Date;const skew=Original.parse('2026-10-16T05:00:00Z')-Original.now();globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[Original.now()+skew]));}static now(){return Original.now()+(location.protocol==='chrome-extension:'?skew:0);}};})();""")
         if Path('/results').is_dir():
             Path('/results/runtime.json').write_text(json.dumps({'chromium':context.browser.version,'playwright':'1.58.0','python':platform.python_version(),'architecture':platform.machine()},sort_keys=True))
         context.route(ORIGIN+'/**' ,lambda route:route.fulfill(content_type='text/html',body=BANK))

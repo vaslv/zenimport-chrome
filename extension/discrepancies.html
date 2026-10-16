@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="ru">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Расхождения · ZenImport</title><link rel="stylesheet" href="discrepancies.css"></head>
+<body><main>
+<header><span>ZenImport</span><h1>Расхождения <span id="bank"></span></h1>
+<p>Возможные лишние операции ZenMoney за полностью загруженные дни банка. Изменения и удаления выполняются в приложении ZenMoney.</p></header>
+<form id="filters"><label>Счёт<select id="account"><option value="">Все счета банка</option></select></label>
+<label>С<input id="from" type="date" required></label><label>По<input id="to" type="date" required></label>
+<button id="refresh" type="submit">Обновить</button></form>
+<p id="status" role="status" aria-live="polite">Получаем данные…</p>
+<p id="freshness"></p><div id="coverage"></div>
+<h2 id="summary"></h2><div id="days" aria-busy="true"></div>
+</main><script type="module" src="discrepancies.js"></script></body></html>
