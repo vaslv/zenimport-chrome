@@ -1,7 +1,7 @@
 # Проверки E1–E5 — 16 октября 2026
 
 - `scripts/test-docker.sh`: **13 unit + 3 browser passed**. Один интеграционный модуль пропускается только в самостоятельном browser image без backend.
-- `scripts/test-integration.sh ../ZenImportBackend`: **8 browser/integration passed**, без пропусков, настоящий собранный MV3, Chromium/Playwright 1.58.0, настоящий HTTP/SQLite/SDK backend. Сеть контейнера отключена, банк перехвачен обезличенной HTML/JSON фикстурой, SDK — stateful fake.
+- `scripts/test-integration.sh ../ZenImportBackend`: **9 browser/integration passed**, без пропусков, настоящий собранный MV3, Chromium/Playwright 1.58.0, настоящий HTTP/SQLite/SDK backend. Сеть контейнера отключена, банк перехвачен обезличенной HTML/JSON фикстурой, SDK — stateful fake.
 - Backend после уточнения работы unconfigured: **352 passed**, HTTP/persistence/SIGKILL/graceful/snapshot на ARM64. Также 352 passed и lifecycle на AMD64 под эмуляцией OrbStack (M2).
 
 Проверены два включённых и один исключённый счёт; частичный список и его накопление; точные trxId/f1; пустые интервалы; 132 строки с переходом из кеша таблицы на JSON page 1 с totalRecords=0; расходы/приходы; известная категория из трёх подтверждённых платежей и неизвестная NULL; неоднозначное историческое совпадение создаётся как новое; viewed=false; повтор, мобильная правка и удаление не перезаписываются; разовое старое чтение; потерянный ACK после commit страницы; закрытый popup; принудительная остановка worker через корневой CDP Target.closeTarget с подтверждением уничтоженного execution context, затем продолжение; потерянный ответ SDK после применения; изменившийся фильтр не подтверждает покрытие. Unit общий coordinator также проверен с искусственным вторым банком и новой вкладкой после паузы.
