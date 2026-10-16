@@ -38,8 +38,10 @@ function progress(state) {
   if(state.phase==='complete'){
     const d=job.delivery;
     $('status').textContent=job.delivery_state==='complete'
-      ? `Готово. Добавлено: ${d.delivered}. Уже обработано: ${d.suppressed}.`
-      : job.delivery_state==='blocked' ? `История сохранена. Отправка ожидает проверки сервером. Не подтверждено: ${d.uncertain}.`
+      ? `Готово. Обработано: ${d.delivered}. Исключено: ${d.suppressed}.`
+      : job.delivery_state==='blocked' ? d.uncertain
+        ? `История сохранена. Сервер проверяет отправку: ${d.uncertain}.`
+        : `История сохранена. ${messages[job.errors?.at(-1)?.code] || 'Отправка приостановлена на сервере.'}`
       : `История сохранена. Сервер отправляет операции: ${d.pending}.`;
   }
 }

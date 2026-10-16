@@ -87,6 +87,12 @@ def account(popup,target,source="12345678"):
 
 def state(worker):return worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
 
+def start_sync(popup,bank,worker):
+    previous=(state(worker) or {}).get('command',{}).get('request_id')
+    bank.bring_to_front();popup.locator('#sync').click()
+    pump_until(popup,worker,lambda:(state(worker) or {}).get('command',{}).get('request_id') not in (None,previous))
+
+
 def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfill(tmp_path):
     bank_api=Bank()
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (context,worker,bank,popup,identifier):
@@ -106,10 +112,11 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         remote.transactions['ambiguous-old']=movement('ambiguous-old',amount=200,date='2026-10-12',incomeAccount=TARGET,outcomeAccount=TARGET)
         bank.goto(ORIGIN+'/payment-history?accountNo=12345678');bank.bring_to_front();popup.locator('#refresh-accounts').click()
         expect(popup.locator('#sync')).to_be_enabled()
-        popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
         created=[tx for batch in remote.writes for tx in batch]
+        expect(popup.locator('#status')).to_contain_text('Обработано:')
         assert len(created)==6
         assert all(tx['viewed'] is False for tx in created)
         assert {tx['outcomeAccount'] for tx in created}=={TARGET,SECOND}
@@ -127,14 +134,14 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         del remote.transactions[deleted];remote.deletions.append({'object':'transaction','id':deleted})
         popup.locator('#settings').evaluate('(e)=>e.open=true')
         popup.locator('#reimport').fill('2026-09-01')
-        bank.bring_to_front();popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
         assert {tx['id'] for batch in remote.writes for tx in batch}==original_ids
         assert sum(map(len,remote.writes))==6
         assert deleted not in remote.transactions
         assert remote.transactions[edited]['tag']==['category-b']
-        assert not worker.evaluate("async()=> (await chrome.storage.local.get('reimportFrom')).reimportFrom")
+        popup.wait_for_function("async()=> !(await chrome.storage.local.get('reimportFrom')).reimportFrom")
         with storage.transaction(path,read_only=True) as db:assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
 
 
@@ -142,14 +149,14 @@ def test_lost_page_ack_replays_same_snapshot_without_duplicate_delivery(tmp_path
     bank_api=Bank()
     with service(tmp_path,drop_page_ack=True) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (_,worker,bank,popup,_):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
-        bank.bring_to_front();popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='paused')
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM capture_pages').fetchone()[0]==1
         assert not remote.writes
         original=state(worker)['job']['id']
         expect(popup.locator('#sync')).to_have_text('Синхронизировать')
-        bank.bring_to_front();popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
         assert state(worker)['job']['id']==original
@@ -161,7 +168,7 @@ def test_popup_closure_and_real_service_worker_stop_then_lost_sdk_response(tmp_p
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (context,worker,bank,popup,identifier):
         remote.mode='timeout_after'
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
-        bank.bring_to_front();popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         deadline=time.monotonic()+10
         while not bank_api.pending and time.monotonic()<deadline:bank.wait_for_timeout(50)
         assert bank_api.pending
@@ -196,7 +203,7 @@ def test_observed_pagination_cache_then_zero_total_continuation(tmp_path):
     bank_api=Bank(count=132)
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (_,worker,bank,popup,_):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
-        bank.bring_to_front();popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete',timeout=45)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=45)
         assert any(call['page']==1 for call in bank_api.calls)
@@ -208,7 +215,7 @@ def test_changed_bank_filter_cannot_complete_an_interval(tmp_path):
     bank_api=Bank();bank_api.hold=True
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (_,worker,bank,popup,_):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
-        bank.bring_to_front();popup.locator('#sync').click()
+        start_sync(popup,bank,worker)
         deadline=time.monotonic()+10
         while not bank_api.pending and time.monotonic()<deadline:bank.wait_for_timeout(50)
         assert bank_api.pending
@@ -220,3 +227,16 @@ def test_changed_bank_filter_cannot_complete_an_interval(tmp_path):
         assert not remote.writes
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM coverage').fetchone()[0]==0
+
+
+def test_zenmoney_outage_does_not_stop_bank_capture_or_claim_uncertain_writes(tmp_path):
+    bank_api=Bank()
+    with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (_,worker,bank,popup,_):
+        connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
+        remote.read_failure=503
+        start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
+        expect(popup.locator('#status')).to_contain_text('ZenMoney временно недоступен')
+        assert not remote.writes
+        with storage.transaction(path,read_only=True) as db:
+            assert db.execute('SELECT count(*) FROM captured_records').fetchone()[0]==3

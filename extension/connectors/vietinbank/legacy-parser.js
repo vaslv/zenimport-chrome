@@ -22,7 +22,7 @@ export async function parseVietinBankJson(data) {
     if(Number(row.amount)<0){const issue=negativeAmountIssue(row,rows[index+1]);if(issue)fail(`Строка ${index+1}: направление отрицательной суммы не подтверждено остатками (${issue}).`);}
     if (!value) fail('Нулевая операция не поддерживается.');
     const description=text(row.remark), rawDate=`${dd}/${mm}/${yyyy} ${hh}:${min}:${ss}`;
-    const bankId=text(row.trxId,160).trim();
+    const bankId=row.trxId==null?'':text(row.trxId,160).trim();
     let id=bankId?`vib:id:${bankId}`:null;
     if (!id) {
       const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify([data.accountNo,rawDate,value,balance,description.replace(/\s+/g,' ').trim()])));

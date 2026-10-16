@@ -16,6 +16,12 @@ test('legacy f1 identity stays byte-for-byte compatible', async()=>{
  const record=(await parsePage(page({transactions:[row({trxId:''})]}),options)).records[0];
  const bytes=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(JSON.stringify(['12345678','09/10/2026 10:12:25',-123456,9876543,'Fixture shop'])));
  assert.equal(record.external_id,'vib:f1:'+Buffer.from(bytes).toString('hex'));
+ for(const value of [null,undefined]){
+   const input=row({trxId:value});if(value===undefined)delete input.trxId;
+   const fallback=(await parsePage(page({transactions:[input]}),options)).records[0];
+   assert.equal(fallback.external_id,record.external_id);
+   assert.equal(fallback.identity_kind,'fingerprint');
+ }
 });
 test('empty interval and observed zero-total continuation',async()=>{
  assert.equal((await parsePage(page({totalRecords:0,transactions:[]}),options)).totalPages,1);

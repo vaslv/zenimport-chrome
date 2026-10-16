@@ -3,6 +3,7 @@ from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 import json
+import platform
 import shutil
 import tempfile
 import threading
@@ -71,6 +72,8 @@ def installed(playwright, url, bank_api=None):
             args=[f'--disable-extensions-except={extension}',f'--load-extension={extension}','--no-sandbox'],viewport={'width':1000,'height':800})
         # Stable calendar without freezing elapsed time or timeout guards.
         context.add_init_script("""(() => {const Original=Date;const skew=Original.parse('2026-10-16T05:00:00Z')-Original.now();globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[Original.now()+skew]));}static now(){return Original.now()+skew;}};})();""")
+        if Path('/results').is_dir():
+            Path('/results/runtime.json').write_text(json.dumps({'chromium':context.browser.version,'playwright':'1.58.0','python':platform.python_version(),'architecture':platform.machine()},sort_keys=True))
         context.route(ORIGIN+'/**' ,lambda route:route.fulfill(content_type='text/html',body=BANK))
         if bank_api: context.route('https://api-ipay.vietinbank.vn/**',bank_api)
         worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker')

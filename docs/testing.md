@@ -1,8 +1,8 @@
 # Проверки E1–E5 — 16 октября 2026
 
-- `scripts/test-docker.sh`: **13 unit + 2 browser passed**. Один интеграционный модуль пропускается только в самостоятельном browser image без backend.
-- `scripts/test-integration.sh ../ZenImportBackend`: **7 browser/integration passed**, без пропусков, настоящий собранный MV3, Chromium/Playwright 1.58.0, настоящий HTTP/SQLite/SDK backend. Сеть контейнера отключена, банк перехвачен обезличенной HTML/JSON фикстурой, SDK — stateful fake.
-- Backend после уточнения работы unconfigured: **348 passed**, HTTP/persistence/SIGKILL/graceful/snapshot на ARM64. Проверка AMD64 после M1.
+- `scripts/test-docker.sh`: **13 unit + 3 browser passed**. Один интеграционный модуль пропускается только в самостоятельном browser image без backend.
+- `scripts/test-integration.sh ../ZenImportBackend`: **8 browser/integration passed**, без пропусков, настоящий собранный MV3, Chromium/Playwright 1.58.0, настоящий HTTP/SQLite/SDK backend. Сеть контейнера отключена, банк перехвачен обезличенной HTML/JSON фикстурой, SDK — stateful fake.
+- Backend после уточнения работы unconfigured: **352 passed**, HTTP/persistence/SIGKILL/graceful/snapshot на ARM64. Также 352 passed и lifecycle на AMD64 под эмуляцией OrbStack (M2).
 
 Проверены два включённых и один исключённый счёт; частичный список и его накопление; точные trxId/f1; пустые интервалы; 132 строки с переходом из кеша таблицы на JSON page 1 с totalRecords=0; расходы/приходы; известная категория из трёх подтверждённых платежей и неизвестная NULL; неоднозначное историческое совпадение создаётся как новое; viewed=false; повтор, мобильная правка и удаление не перезаписываются; разовое старое чтение; потерянный ACK после commit страницы; закрытый popup; принудительная остановка worker через корневой CDP Target.closeTarget с подтверждением уничтоженного execution context, затем продолжение; потерянный ответ SDK после применения; изменившийся фильтр не подтверждает покрытие. Unit общий coordinator также проверен с искусственным вторым банком и новой вкладкой после паузы.
 
@@ -12,4 +12,10 @@ Popup: валютный выбор, явное игнорирование/нев
 
 Не подтверждено фикстурами: полный список настоящих счетов, переключение настоящего VietinBank, текущая реальная DOM-разметка, непросмотренные записи в мобильном приложении. Это M3. Сейчас поддерживается VND и только наблюдаемый Current account; accounts_complete=false. USD не импортируется. Пароли банка/SDK-токен в Chrome отсутствуют.
 
-ZIP воспроизводим: два запуска scripts/build.py дали SHA256 `6122eb511e23efc68bbb609d6b9fcde65fd6bf94ce02265e22bc0ea752a7f73f`. Установка — README. Локальные данные/секреты в ZIP/Docker context не включаются. Рабочий сервер и расширение не переключались.
+ZIP воспроизводим: два запуска scripts/build.py дали SHA256 `f06d3ae7c6365d60902ad7a39e4c49482c331d0dc3b34ad360cccef6bc8dc231`. Установка — README. Локальные данные/секреты в ZIP/Docker context не включаются. Рабочий сервер и расширение не переключались.
+
+## Исправление popup 0.1.1
+
+Регрессия воспроизведена через настоящий chrome.action.openPopup: прежний CSS давал окно 115 px. Фиксированные width/min-width корневого элемента и body дают 390 px. Новый тест подключается к нативному action target через CDP (он не входит в Playwright context.pages), проверяет ширину, переполнение и поля. Это не обычная вкладка popup.html с заданным viewport. Снимок test-results/popup-native.png проверен визуально. Права расширения не расширялись.
+
+Дополнительно проверены null/отсутствующий trxId с прежним f1 и недоступность SDK: история собирается, отправка приостановлена с корректным статусом. Счётчик delivered назван «Обработано»: он включает ранее доставленные операции и не является числом только что добавленных.
