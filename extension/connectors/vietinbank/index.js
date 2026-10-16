@@ -50,3 +50,29 @@ export async function selectAccount(tabId, account) {
   }
   throw Object.assign(Error(), {code: 'capture_context_changed'});
 }
+
+export async function prepare(tabId) {
+  const identifier = 'zenimport-vietinbank-observer-v3';
+  const scripts = await chrome.scripting.getRegisteredContentScripts({ids:[identifier]});
+  if (!scripts.length) {
+    await chrome.scripting.registerContentScripts([{id:identifier,matches:[origin],
+      js:['connectors/vietinbank/observer.js'],world:'MAIN',runAt:'document_start',persistAcrossSessions:true}]);
+    // Required once: the bank caches fetch before a late script injection.
+    await chrome.tabs.reload(tabId);
+  }
+}
+export async function running(tabId, driver) {
+  try {
+    const [result] = await chrome.scripting.executeScript({target:{tabId,documentIds:[driver.documentId]},
+      func:runId => globalThis.__zenImportCaptureRun === runId,args:[driver.runId]});
+    return result.result === true;
+  } catch { return false; }
+}
+export async function launch(tabId, driver) {
+  await chrome.scripting.executeScript({target:{tabId,documentIds:[driver.documentId]},
+    func:config => {globalThis.__zenImportCaptureConfig=config;},args:[driver]});
+  await chrome.scripting.executeScript({target:{tabId,documentIds:[driver.documentId]},files:['connectors/vietinbank/driver.js']});
+}
+export async function abort(tabId) {
+  await chrome.tabs.sendMessage(tabId,{type:'capture-abort'},{frameId:0});
+}
