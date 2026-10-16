@@ -113,8 +113,9 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         historical.history(count=3,account=identifier_a,beneficiary_account='merchant-known',beneficiary_name='Fixture merchant')
         for record in historical.data['transaction']:
             record['outcomeAccount']=record['incomeAccount']=TARGET;remote.transactions[record['id']]=record
-        # A possible historical match must not suppress an ambiguous new row.
+        # The user now requires matching every type by account/day/amount before creation.
         remote.transactions['ambiguous-old']=movement('ambiguous-old',amount=200,date='2026-10-12',incomeAccount=TARGET,outcomeAccount=TARGET)
+        retained=deepcopy(remote.transactions['ambiguous-old'])
         bank.goto(ORIGIN+'/payment-history?accountNo=12345678');bank.bring_to_front();refresh_accounts(popup)
         expect(popup.locator('#sync')).to_be_enabled()
         start_sync(popup,bank,worker)
@@ -122,7 +123,8 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
         created=[tx for batch in remote.writes for tx in batch]
         expect(popup.locator('#status')).to_contain_text('Обработано:')
-        assert len(created)==6
+        assert len(created)==5
+        assert remote.transactions['ambiguous-old']==retained
         assert all(tx['viewed'] is False for tx in created)
         assert {tx['outcomeAccount'] for tx in created}=={TARGET,SECOND}
         assert not any(call['account']=='11112222' for call in bank_api.calls)
@@ -143,7 +145,8 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
         assert {tx['id'] for batch in remote.writes for tx in batch}==original_ids
-        assert sum(map(len,remote.writes))==6
+        assert sum(map(len,remote.writes))==5
+        assert remote.transactions['ambiguous-old']==retained
         assert deleted not in remote.transactions
         assert remote.transactions[edited]['tag']==['category-b']
         popup.wait_for_function("async()=> !(await chrome.storage.local.get('reimportFrom')).reimportFrom")
