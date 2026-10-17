@@ -37,7 +37,7 @@ from backend import storage
 from migration_history import AuditedTransport, write_stage, ledger, originals_unchanged
 import migration_lab as lab
 from support import BANK, ORIGIN, PopupBackend
-from test_integration import account, pump_until, start_sync, state
+from test_integration import pump_until, state
 
 
 def command(*args):
@@ -46,7 +46,11 @@ def command(*args):
 
 def certificate(directory, name, *, trusted):
     """Trust one private CA in this disposable container's NSS DB only."""
-    root=directory/name;root.mkdir()
+    root=directory/name
+    if root.exists():
+        if trusted:trust_certificate(directory,root)
+        return root
+    root.mkdir()
     command('openssl','req','-x509','-newkey','rsa:2048','-nodes','-keyout',str(root/'ca.key'),
         '-out',str(root/'ca.crt'),'-days','2','-subj','/CN=ZenImport disposable acceptance CA')
     command('openssl','req','-newkey','rsa:2048','-nodes','-keyout',str(root/'server.key'),
@@ -55,12 +59,15 @@ def certificate(directory, name, *, trusted):
     command('openssl','x509','-req','-in',str(root/'server.csr'),'-CA',str(root/'ca.crt'),
         '-CAkey',str(root/'ca.key'),'-CAcreateserial','-out',str(root/'server.crt'),
         '-days','2','-extfile',str(root/'extensions'))
-    if trusted:
-        nss=Path.home()/'.pki/nssdb';nss.mkdir(parents=True,exist_ok=True)
-        if not (nss/'cert9.db').exists():command('certutil','-N','--empty-password','-d','sql:'+str(nss))
-        command('certutil','-A','-d','sql:'+str(nss),'-n','ZenImport acceptance '+directory.name,
-            '-t','C,,','-i',str(root/'ca.crt'))
+    if trusted:trust_certificate(directory,root)
     return root
+
+
+def trust_certificate(directory,root):
+    nss=Path.home()/'.pki/nssdb';nss.mkdir(parents=True,exist_ok=True)
+    if not (nss/'cert9.db').exists():command('certutil','-N','--empty-password','-d','sql:'+str(nss))
+    command('certutil','-A','-d','sql:'+str(nss),'-n','ZenImport acceptance '+directory.name,
+        '-t','C,,','-i',str(root/'ca.crt'))
 
 
 @contextmanager
@@ -242,13 +249,13 @@ class Acceptance:
         app=create_app(Settings(path,token,self.token),client_factory=lambda _:self.client(path.parent/'sdk-audit.jsonl'))
         sock=socket.socket();sock.bind(('127.0.0.1',0));port=sock.getsockname()[1]
         options={'ssl_certfile':str(cert/'server.crt'),'ssl_keyfile':str(cert/'server.key')} if cert else {}
-        server=uvicorn.Server(uvicorn.Config(app,log_level='critical',**options))
+        server=uvicorn.Server(uvicorn.Config(app,log_level='critical',timeout_graceful_shutdown=15,**options))
         thread=threading.Thread(target=lambda:server.run(sockets=[sock]),daemon=True);thread.start()
         deadline=time.monotonic()+15
         while not server.started and time.monotonic()<deadline:time.sleep(.02)
         assert server.started
         try:yield ('https://localhost:' if cert else 'http://127.0.0.1:')+str(port),app
-        finally:server.should_exit=True;thread.join(30);assert not thread.is_alive()
+        finally:server.should_exit=True;thread.join(60);assert not thread.is_alive()
 
     def audit(self,path):
         return [identifier for line in path.read_bytes().splitlines() for identifier in decode_json(line)['entities'].get('transaction',[])] if path.exists() else []
@@ -257,7 +264,13 @@ class Acceptance:
         # The one-shot run marker prevents blind retries after interruption.
         if label in self.journal['completed']:raise RuntimeError('Stage already complete; use a new acceptance directory')
         audit=path.parent/'sdk-audit.jsonl';before=len(self.audit(audit))
-        start_sync(popup,bank,worker)
+        previous=(state(worker) or {}).get('command',{}).get('request_id')
+        # Worker completion precedes the popup's next 1.5-second poll. Wait for
+        # the actual Sync button, otherwise the click can mean Stop old capture.
+        expect(popup.locator('#sync')).to_have_text('Синхронизировать',timeout=10000)
+        expect(popup.locator('#sync')).to_be_enabled()
+        bank.bring_to_front();popup.locator('#sync').click()
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('command',{}).get('request_id') not in (None,previous),timeout=60)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete',timeout=90)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=120)
         sent=self.audit(audit)[before:]
@@ -278,8 +291,9 @@ class Acceptance:
         self.journal['completed'][label]=result;lab.save(self.path,self.journal)
         print(json.dumps(result),flush=True)
 
-    def verify(self,case):
+    def verify(self,case,*,later=True):
         plan=self.journal['variants'][case];data=self.read();self.check_baseline(data)
+        records=[r for r in plan['bank'] if later or r['phase']=='initial']
         targets={a['id'] for a in plan['accounts']}
         rows=[r for r in data['transaction'] if not r.get('deleted') and targets.intersection((r.get('incomeAccount'),r.get('outcomeAccount')))]
         expected_ids={r['id'] for r in plan['seed']}|set(plan['created'].values())
@@ -288,19 +302,19 @@ class Acceptance:
         for row in plan['seed']:
             assert all(originals[row['id']].get(k)==row.get(k) for k in ('date','income','outcome','incomeAccount','outcomeAccount','tag','viewed'))
         for identifier in plan['created'].values():assert originals[identifier]['viewed'] is False
-        known=[r for r in plan['bank'] if r['amount'] in (-1709,-2011)]
+        known=[r for r in records if r['amount'] in (-1709,-2011)]
         for r in known:
             identifier=plan['created']['vib:id:'+r['raw']['trxId']]
             assert originals[identifier]['tag']==[self.journal['catalog']['tag'][0]['id']]
         gross=ledger(rows,targets);daily=defaultdict(Decimal);expected_daily=defaultdict(Decimal)
         for (day,target,_,side),amount in gross.items():daily[day,target]+=amount*(1 if side=='income' else -1)
-        for row in plan['bank']:expected_daily[row['date'],row['target']]+=Decimal(row['amount'])
+        for row in records:expected_daily[row['date'],row['target']]+=Decimal(row['amount'])
         assert {k:v for k,v in daily.items() if v}=={k:v for k,v in expected_daily.items() if v}
         net={target:sum(v for (_,account),v in daily.items() if account==target) for target in targets}
         for target in targets:
-            assert net[target]==sum(Decimal(r['amount']) for r in plan['bank'] if r['target']==target)
+            assert net[target]==sum(Decimal(r['amount']) for r in records if r['target']==target)
             if self.live:assert Decimal(next(a['balance'] for a in data['account'] if a['id']==target))==net[target]
-        return {'case':case,'bank_records':len(plan['bank']),'remote_active':len(rows),'new_ids':len(plan['created']),
+        return {'case':case,'bank_records':len(records),'remote_active':len(rows),'new_ids':len(plan['created']),
             'exact_ids':True,'balances':self.live,'daily_net':True,'categories_unread':True,'baseline_preserved':True}
 
 
@@ -347,52 +361,89 @@ def security(directory,context,worker,bank,popup,trusted,untrusted):
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
     mode=parser.add_mutually_exclusive_group(required=True);mode.add_argument('--fake',action='store_true');mode.add_argument('--live',action='store_true')
-    parser.add_argument('--state',type=Path,default=Path('/state'));args=parser.parse_args()
-    # Fixed isolated mount only. Production env, arbitrary endpoint and DB flags
-    # deliberately do not exist. Browser/container are ephemeral on each run.
+    parser.add_argument('--state',type=Path,default=Path('/state'))
+    parser.add_argument('--resume-verified-prefix',action='store_true',help='Explicit recovery after copied case and optionally verified empty A; never a partial financial job')
+    args=parser.parse_args()
+    # No arbitrary server/DB options: only the isolated mount is accepted.
     assert args.state==Path('/state')
     os.umask(0o077);directory=args.state;directory.mkdir(exist_ok=True)
     with (directory/'.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        if (directory/'run-started').exists():raise RuntimeError('One-shot acceptance: inspect prior result before creating a new directory')
-        (directory/'run-started').touch()
-        acceptance=Acceptance(directory,args.live);acceptance.seed()
+        if args.resume_verified_prefix:
+            assert args.live and (directory/'run-started').exists() and not (directory/'empty/b').exists()
+            acceptance=Acceptance(directory,True)
+            wanted={'copied-'+s for s in ('a-initial','a-repeat','b-initial','b-repeat','b-new','b-new-repeat')}
+            finished=set(acceptance.journal['completed'])
+            assert finished in (wanted,wanted|{'empty-a-initial'},wanted|{'empty-a-initial','empty-a-repeat'})
+            assert set(acceptance.journal['stages'])=={'browser-catalog','browser-seed-copied','browser-seed-empty'}
+            assert all(s['state']=='verified' for s in acceptance.journal['stages'].values())
+            with closing(storage.connect_readonly(directory/'copied/b/db.sqlite3')) as db:
+                storage.check_integrity(db)
+                assert db.execute("SELECT count(*) FROM bank_processing WHERE state!='delivered'").fetchone()[0]==0
+            results=[acceptance.verify('copied')]
+            assert len(acceptance.audit(directory/'copied/a/sdk-audit.jsonl'))==2
+            assert len(acceptance.audit(directory/'copied/b/sdk-audit.jsonl'))==1
+            if 'empty-a-initial' in finished:
+                with closing(storage.connect_readonly(directory/'empty/a/db.sqlite3')) as db:
+                    storage.check_integrity(db)
+                    assert db.execute("SELECT count(*) FROM bank_processing WHERE state!='delivered'").fetchone()[0]==0
+                    assert db.execute("SELECT count(*) FROM capture_jobs WHERE capture_state!='complete' OR delivery_state!='complete'").fetchone()[0]==0
+                assert len(acceptance.audit(directory/'empty/a/sdk-audit.jsonl'))==2
+                acceptance.verify('empty',later=False)
+            else:assert not (directory/'empty').exists()
+            (directory/('resume-verified-'+str(len(finished)))).touch(exist_ok=False)
+        else:
+            if (directory/'run-started').exists():raise RuntimeError('One-shot acceptance: inspect prior result before creating a new directory')
+            (directory/'run-started').touch()
+            acceptance=Acceptance(directory,args.live);acceptance.seed();results=[]
         trusted=certificate(directory,'trusted',trusted=True);untrusted=certificate(directory,'untrusted',trusted=False)
-        results=[]
-        with sync_playwright() as p, browser(p,directory,acceptance.bank_api) as (context,worker,bank,popup):
+        checks=None
+        with sync_playwright() as p:
             for case,plan in acceptance.journal['variants'].items():
-                acceptance.bank_api.plan=plan;acceptance.bank_api.later=False
-                a=directory/case/'a/db.sqlite3';b=directory/case/'b/db.sqlite3'
-                with acceptance.serve(a,plan['api_tokens']['a']) as (url_a,app):
-                    connect(popup,bank,worker,url_a,plan['api_tokens']['a'])
-                    settings(popup,bank,plan)
-                    acceptance.capture(case+'-a-initial',a,popup,bank,worker,2)
-                    acceptance.capture(case+'-a-repeat',a,popup,bank,worker,0)
-                    before_a=len(acceptance.audit(a.parent/'sdk-audit.jsonl'))
-                if case=='copied':
-                    b.parent.mkdir(parents=True)
-                    with closing(sqlite3.connect(a)) as source, closing(sqlite3.connect(b)) as target:source.backup(target)
-                with acceptance.serve(b,plan['api_tokens']['b'],trusted) as (url_b,app):
+                if args.resume_verified_prefix and case=='copied':continue
+                case_directory=directory/case;case_directory.mkdir(exist_ok=True)
+                profile_directory=case_directory/('resume-'+str(len(finished)) if args.resume_verified_prefix else 'browser')
+                profile_directory.mkdir()
+                with browser(p,profile_directory,acceptance.bank_api) as (context,worker,bank,popup):
+                    version=context.browser.version
+                    acceptance.bank_api.plan=plan;acceptance.bank_api.later=False
+                    a=case_directory/'a/db.sqlite3';b=case_directory/'b/db.sqlite3'
+                    with acceptance.serve(a,plan['api_tokens']['a']) as (url_a,app):
+                        connect(popup,bank,worker,url_a,plan['api_tokens']['a'])
+                        settings(popup,bank,plan,copied=case+'-a-initial' in acceptance.journal['completed'])
+                        if case+'-a-initial' not in acceptance.journal['completed']:
+                            acceptance.capture(case+'-a-initial',a,popup,bank,worker,2)
+                        if case+'-a-repeat' not in acceptance.journal['completed']:
+                            acceptance.capture(case+'-a-repeat',a,popup,bank,worker,0)
+                        before_a=len(acceptance.audit(a.parent/'sdk-audit.jsonl'))
                     if case=='copied':
-                        checks=security(directory,context,worker,bank,popup,trusted,untrusted)
-                    connect(popup,bank,worker,url_b,plan['api_tokens']['b'])
-                    assert config(worker)['url']==url_b
-                    assert state(worker) is None,'Old capture leaked across servers'
-                    assert popup.locator('#last-sync').is_hidden(),'Old server timestamp leaked'
-                    settings(popup,bank,plan,copied=case=='copied')
-                    acceptance.capture(case+'-b-initial',b,popup,bank,worker,0)
-                    acceptance.capture(case+'-b-repeat',b,popup,bank,worker,0)
-                    acceptance.bank_api.later=True
-                    acceptance.capture(case+'-b-new',b,popup,bank,worker,1)
-                    acceptance.capture(case+'-b-new-repeat',b,popup,bank,worker,0)
-                    results.append(acceptance.verify(case))
-                    assert len(acceptance.audit(a.parent/'sdk-audit.jsonl'))==before_a,'Old server received writes'
-            assert 'https://*/*' not in permissions(worker)
-            popup.screenshot(path=str(directory/'popup-final.png'),full_page=True)
-            summary={'mode':'live-test-account' if args.live else 'offline-fixture','chromium':context.browser.version,
+                        b.parent.mkdir(parents=True)
+                        with closing(sqlite3.connect(a)) as source, closing(sqlite3.connect(b)) as target:source.backup(target)
+                    with acceptance.serve(b,plan['api_tokens']['b'],trusted) as (url_b,app):
+                        if checks is None:checks=security(directory,context,worker,bank,popup,trusted,untrusted)
+                        connect(popup,bank,worker,url_b,plan['api_tokens']['b'])
+                        assert config(worker)['url']==url_b
+                        assert state(worker) is None,'Old capture leaked across servers'
+                        assert popup.locator('#last-sync').is_hidden(),'Old server timestamp leaked'
+                        settings(popup,bank,plan,copied=case=='copied')
+                        acceptance.capture(case+'-b-initial',b,popup,bank,worker,0)
+                        acceptance.capture(case+'-b-repeat',b,popup,bank,worker,0)
+                        acceptance.bank_api.later=True
+                        acceptance.capture(case+'-b-new',b,popup,bank,worker,1)
+                        acceptance.capture(case+'-b-new-repeat',b,popup,bank,worker,0)
+                        results.append(acceptance.verify(case))
+                        assert len(acceptance.audit(a.parent/'sdk-audit.jsonl'))==before_a,'Old server received writes'
+                        assert 'https://*/*' not in permissions(worker)
+                        popup.screenshot(path=str(directory/('popup-'+case+'.png')),full_page=True)
+                        # Finish this independent browser case before stopping B:
+                        # release HTTPS keep-alive/speculative TLS connections.
+                        # The same profile was used for both A and B in the case.
+                        context.close()
+            summary={'mode':'live-test-account' if args.live else 'offline-fixture','chromium':version,
                 'extension_version':json.loads(Path('/app/dist/extension/manifest.json').read_text())['version'],
                 'artifact_unchanged':True,'certificate_checks_enabled':True,'security':checks,'variants':results,
-                'jobs':list(acceptance.journal['completed'].values()),'bank':'synthetic-only','production_access':False}
+                'jobs':list(acceptance.journal['completed'].values()),'bank':'synthetic-only','production_access':False,
+                'resumed_verified_copied_case':args.resume_verified_prefix}
             lab.save(directory/'results.json',summary)
             print(encode_json(summary).decode(),flush=True)
         acceptance.api.close()
