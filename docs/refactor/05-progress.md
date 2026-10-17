@@ -287,3 +287,42 @@ and ZIP integrity. Source/tag remains immutable; subsequent docs do not replace 
 - Built `dist/zenimport-chrome-0.2.1.zip` and verified every archive member against
   the unpacked artifact; no private settings are included. Local commits only.
   No push, Git tags, release, installed-extension update or production deployment.
+
+## October 17, 2026 — Multiple named bank connections (local 0.2.1)
+
+- Added a compact Bank connection selector and Settings → Bank connections with
+  Add connection/Rename. Each login can contain multiple discovered accounts;
+  every distinct account has its own target, initial date and enabled/ignored
+  choice. Users still authenticate only on the bank website. No bank credentials,
+  injected product UI, financial editor, or keepalive were added.
+- Inspection reads the server's connection catalog. Remembered choices are hints
+  only among memberships containing all observed physical accounts. An unknown
+  account requires an explicit existing association or a new named connection;
+  it never silently extends the last login. Start commands bind the chosen
+  connection and recheck the active bank page. Existing profile IDs are retained.
+- Last-success markers and one-time import dates are scoped by server/connection.
+  One unfinished capture blocks profile switching; a paused capture can now be
+  explicitly stopped. Token repair keeps its prior recovery behavior. Pending
+  saves/refreshes lock selection, preventing another profile from receiving stale
+  settings. Names and unfinished form drafts survive popup closure; a draft and
+  lost creation response are bound to the observed account set so another login
+  cannot reuse that pending connection ID.
+- Shared physical accounts reuse canonical IDs, mappings and the permanent
+  delivery/deletion journal. Import settings are shared and the popup says so;
+  Unlink account removes membership from one connection while preserving history.
+- Docker: full joint built-extension/real-backend/fake-ZenMoney suite 26 passed.
+  After final creation-context/interaction-lock tightening, 52 units and 12
+  independent browser checks passed (two expected module skips without backend).
+  Focused login/shared-account scenarios passed again: 2 tests on the final source.
+  The complete backend passed 527 tests plus HTTP/crash/shutdown/snapshot checks.
+  Logs: ignored `.local/profiles-*.log`; no production data or real APIs.
+- Tests cover two artificial BIDV logins with two accounts each, different targets,
+  ignored accounts, return to the first login, stale selection/start rejection,
+  separate sync timestamps, repeat capture, shared access and mobile deletion
+  without restoration, unlink, name drafts, and lost creation ACKs. Screenshot
+  `test-results/popup-bank-connections.png` was checked at 390 px without overflow.
+  A live two-login bank acceptance is not claimed.
+- Guide: `docs/bank-connections.md`. Backend schema 7 preserves old profiles and
+  accepts verified published schema-6 archives; new archives preserve names and
+  memberships. Both components need 0.2.1. SDK unchanged. Local ZIP rebuilt;
+  no push, tag, publication, installed-extension update or production deployment.

@@ -14,7 +14,10 @@ Do not treat the delivery journal as disposable cache: removing it can reimport
 previously deleted transactions.
 
 Chrome keeps the backend address/API token, connection settings, and capture
-checkpoints in private extension storage. Unfinished address/token input stays
+checkpoints in private extension storage. Named bank connections and account
+memberships are stored on your backend. A connection is not a stored bank login.
+Unfinished connection-name drafts stay in private session storage, scoped to the
+server, bank, and observed accounts. Unfinished address/token input stays
 in session storage until connection or browser/extension restart. The ZenMoney
 token stays on the backend; do not enter it in the extension. Backend tokens are
 never passed to bank-page JavaScript. Do not use an untrusted shared backend:

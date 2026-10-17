@@ -88,8 +88,15 @@ def account(popup,target,source="12345678"):
 
 def refresh_accounts(popup):
     # Ready settings collapse after saving; the user explicitly expands them.
+    profile=popup.locator('#bank-profile').input_value()
     popup.locator('#settings').evaluate('(e)=>e.open=true')
     popup.locator('#refresh-accounts').click()
+    expect(popup.locator('#status')).not_to_contain_text('Loading account settings')
+    # These fixture visits intentionally add another account of the SAME login.
+    # A new account must now be explicitly associated, never silently merged.
+    if not popup.locator('#bank-profile').input_value() and profile:
+        popup.locator('#bank-profile').select_option(profile)
+        expect(popup.locator('#status')).to_contain_text('Bank connection saved')
 
 def state(worker):return worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
 
@@ -206,7 +213,7 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         assert remote.transactions['ambiguous-old']==retained
         assert deleted not in remote.transactions
         assert remote.transactions[edited]['tag']==['category-b']
-        popup.wait_for_function("async()=> !(await chrome.storage.local.get('reimportFrom')).reimportFrom")
+        popup.wait_for_function("async()=> !Object.values((await chrome.storage.local.get('reimportDates')).reimportDates || {}).some(Boolean)")
         with storage.transaction(path,read_only=True) as db:assert db.execute('PRAGMA integrity_check').fetchone()[0]=='ok'
 
 

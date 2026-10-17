@@ -1,5 +1,9 @@
 # Install and update ZenImport Chrome
 
+The instructions below describe published 0.2.0. Local development 0.2.1 also
+supports [named connections for multiple bank logins](bank-connections.md) and
+[BIDV](bidv.md); those features require backend 0.2.1.
+
 ## Requirements
 
 - Desktop Google Chrome 120 or newer with permission to load unpacked extensions.
@@ -44,7 +48,7 @@ The steps follow Chrome's [unpacked extension instructions](https://developer.ch
 
 1. Sign in to VietinBank yourself and open transaction history for the desired
    account. The extension does not log in or extend an expired bank session.
-2. Open ZenImport's popup. Expand **Settings → Connection** if necessary. Enter the
+2. Open ZenImport's popup. Expand **Settings → Connection** (**Server connection** in 0.2.1) if necessary. Enter the
    backend's root address, such as `https://your-server.example`, and its
    **Server token** (`API_TOKEN`). Do not append `/api/v1` to the address.
 3. Click **Connect** and approve Chrome's request for access to that server.

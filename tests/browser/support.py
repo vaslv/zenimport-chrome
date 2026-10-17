@@ -16,6 +16,7 @@ BANK = Path(__file__).with_name('bank.html').read_text()
 class PopupBackend:
     def __init__(self):
         self.accounts = {}
+        self.connections = {}
         self.connection_id = str(uuid4())
         self.calls = []
         self.version = 1
@@ -27,10 +28,27 @@ class PopupBackend:
             return {'accounts':[{'id':'target-vnd','title':'Fixture VND '+'Long account title '*8,'currency':'VND','instrument':2},
                 {'id':'target-usd','title':'Fixture USD','currency':'USD','instrument':3}]}
         if path == '/api/v1/connections/discover':
+            profile=body['profile_key'];connection=self.connections.get(profile)
+            if connection is None:
+                connection={'id':self.connection_id if not self.connections else str(uuid4()),'bank':body['bank'],
+                    'profile_key':profile,'profile_identity':body['profile_identity'],'label':body.get('label','Fixture connection'),
+                    'accounts_complete':False,'accounts':[]}
+                self.connections[profile]=connection
             for raw in body['accounts']:
                 self.accounts.setdefault(raw['source_key'],raw|{'id':str(uuid4()),'selection':'unconfigured','settings_version':0,
                     'zenmoney_account_id':None,'import_start':None,'last_complete_end':None})
-            return {'id':self.connection_id,'bank':body['bank'],'accounts_complete':False,'accounts':list(self.accounts.values())}
+                if not any(a['id']==self.accounts[raw['source_key']]['id'] for a in connection['accounts']):connection['accounts'].append(self.accounts[raw['source_key']])
+            if body.get('label'):connection['label']=body['label']
+            return connection
+        if path.startswith('/api/v1/connections?bank='):
+            return {'connections':[c for c in self.connections.values() if c['bank']==path.split('=',1)[1]]}
+        if path.endswith('/label'):
+            connection=next(c for c in self.connections.values() if c['id']==path.split('/')[4])
+            connection['label']=body['label'];return connection
+        if path.endswith('/unlink'):
+            connection=next(c for c in self.connections.values() if c['id']==path.split('/')[4])
+            connection['accounts']=[a for a in connection['accounts'] if a['id']!=path.split('/')[6]]
+            return connection
         if '/settings' in path:
             for account in self.accounts.values():
                 if account['id'] == path.split('/')[4]:

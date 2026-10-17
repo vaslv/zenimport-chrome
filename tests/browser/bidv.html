@@ -3,9 +3,16 @@
 <main><h1>Accounts</h1><button>Payment Open account</button><app-card-account-2><p class="card-account-2--no">12345678</p><p class="card-account-2--amount">900,000 VND</p></app-card-account-2><button>Savings Open account</button></main>
 <script>
 // Synthetic UI, modelled only on observed DOM. No real login or credentials.
+const params=new URL(location.href).searchParams;
+if(params.has('fixtureLogin'))localStorage.setItem('fixtureLogin',params.get('fixtureLogin'));
+if(params.has('multi'))localStorage.setItem('fixtureMulti','true');
+const sources=localStorage.getItem('fixtureLogin')==='b'?['87654321','99990000']:['12345678','11112222'];
 const account=location.pathname.match(/\/thanh-toan\/(\d+)$/)?.[1];
 let period={start:'2025-10-16',end:'2026-10-16'},rows=[],page=0,drawer,modal,chosen=0,month=9,year=2026;
 const main=document.querySelector('main');
+if(!account){main.innerHTML='<h1>Accounts</h1><button>Payment Open account</button>'+
+ (localStorage.getItem('fixtureMulti')?sources:sources.slice(0,1)).map(source=>`<app-card-account-2><p class="card-account-2--no">${source}</p><p class="card-account-2--amount">900,000 VND</p></app-card-account-2>`).join('')+'<button>Savings Open account</button>';}
+if(account && !sources.includes(account)){main.innerHTML='<h1>Account unavailable in this bank login</h1>';throw Error('Fixture account belongs to another login');}
 if(account){main.innerHTML=`<h1>Payment</h1><app-card-account><p class="card-account--no">${account}</p><p class="card-account--balance">900,000 VND</p><button class="ant-dropdown-trigger">Transaction history</button></app-card-account>`;
 main.querySelector('button').addEventListener(new URL(location.href).searchParams.has('clickMenu')?'click':'mouseenter',()=>{
  if(document.querySelector('#history-menu'))return;

@@ -2,12 +2,15 @@
 
 Both backends and the extension must support migration (0.2.0+). The earlier 0.1.9
 ZIP does not contain the buttons. Upgrade both servers and the extension first.
+Backend 0.2.1 accepts verified archives from 0.2.0 (schema 6) and current schema 7;
+0.2.0 cannot import a schema-7 archive. Named connections and memberships are
+included in the new archive.
 
 1. In **Settings → Data migration**, click **Export data** on the old server.
    This stops bank capture and persistently pauses that backend. Save the ZIP and
    check that the download completed. If another server operation is in progress,
    retry when it finishes.
-2. In **Connection**, enter the new address and its backend token, then Connect.
+2. In **Connection** (**Server connection** in 0.2.1), enter the new address and its backend token, then Connect.
    Configure that server's ZenMoney token separately for the same ZenMoney account.
 3. Before its first synchronization, click **Import data** and select the ZIP.
    Wait for **Data restored**. Import does not send financial changes to ZenMoney.

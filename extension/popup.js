@@ -1,6 +1,7 @@
 import {permissionOrigin} from './backend-client.js';
 import {today,daysAgo,monthsAgo,validDate,syncTime} from './dates.js';
 import {setupMigration} from './popup-migration.js';
+import {setupProfiles} from './popup-profiles.js';
 const $ = id => document.getElementById(id);
 const rpc = async data => {
   const result=await chrome.runtime.sendMessage(data);
@@ -20,13 +21,15 @@ const messages={
   capture_context_changed:'The page or account has changed. Synchronize again.',validation_error:'Check the selected accounts and date.',
   migration_paused:'This server is paused after export. Import the archive on the new server, or resume this server in Settings.',
   migration_busy:'A server operation is in progress. Try again shortly.',
+  bank_connection_required:'Choose a connection for the open bank session, or add a new one in Settings.',
+  bank_connection_changed:'The bank session belongs to another connection. Refresh and choose the correct connection before synchronizing.',
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
 const showError=error=>{
   status(messages[error.code] || 'Could not complete the action. Try again later.','error');
   if(['not_configured','unauthorized','invalid_server','unsupported_api_version'].includes(error.code)){
     $('settings').open=true;$('connection-settings').open=true;
-  }else if(['account_unconfigured','settings_conflict','zenmoney_account_unavailable'].includes(error.code))$('settings').open=true;
+  }else if(['account_unconfigured','settings_conflict','zenmoney_account_unavailable','bank_connection_required','bank_connection_changed'].includes(error.code))$('settings').open=true;
 };
 let lastSyncedAt=null;
 function renderLastSync(value=lastSyncedAt) {
@@ -39,18 +42,28 @@ let connectionDraftPending=false;
 let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='',migrationPaused=false;
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
 function updateButton() {
-  const active=['planned','collecting'].includes(capture?.phase);
-  $('account-settings').hidden=!configured;
-  $('history-settings').hidden=!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported);
-  $('discrepancies').disabled=busy || !compatible;
-  $('connect').disabled=busy;
-  $('url').disabled=busy;$('token').disabled=busy;
+  const active=['planned','collecting'].includes(capture?.phase),working=busy || !!refreshTask;
+  $('account-settings').hidden=!compatible;
+  $('history-settings').hidden=!compatible || !view?.connection?.accounts.some(a=>a.selection==='enabled' && a.supported);
+  $('discrepancies').disabled=working || !compatible;
+  $('connect').disabled=working;$('refresh-accounts').disabled=working;
+  $('accounts').inert=working || !compatible;
+  $('url').disabled=working;$('token').disabled=working;
   $('sync').textContent=active?'Stop capture':'Synchronize';
-  $('sync').disabled=busy || migrationPaused || (!active && (!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported)));
+  $('sync').disabled=working || migrationPaused || (!active && (!compatible || !view?.connection?.accounts.some(a=>a.selection==='enabled' && a.supported)));
+  $('stop-paused').hidden=capture?.phase!=='paused';$('stop-paused').disabled=working;
+  const locked=working || ['planned','collecting','paused'].includes(capture?.phase);
+  profiles.update(locked);
+  for(const e of $('accounts').querySelectorAll('.unlink-account'))e.disabled=locked;
 }
 function progress(state) {
   capture=state;updateButton();
   if(!state)return;
+  if(view?.connection?.id!==state.connection?.id) {
+    if(['planned','collecting','paused'].includes(state.phase))status(`Capture belongs to ${state.connection?.label || 'another connection'}. Finish or stop it before switching connections.`,'loading');
+    else status(compatible?'Ready to synchronize.':messages.bank_connection_required);
+    return;
+  }
   if(state.error && ['failed','paused'].includes(state.phase)){showError({code:state.error});return;}
   if(state.phase==='paused'){status('Capture paused. Click Synchronize to resume.');return;}
   const job=state.job;
@@ -103,13 +116,13 @@ function accountForm(account) {
   form.addEventListener('change',()=>{if(!saving){save.textContent='Save account';save.disabled=false;feedback.hidden=true;}});
   form.addEventListener('invalid',()=>localStatus('Check the selected account and import start date.','error'),true);
   form.addEventListener('submit',async event=>{
-    event.preventDefault();if(saving)return;
+    event.preventDefault();if(saving || busy)return;
     if(!target.value){localStatus('Select a ZenMoney account or Do not import.','error');return;}
     if(target.value!=='ignored' && (!validDate(date.value) || date.value>today())){localStatus(messages.validation_error,'error');return;}
-    saving=true;save.textContent='Saving…';localStatus('Saving account…','loading');status('Saving account…','loading');
+    saving=true;busy=true;updateButton();save.textContent='Saving…';localStatus('Saving account…','loading');status('Saving account…','loading');
     const controls=[...form.querySelectorAll('input,select,button')];for(const control of controls)control.disabled=true;
     try {
-      const result=await rpc({type:'settings',accountId:account.id,settings:{expected_version:account.settings_version,
+      const result=await rpc({type:'settings',connectionId:view.connection.id,accountId:account.id,settings:{expected_version:account.settings_version,
         selection:target.value==='ignored'?'ignored':'enabled',zenmoney_account_id:target.value==='ignored'?null:target.value,
         import_start:target.value==='ignored'?null:date.value}});
       view.connection.accounts=view.connection.accounts.map(a=>a.id===account.id?result.account:a);
@@ -120,35 +133,47 @@ function accountForm(account) {
       showError(error);
       localStatus(error.code==='backend_unavailable'?'Could not confirm that the account was saved. Refresh the account list.':messages[error.code] || 'Could not save the account. Try again later.','error');
     }finally{
-      saving=false;for(const control of controls)control.disabled=false;syncFields();save.textContent='Save account';
+      saving=false;busy=false;for(const control of controls)control.disabled=false;syncFields();save.textContent='Save account';updateButton();
     }
   });
+  const unlink=node('button','Unlink account',{type:'button',className:'unlink-account'});
+  unlink.addEventListener('click',async()=>{
+    busy=true;updateButton();status('Unlinking account…','loading');
+    try {await rpc({type:'unlink-bank-account',connectionId:view.connection.id,accountId:account.id});await refresh();status('Account unlinked. History and sent transactions were kept.','success');}
+    catch(error){showError(error);}finally{busy=false;updateButton();}
+  });
+  form.append(unlink);
+  if(view.connections.some(c=>c.id!==view.connection.id && c.accounts.some(a=>a.id===account.id)))form.append(node('p','Shared account: the ZenMoney mapping and import choice apply to all connections. Unlink it here to keep importing through another connection.',{className:'muted'}));
   return form;
 }
 function renderAccounts() {
   $('accounts').replaceChildren();
-  if(!view)return;
+  if(!view?.connection)return;
   if(!view.connection.accounts_complete)$('accounts').append(node('p','The selected account was detected. Open the other bank accounts to add them to settings.',{className:'muted'}));
   for(const account of view.connection.accounts)$('accounts').append(accountForm(account));
   $('accounts').append(node('p','Create new ZenMoney accounts in the mobile app.',{className:'muted'}));
 }
 function refresh() {
-  if(!refreshTask)refreshTask=refreshData().finally(()=>{refreshTask=null;});
+  if(!refreshTask){refreshTask=refreshData().finally(()=>{refreshTask=null;updateButton();});updateButton();}
   return refreshTask;
 }
 async function refreshData() {
   compatible=false;renderLastSync(null);status('Loading account settings…','loading');$('refresh-accounts').disabled=true;$('accounts').inert=true;for(const control of $('accounts').querySelectorAll('input,select,button'))control.disabled=true;updateButton();
   try {
-    view=await rpc({type:'inspect'});compatible=true;renderLastSync(view.lastSyncedAt);
+    view=await rpc({type:'inspect'});compatible=!!view.connection;renderLastSync(view.lastSyncedAt);
     $('bank').textContent=({vietinbank:'VietinBank',bidv:'BIDV'})[view.bank] || view.bank;
+    await profiles.render(view);
+    $('reimport').value=view.reimportFrom || '';reimportSaved=$('reimport').value;
+    if(!view.connection){$('accounts').replaceChildren();status(messages.bank_connection_required);return;}
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
     if(pending){$('settings').open=true;status('Select the accounts to import.');}
     else if(!capture)status(view.connection.accounts.some(a=>a.selection==='enabled' && a.supported)?'Ready to synchronize.':messages.account_disabled);
     else progress(capture);
-  } catch(error){showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
+  } catch(error){await profiles.render(null);showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
 }
 let connectionEdited=false;
+const profiles=setupProfiles({rpc,refresh,lock:value=>{busy=value;updateButton();},feedback:status,error:showError});
 const migration=setupMigration({rpc,refresh:async()=>{capture=null;view=null;await refresh();},
   lock:value=>{busy=value;updateButton();},pause:value=>{migrationPaused=value;updateButton();}});
 for(const id of ['url','token'])$(id).addEventListener('input',()=>{
@@ -168,6 +193,10 @@ $('server-form').addEventListener('submit',async event=>{
 });
 $('discrepancies').addEventListener('click',async()=>{try{await rpc({type:'open-discrepancies'});}catch(error){showError(error);}});
 $('refresh-accounts').addEventListener('click',refresh);
+$('stop-paused').addEventListener('click',async()=>{
+  busy=true;updateButton();try{await rpc({type:'stop'});progress((await rpc({type:'status'})).capture);await refresh();}
+  catch(error){showError(error);}finally{busy=false;updateButton();}
+});
 $('reimport').max=today();
 $('sync').addEventListener('click',async()=>{
   busy=true;updateButton();
@@ -178,9 +207,9 @@ $('sync').addEventListener('click',async()=>{
       if(!view?.origin || !await chrome.permissions.request({origins:[view.origin]}))throw Object.assign(Error(),{code:'unsupported_bank'});
       const date=$('reimport').value;
       if(date && (!validDate(date) || date>today()))throw Object.assign(Error(),{code:'validation_error'});
-      await rpc({type:'reimport',date});
+      await rpc({type:'reimport',date,connectionId:view.connection.id});
       reimportSaved=date;
-      status('Starting synchronization…','loading');await rpc({type:'start'});
+      status('Starting synchronization…','loading');await rpc({type:'start',connectionId:view.connection.id});
     }
     const state=await rpc({type:'status'});progress(state.capture);await migration.refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
@@ -198,8 +227,10 @@ try {
  if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}
 setInterval(async()=>{
- try{const state=await rpc({type:'status'});renderLastSync(compatible?state.lastSyncedAt:null);if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
-  if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value='';
-  reimportSaved=state.reimportFrom;
+ try{const state=await rpc({type:'status'});const same=state.view?.connection?.id===view?.connection?.id;renderLastSync(compatible && same?state.lastSyncedAt:null);if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
+  if(same){
+    if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value='';
+    reimportSaved=state.reimportFrom;
+  }
  }catch{}
 },1500);

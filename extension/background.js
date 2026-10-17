@@ -1,6 +1,7 @@
 import {Backend, SyncError, serverAddress} from './backend-client.js';
 import {Coordinator} from './coordinator.js';
 import {connectorFor,connectorById} from './connectors/index.js';
+import {bankName,profileStorageKey,resolveProfile,canAttach,accountSignature} from './bank-profiles.js';
 
 const secureStorage = Promise.all(['local','session'].map(area =>
   chrome.storage[area].setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'})));
@@ -30,18 +31,68 @@ async function activeTab() {
   const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
   if (!tab || !connectorFor(tab.url)) throw new SyncError('unsupported_bank'); return tab;
 }
-async function inspect() {
+async function savedReimport(config,view) {
+  if(!config || !view?.connection)return '';
+  const {reimportDates={},reimportFrom}=await chrome.storage.local.get(['reimportDates','reimportFrom']);
+  const key=config.url+'|'+view.connection.id;
+  if(reimportFrom && !Object.keys(reimportDates).length) {
+    reimportDates[key]=reimportFrom;await chrome.storage.local.set({reimportDates});
+    await chrome.storage.local.remove('reimportFrom');
+  }
+  return reimportDates[key] || '';
+}
+async function inspect({profileKey=null,label=null}={}) {
   const config = await configuration(), client = new Backend(config);
+  await savedReimport(config,(await chrome.storage.local.get('view')).view);
   await client.info();
   const tab = await activeTab(), adapter = connectorFor(tab.url);
-  const {profiles = {}} = await chrome.storage.local.get('profiles');
-  const key = config.url + '|' + adapter.id;
-  if (!profiles[key]) { profiles[key] = crypto.randomUUID(); await chrome.storage.local.set({profiles}); }
-  const detected = await adapter.inspect(tab,profiles[key]);
-  const connection = await client.request('/connections/discover','POST',detected.discovery);
+  const {profiles={},selectedProfiles={},creatingProfiles={}}=await chrome.storage.local.get(['profiles','selectedProfiles','creatingProfiles']);
+  const key=profileStorageKey(config.url,adapter.id);
+  const detected=await adapter.inspect(tab,'probe');
+  let connections;
+  try {({connections}=await client.request('/connections?bank='+encodeURIComponent(adapter.id)));}
+  catch(error){if(error.code==='not_found')throw new SyncError('unsupported_api_version');throw error;}
+  let selected=profileKey ? connections.find(c=>c.profile_key===profileKey) : resolveProfile(connections,detected.discovery.accounts,selectedProfiles[key] || profiles[key]);
+  if(profileKey && (!selected || !canAttach(connections,selected,detected.discovery.accounts)))throw new SyncError('bank_connection_changed');
+  if(label!==null || connections.length===0) {
+    if(label!==null) {
+      if(typeof label!=='string' || !label.trim() || label.length>120)throw new SyncError('validation_error');
+      // Reuse a persisted creation identity after popup closure or a lost ACK.
+      const signature=accountSignature(detected.discovery.accounts);
+      if(creatingProfiles[key]?.signature!==signature) {
+        creatingProfiles[key]={profileKey:crypto.randomUUID(),signature};await chrome.storage.local.set({creatingProfiles});
+      }
+      selected={profile_key:creatingProfiles[key].profileKey,profile_identity:'user_selected'};
+    } else selected={profile_key:profiles[key] || crypto.randomUUID(),profile_identity:'user_selected'};
+    if(!profiles[key]) {profiles[key]=selected.profile_key;await chrome.storage.local.set({profiles});}
+  }
+  let connection=null;
+  if(selected) {
+    const discovery={...detected.discovery,profile_key:selected.profile_key,profile_identity:selected.profile_identity || 'user_selected'};
+    if(label!==null || connections.length===0)discovery.label=label?.trim() || bankName(adapter.id)+' 1';
+    connection=await client.request('/connections/discover','POST',discovery);
+    connections=[...connections.filter(c=>c.id!==connection.id),connection];
+    selectedProfiles[key]=connection.profile_key;
+    if(creatingProfiles[key]?.profileKey===connection.profile_key) {
+      await chrome.storage.session.remove('bankProfileDraft');delete creatingProfiles[key];
+    }
+    await chrome.storage.local.set({selectedProfiles,creatingProfiles});
+  }
   const {syncHistory={}}=await chrome.storage.local.get('syncHistory');
-  const view={tabId:tab.id,bank:adapter.id,origin:adapter.origin,connection,lastSyncedAt:syncHistory[config.url+'|'+connection.id] || null};
+  const view={tabId:tab.id,bank:adapter.id,origin:adapter.origin,connection,connections,
+    selectionRequired:!connection,detectedAccounts:detected.discovery.accounts,
+    lastSyncedAt:connection ? syncHistory[config.url+'|'+connection.id] || null : null};
+  view.reimportFrom=await savedReimport(config,view);
   await chrome.storage.local.set({view});
+  return view;
+}
+async function requireIdle() {
+  const capture=await store.get();
+  if(capture && ['planned','collecting','paused'].includes(capture.phase))throw new SyncError('account_busy');
+}
+async function requireView(connectionId) {
+  const {view}=await chrome.storage.local.get('view');
+  if(!view?.connection || view.connection.id!==connectionId)throw new SyncError('bank_connection_changed');
   return view;
 }
 async function popup(data) {
@@ -53,15 +104,15 @@ async function popup(data) {
     return {};
   }
   if(data.type==='migration-imported'){
-    await chrome.storage.local.remove(['view','capture','reimportFrom']);
+    await chrome.storage.local.remove(['view','capture','reimportFrom','reimportDates']);
     await chrome.alarms.clear('capture');
     return {};
   }
   if(data.type==='migration-resume')return new Backend(await configuration()).request('/migration/resume','POST',{});
   if (data.type === 'status') {
-    const {config,view,capture,reimportFrom,syncHistory={}} = await chrome.storage.local.get(['config','view','capture','reimportFrom','syncHistory']);
-    return {configured:!!config,url:config?.url || '',view,capture,reimportFrom:reimportFrom || '',
-      lastSyncedAt:config && view ? syncHistory[config.url+'|'+view.connection.id] || null : null};
+    const {config,view,capture,syncHistory={}} = await chrome.storage.local.get(['config','view','capture','syncHistory']);
+    return {configured:!!config,url:config?.url || '',view,capture,reimportFrom:await savedReimport(config,view),
+      lastSyncedAt:config && view?.connection ? syncHistory[config.url+'|'+view.connection.id] || null : null};
   }
   if (data.type === 'configure') {
     const {capture,config:previous} = await chrome.storage.local.get(['capture','config']);
@@ -75,7 +126,7 @@ async function popup(data) {
     await chrome.storage.local.set({config,...(resume ? {capture:{...capture,error:null}} : {})});
     // Clear even when the popup closed while the connection was being checked.
     await chrome.storage.session.remove('connectionDraft');
-    if (!resume) await chrome.storage.local.remove(['view','capture']);
+    if (!resume) await chrome.storage.local.remove(['view','capture','reimportFrom']);
     return {configured:true};
   }
   if (data.type === 'open-discrepancies') {
@@ -85,10 +136,27 @@ async function popup(data) {
     return {};
   }
   if (data.type === 'inspect') return inspect();
+  if(data.type==='select-bank-connection') {
+    await requireIdle();return inspect({profileKey:data.profileKey});
+  }
+  if(data.type==='create-bank-connection') {
+    await requireIdle();return inspect({label:data.label});
+  }
+  if(data.type==='rename-bank-connection') {
+    const view=await requireView(data.connectionId);
+    await new Backend(await configuration()).request(`/connections/${view.connection.id}/label`,'PUT',{label:data.label});
+    return inspect();
+  }
+  if(data.type==='unlink-bank-account') {
+    await requireIdle();const view=await requireView(data.connectionId);
+    if(!view.connection.accounts.some(a=>a.id===data.accountId))throw new SyncError('bank_connection_changed');
+    await new Backend(await configuration()).request(`/connections/${view.connection.id}/accounts/${data.accountId}/unlink`,'POST',{});
+    return inspect();
+  }
   if (data.type === 'catalog') return new Backend(await configuration()).request('/zenmoney/accounts');
   if (data.type === 'settings') {
-    const view = (await chrome.storage.local.get('view')).view;
-    if (!view?.connection.accounts.some(account => account.id === data.accountId)) throw new SyncError('capture_context_changed');
+    const view = await requireView(data.connectionId);
+    if (!view.connection.accounts.some(account => account.id === data.accountId)) throw new SyncError('capture_context_changed');
     const result = await new Backend(await configuration()).request(`/accounts/${data.accountId}/settings`,'PUT',data.settings);
     view.connection.accounts = view.connection.accounts.map(account => account.id === result.id ? result : account);
     await chrome.storage.local.set({view}); return {account:result};
@@ -96,12 +164,18 @@ async function popup(data) {
   if (data.type === 'reimport') {
     // The backend validates the actual bank calendar and supported depth.
     if (data.date && !/^\d{4}-\d{2}-\d{2}$/.test(data.date)) throw new SyncError('validation_error');
-    await chrome.storage.local.set({reimportFrom:data.date || ''}); return {};
+    const view=await requireView(data.connectionId),config=await configuration();
+    const {reimportDates={}}=await chrome.storage.local.get('reimportDates');
+    reimportDates[config.url+'|'+view.connection.id]=data.date || '';
+    await chrome.storage.local.set({reimportDates});await chrome.storage.local.remove('reimportFrom');return {};
   }
   if (data.type === 'start') {
-    const view = await inspect(), adapter = connectorById(view.bank);
+    const view = await inspect();
+    if(!view.connection)throw new SyncError('bank_connection_required');
+    if(view.connection.id!==data.connectionId)throw new SyncError('bank_connection_changed');
+    const adapter = connectorById(view.bank);
     await adapter.prepare(view.tabId);
-    const reimportFrom = (await chrome.storage.local.get('reimportFrom')).reimportFrom || null;
+    const reimportFrom = await savedReimport(await configuration(),view) || null;
     await chrome.alarms.create('capture',{periodInMinutes:.5});
     const capture = await (await coordinator()).start({connection:view.connection,bank:view.bank,tabId:view.tabId,reimportFrom});
     return {capture};
@@ -150,8 +224,11 @@ async function tick() {
     if (state?.phase === 'complete') {
       // Backfill is a one-shot collection request. A blocked delivery is still
       // visible and does not authorize recapture or another send.
-      const pending=(await chrome.storage.local.get('reimportFrom')).reimportFrom;
-      if (state.command.reimport_from && pending===state.command.reimport_from) await chrome.storage.local.remove('reimportFrom');
+      const config=await configuration(),{reimportDates={}}=await chrome.storage.local.get('reimportDates');
+      const key=config.url+'|'+state.connection.id;
+      if(state.command.reimport_from && reimportDates[key]===state.command.reimport_from) {
+        delete reimportDates[key];await chrome.storage.local.set({reimportDates});
+      }
       if (['complete','blocked'].includes(state.job.delivery_state)) await chrome.alarms.clear('capture');
     }
   } catch (error) { await recover(error); }

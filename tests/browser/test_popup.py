@@ -159,6 +159,7 @@ def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
         service.accounts['87654321']=dict(next(iter(service.accounts.values())),id=str(uuid4()),source_key='87654321',
             label='Second fixture account',masked_number='••4321',selection='unconfigured',settings_version=0,
             zenmoney_account_id=None,import_start=None)
+        next(iter(service.connections.values()))['accounts'].append(service.accounts['87654321'])
         popup.reload()
         expect(popup.locator('.account')).to_have_count(2)
         expect(popup.locator('#settings')).to_have_attribute('open','')
@@ -193,6 +194,8 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.locator('.account-status')).to_be_visible()
         expect(popup.locator('.account-status')).to_contain_text('Saving account')
         expect(popup.locator('.account select')).to_be_disabled()
+        expect(popup.locator('#bank-profile')).to_be_disabled()
+        expect(popup.locator('#sync')).to_be_disabled()
         assert service.started.is_set()
         if Path('/results').is_dir():popup.screenshot(path='/results/account-saving.png')
         service.release.set()
@@ -264,10 +267,12 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         expect(popup.locator('#last-sync')).to_contain_text('2 hours ago')
         assert worker.evaluate("async()=> (await chrome.storage.local.get('syncHistory')).syncHistory")==saved
         service.connection_id=str(uuid4())
+        for connection in service.connections.values():connection['id']=service.connection_id
         popup.reload()
         expect(popup.locator('#sync')).to_be_enabled()
         expect(popup.locator('#last-sync')).to_be_hidden()
         service.connection_id=next(iter(saved)).split('|')[-1]
+        for connection in service.connections.values():connection['id']=service.connection_id
         popup.reload()
         expect(popup.locator('#last-sync')).to_contain_text('16 October 2026')
         bank.goto('about:blank');bank.bring_to_front();popup.reload()
@@ -330,3 +335,29 @@ def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
         assert completed['workerId']==paused['workerId']
         assert completed['command']['request_id']!=paused['command']['request_id']
         assert len([call for call in service.calls if call[:2]==('POST','/api/v1/jobs')])==1
+
+
+def test_bank_connection_name_draft_survives_popup_closure_and_saves_once():
+    service=PopupBackend()
+    with http_server(service) as url,sync_playwright() as p,installed(p,url) as (context,worker,bank,popup,identifier):
+        connect(popup,bank,url)
+        expect(popup.locator('.account')).to_have_count(1)
+        first=popup.locator('#bank-profile').input_value()
+        popup.locator('#bank-profile-settings').evaluate('(e)=>e.open=true')
+        popup.locator('#add-profile').click()
+        popup.locator('#profile-name').fill('Second bank login')
+        popup.close()
+        popup=context.new_page();popup.goto(f'chrome-extension://{identifier}/popup.html');bank.bring_to_front()
+        expect(popup.locator('#profile-form')).to_be_visible()
+        expect(popup.locator('#profile-name')).to_have_value('Second bank login')
+        popup.locator('#save-profile').click()
+        expect(popup.locator('#status')).to_contain_text('Bank connection saved')
+        expect(popup.locator('#bank-profile option:checked')).to_have_text('Second bank login')
+        assert popup.locator('#bank-profile').input_value()!=first
+        assert len(service.connections)==2 and len(service.accounts)==1
+        assert not worker.evaluate("async()=> (await chrome.storage.session.get('bankProfileDraft')).bankProfileDraft")
+        popup.reload()
+        expect(popup.locator('#profile-form')).to_be_hidden()
+        expect(popup.locator('#bank-profile option:checked')).to_have_text('Second bank login')
+        assert len(service.connections)==2
+        assert not [c for c in service.calls if c[:2]==('POST','/api/v1/jobs')]

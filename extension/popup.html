@@ -8,17 +8,27 @@
 </head>
 <body><main>
   <header><h1>ZenImport</h1><span id="bank"></span></header>
+  <label id="profile-picker" hidden>Bank connection<select id="bank-profile" aria-label="Bank connection"></select></label>
   <button id="sync" class="primary" type="button" disabled>Synchronize</button>
   <p id="last-sync" class="muted" hidden></p>
   <p id="status" role="status" aria-live="polite"></p>
+  <button id="stop-paused" type="button" hidden>Stop paused capture</button>
   <button id="discrepancies" type="button" disabled>Discrepancies</button>
   <details id="settings"><summary>Settings</summary>
-    <details id="connection-settings" class="settings-section"><summary>Connection</summary>
+    <details id="connection-settings" class="settings-section"><summary>Server connection</summary>
     <form id="server-form">
       <label>Server address<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
       <label>Server token<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
       <button id="connect" type="submit">Connect</button>
     </form>
+    </details>
+    <details id="bank-profile-settings" class="settings-section" hidden><summary>Bank connections</summary>
+      <p class="muted">Sign in on the bank website. Choose a saved connection for that login, or add another one. Bank passwords are never stored here.</p>
+      <div class="shortcuts"><button id="add-profile" type="button">Add connection</button><button id="rename-profile" type="button">Rename</button></div>
+      <form id="profile-form" hidden>
+        <label>Connection name<input id="profile-name" maxlength="120" autocomplete="off" required></label>
+        <div class="shortcuts"><button id="save-profile" type="submit">Add connection</button><button id="cancel-profile" type="button">Cancel</button></div>
+      </form>
     </details>
     <details id="migration-settings" class="settings-section" hidden><summary>Data migration</summary>
       <p class="muted">Export pauses this server. Connect to the new server, then import before its first synchronization. The ZIP contains private financial data, not server tokens.</p>

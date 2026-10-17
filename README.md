@@ -1,6 +1,7 @@
 # ZenImport Chrome
 
-Local development **0.2.1** adds [BIDV VND payment-account history](docs/bidv.md).
+Local development **0.2.1** adds [BIDV VND payment-account history](docs/bidv.md) and
+[named connections for multiple bank logins](docs/bank-connections.md).
 It requires backend 0.2.1+ and is not yet published; the latest published release
 below remains 0.2.0. Complete live BIDV synchronization acceptance is still pending.
 
@@ -14,7 +15,7 @@ An independent MV3 extension. Reads history from an open online banking session 
 
 Download the ZIP and `SHA256SUMS` from [GitHub Releases](https://github.com/vaslv/zenimport-chrome/releases), verify the checksum, and extract the ZIP into a permanent directory. In desktop Chrome 120 or newer, open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**. Select the extracted directory containing `manifest.json`. The ZIP is not installed directly and this distribution does not update automatically.
 
-Follow the [installation and update guide](docs/installation.md) to connect your backend, select bank accounts, and synchronize. The published build supports **VietinBank VND current-account history**; development adds BIDV as described above. Use ZenImportBackend 0.2.0 (API v1) for migration; VietinBank synchronization remains compatible with 0.1.0. See the [backend deployment guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.0.md).
+Follow the [installation and update guide](docs/installation.md) to connect your backend, select bank accounts, and synchronize. The published build supports **VietinBank VND current-account history**; development adds BIDV as described above. Published Chrome 0.2.0 uses backend 0.2.0 (API v1) for migration. Development Chrome 0.2.1 requires backend 0.2.1 for connection discovery in both banks. See the [backend deployment guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.0.md).
 
 Keep the same installation directory when updating and click **Reload** on the extension card. Do not uninstall the extension if you want to retain its local settings and capture checkpoints. GitHub ZIP installation is separate from Chrome Web Store publication.
 
@@ -28,7 +29,7 @@ Plan and actual limitations: `docs/refactor/03-extension.md`, `docs/refactor/05-
 
 ## Synchronization
 
-Open history for the desired bank account. On first connection, select a ZenMoney account or Do not import and a date (default: 30 days ago). A complete VietinBank account list is not yet verified: open other accounts and refresh the list. Configured accounts can synchronize while new ones remain unconfigured.
+Open history for the desired bank login/account. Use the Bank connection selector for multiple logins of the same bank; add or rename connections in Settings. Sign in on the bank website yourself; ZenImport never stores bank passwords. On first connection, select a ZenMoney account or Do not import and a date (default: 30 days ago). A complete VietinBank account list is not yet verified: open other accounts and refresh the list. Configured accounts can synchronize while new ones remain unconfigured.
 
 Synchronize authorizes capture and delivery of all missing transactions for configured accounts. The server adds only confidently known categories; every new record has viewed=false. Mobile changes/deletions are final. Pausing/closing the tab preserves pages; to resume, reopen history and click again. Stop capture does not undo sent records or revoke delivery of authorized complete intervals.
 

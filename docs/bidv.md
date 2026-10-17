@@ -9,7 +9,8 @@ until the user clicks Synchronize for BIDV.
 1. Sign in to `https://smartbanking.bidv.com.vn` yourself and select English.
 2. Open Accounts (`/tai-khoan`) or a VND payment account
    (`/tai-khoan/thanh-toan/<account-number>`).
-3. Open ZenImport, map each discovered account to its ZenMoney account, and choose
+3. Open ZenImport, select or [add a named bank connection](bank-connections.md),
+   map each discovered account to its ZenMoney account, and choose
    the first import date. The default is 30 days; six months/custom dates are
    available within the bank's rolling one-calendar-year limit.
 4. Click Synchronize. Chrome asks for access to the BIDV origin. The connector
