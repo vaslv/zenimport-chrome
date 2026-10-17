@@ -24,7 +24,7 @@ class PopupBackend:
         if path == '/api/v1/info':
             return {'api_version':self.version}
         if path == '/api/v1/zenmoney/accounts':
-            return {'accounts':[{'id':'target-vnd','title':'Fixture VND '+'Длинное название '*8,'currency':'VND','instrument':2},
+            return {'accounts':[{'id':'target-vnd','title':'Fixture VND '+'Long account title '*8,'currency':'VND','instrument':2},
                 {'id':'target-usd','title':'Fixture USD','currency':'USD','instrument':3}]}
         if path == '/api/v1/connections/discover':
             for raw in body['accounts']:

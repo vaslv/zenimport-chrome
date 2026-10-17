@@ -82,8 +82,8 @@ def pump_until(popup,worker,check,timeout=20):
 def account(popup,target,source="12345678"):
     form=popup.locator('.account').filter(has_text=source)
     form.locator('select').select_option(target)
-    form.get_by_role('button',name='Сохранить счёт',exact=True).click()
-    expect(popup.locator('#status')).to_contain_text('Счёт сохранён')
+    form.get_by_role('button',name='Save account',exact=True).click()
+    expect(popup.locator('#status')).to_contain_text('Account saved')
 
 def refresh_accounts(popup):
     # Ready settings collapse after saving; the user explicitly expands them.
@@ -122,7 +122,7 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
         created=[tx for batch in remote.writes for tx in batch]
-        expect(popup.locator('#status')).to_contain_text('Обработано:')
+        expect(popup.locator('#status')).to_contain_text('Processed:')
         assert len(created)==5
         assert remote.transactions['ambiguous-old']==retained
         assert all(tx['viewed'] is False for tx in created)
@@ -163,7 +163,7 @@ def test_lost_page_ack_replays_same_snapshot_without_duplicate_delivery(tmp_path
             assert db.execute('SELECT count(*) FROM capture_pages').fetchone()[0]==1
         assert not remote.writes
         original=state(worker)['job']['id']
-        expect(popup.locator('#sync')).to_have_text('Синхронизировать')
+        expect(popup.locator('#sync')).to_have_text('Synchronize')
         start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
         pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
@@ -244,7 +244,7 @@ def test_zenmoney_outage_does_not_stop_bank_capture_or_claim_uncertain_writes(tm
         remote.read_failure=503
         start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
-        expect(popup.locator('#status')).to_contain_text('ZenMoney временно недоступен')
+        expect(popup.locator('#status')).to_contain_text('ZenMoney is temporarily unavailable')
         assert not remote.writes
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM captured_records').fetchone()[0]==3
@@ -263,9 +263,9 @@ def test_discrepancy_page_reads_actual_backend_and_refreshes_mobile_deletion(tmp
         page=opened.value
         expect(page.locator('.operation')).to_have_count(1)
         expect(page.locator('.operation')).to_contain_text('Extra fixture')
-        expect(page.locator('.totals')).to_contain_text('Разница: −50 VND')
+        expect(page.locator('.totals')).to_contain_text('Difference: −50 VND')
         del remote.transactions['unlinked-extra']
         remote.deletions.append({'object':'transaction','id':'unlinked-extra'})
         page.locator('#refresh').click()
-        expect(page.locator('#summary')).to_contain_text('лишние операции не найдены')
+        expect(page.locator('#summary')).to_contain_text('extra transactions were found')
         assert len(remote.writes)==writes

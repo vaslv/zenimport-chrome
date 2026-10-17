@@ -17,7 +17,7 @@ class ReportBackend(PopupBackend):
                 'status':'ready','checked_days':15,'unchecked_days':1}],
             'days':[{'date':'2026-10-15','account_id':account['id'],'bank_total':'-100','zenmoney_total':'-200','difference':'-100',
                 'operations':[{'id':'extra','amount':'-100','payee':'<img src=x onerror="window.pwned=1">',
-                    'comment':'Дополнительная запись','categories':['Продукты'],'created':1792040000}]}]}
+                    'comment':'Additional transaction','categories':['Groceries'],'created':1792040000}]}]}
 
 
 def test_popup_opens_read_only_bank_scoped_report_and_safe_responsive_page():
@@ -26,16 +26,16 @@ def test_popup_opens_read_only_bank_scoped_report_and_safe_responsive_page():
         connect(popup,bank,url)
         expect(popup.locator('.account')).to_have_count(1)
         popup.locator('.account select').select_option('target-vnd')
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#discrepancies')).to_be_enabled()
         with context.expect_page() as opened:popup.locator('#discrepancies').click()
         page=opened.value
-        expect(page.locator('#summary')).to_contain_text('Возможные лишние операции: 1')
+        expect(page.locator('#summary')).to_contain_text('Potential extra transactions: 1')
         assert urlsplit(page.url).query=='connection='+service.connection_id
-        expect(page.locator('.day-title')).to_contain_text('15 октября 2026')
+        expect(page.locator('.day-title')).to_contain_text('15 October 2026')
         expect(page.locator('.operation')).to_have_count(1)
-        expect(page.locator('.totals')).to_contain_text('Разница: −100 VND')
-        expect(page.locator('.coverage')).to_contain_text('Без полной истории банка: 1')
+        expect(page.locator('.totals')).to_contain_text('Difference: −100 VND')
+        expect(page.locator('.coverage')).to_contain_text('Days without complete bank history: 1')
         assert page.locator('img').count()==0 and page.evaluate('window.pwned') is None
         assert TOKEN not in page.content()
         assert page.locator('button').count()==1 # Refresh only; no financial editing.

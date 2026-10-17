@@ -9,8 +9,8 @@
     for(let attempt=0;attempt<4;attempt++){
       let result;
       try{result=await chrome.runtime.sendMessage({type,runId:config.runId,account:config.account,...extra});}
-      catch{if(attempt===3)throw Error('Связь с расширением потеряна.');await new Promise(resolve=>setTimeout(resolve,300));continue;}
-      if(!result?.ok)throw Error(result?.error||'Связь с загрузчиком потеряна.');
+      catch{if(attempt===3)throw Error('The connection to the extension was lost.');await new Promise(resolve=>setTimeout(resolve,300));continue;}
+      if(!result?.ok)throw Error(result?.error||'The connection to the capture driver was lost.');
       return result;
     }
   };
@@ -18,24 +18,24 @@
   const visible=e=>{if(!e||e.closest('[aria-hidden="true"]'))return false;const r=e.getBoundingClientRect();return !!(r.width&&r.height)&&getComputedStyle(e).visibility!=='hidden';};
   const text=e=>e?.textContent?.replace(/\s+/g,' ').trim()||'';
   function guard(){
-    if(stopped)throw Error('Загрузка остановлена.');
-    if(location.pathname!=='/payment-history'||new URL(location.href).searchParams.get('accountNo')!==config.account)throw Error('Банк сменил страницу или завершил сессию.');
+    if(stopped)throw Error('Capture stopped.');
+    if(location.pathname!=='/payment-history'||new URL(location.href).searchParams.get('accountNo')!==config.account)throw Error('The bank changed the page or ended the session.');
     const selected=text(document.querySelector('.vt-select__single-value .cus-option'));
-    if(accountReady&&(!selected.startsWith(config.account+' - ')||!selected.endsWith(' - Current account')))throw Error('Выбран другой или неподдерживаемый счёт.');
+    if(accountReady&&(!selected.startsWith(config.account+' - ')||!selected.endsWith(' - Current account')))throw Error('A different or unsupported account is selected.');
     if(filterReady){
       const expected=[config.interval.period.start,config.interval.period.end].map(display).join(' - ');
-      if(document.querySelector('input[placeholder="Choose time range"]')?.value!==expected)throw Error('Период изменился.');
-      for(const placeholder of ['Input keyword to search','From','To'])if(document.querySelector(`input[placeholder="${placeholder}"]`)?.value)throw Error('Фильтры изменились.');
+      if(document.querySelector('input[placeholder="Choose time range"]')?.value!==expected)throw Error('The selected period has changed.');
+      for(const placeholder of ['Input keyword to search','From','To'])if(document.querySelector(`input[placeholder="${placeholder}"]`)?.value)throw Error('The filters have changed.');
       const all=[...document.querySelectorAll('input[type="radio"]')].find(r=>text(r.closest('label')||r.parentElement)==='All');
-      if(!all?.checked)throw Error('Фильтр операций изменился.');
+      if(!all?.checked)throw Error('The transaction filter has changed.');
     }
   }
   async function wait(check,action,limit=30000){
     const start=Date.now();let polls=0;await event('wait',{action});
     while(Date.now()-start<limit){guard();await rpc('capture-check');const value=check();if(value){await event('wait_done',{action,ms:Date.now()-start,polls});return value;}polls++;await new Promise(r=>setTimeout(r,700));}
-    throw Error(`Не дождался этапа ${action}. Проверьте вход, Network и сообщение банка.`);
+    throw Error(`Timed out waiting for ${action}. Check sign-in, Network, and the bank message.`);
   }
-  async function click(node,action){guard();if(!node||node.disabled||node.getAttribute('aria-disabled')==='true')throw Error(`Элемент ${action} недоступен.`);await event('click',{action});node.click();}
+  async function click(node,action){guard();if(!node||node.disabled||node.getAttribute('aria-disabled')==='true')throw Error(`Element ${action} is unavailable.`);await event('click',{action});node.click();}
   const button=label=>[...document.querySelectorAll('button')].find(b=>visible(b)&&text(b)===label);
   const dateLabel=iso=>new Date(iso+'T00:00:00Z').toLocaleDateString('en-US',{timeZone:'UTC',weekday:'long',month:'long',day:'numeric',year:'numeric'});
   const calendar=()=>document.querySelector('[role="application"][aria-label="Calendar"]');
@@ -46,13 +46,13 @@
       const target=available.find(e=>(e.getAttribute('aria-label')||'').includes(dateLabel(iso)));
       if(target){await click(target,kind);return;}
       const match=(available[0].getAttribute('aria-label')||'').match(/([A-Z][a-z]+ \d{1,2}, \d{4})/);
-      if(!match)throw Error('Неизвестная разметка дат календаря.');
+      if(!match)throw Error('Unrecognized calendar date markup.');
       const backwards=new Date(iso+'T00:00:00Z')<new Date(match[1]+' UTC');
       const signature=available.map(e=>e.getAttribute('aria-label')).join('|');
       await click(calendar().querySelector(`img[alt="button ${backwards?'back':'next'}"]`),backwards?'previous_month':'next_month');
       await wait(()=>days().map(e=>e.getAttribute('aria-label')).join('|')!==signature,'calendar_changed');
     }
-    throw Error('Превышен предел переходов календаря.');
+    throw Error('Calendar navigation limit exceeded.');
   }
   const display=iso=>iso.split('-').reverse().join('/');
   async function filter(period){
@@ -64,7 +64,7 @@
     }
     const radios=[...document.querySelectorAll('input[type="radio"]')];
     const all=radios.find(r=>text(r.closest('label')||r.parentElement)==='All');
-    if(!all)throw Error('Не найден фильтр All.');if(!all.checked)await click(all,'all_transactions');
+    if(!all)throw Error('The All filter was not found.');if(!all.checked)await click(all,'all_transactions');
     await click(input,'open_calendar');await wait(calendar,'calendar_ready');
     await pick(period.from,'start_date');await pick(period.to,'end_date');
     await click(button('Chọn'),'apply_dates');
@@ -82,24 +82,24 @@
   globalThis.__zenImportCaptureAbort=cleanup;
   async function response(page){return wait(()=>{
     const found=inbox.find(e=>e.error||e.data?.currentPage===page);
-    if(found){inbox=inbox.filter(e=>e!==found);if(found.error)throw Error('Ответ истории не удалось прочитать.');return found.data;}
+    if(found){inbox=inbox.filter(e=>e!==found);if(found.error)throw Error('Could not read the history response.');return found.data;}
     return null;
   },'api_response',45000);}
   async function walkUntil(rows,total){
     await wait(()=>Number(text(document.querySelector('.table-pagination-total-total')))===total,'table_total');
     for(let attempts=0;attempts<10000;attempts++){
       const totalNode=document.querySelector('.table-pagination-total-total');
-      if(Number(text(totalNode))!==total)throw Error('Счётчик таблицы не совпадает с ответом API.');
+      if(Number(text(totalNode))!==total)throw Error('The table count does not match the API response.');
       const range=text(document.querySelector('.table-pagination-total-range')).match(/^(\d+)-(\d+)$/);
       const current=document.querySelector('.table-pagination [aria-label*="is your current page"]');
-      if(!range||!current)throw Error('Не удалось определить страницу таблицы.');
+      if(!range||!current)throw Error('Could not identify the table page.');
       const end=Number(range[2]);if(end>=rows)return;
       const page=Number((current.getAttribute('aria-label')||'').match(/Page (\d+)/)?.[1]);
       const next=document.querySelector(`.table-pagination [aria-label="Page ${page+1}"]`);
       await click(next,'next_table_page');
       await wait(()=>text(document.querySelector('.table-pagination-total-range'))!==range[0],'table_page');
     }
-    throw Error('Превышен предел страниц таблицы.');
+    throw Error('Table pagination limit exceeded.');
   }
   (async()=>{
     try{

@@ -20,7 +20,7 @@ function probePage() {
   // the complete list of a login or scrape unverified React internal objects.
   return {account, accounts_complete: false, accounts: [{source_key: account, identity_scope: 'bank', label,
     masked_number: '••••' + account.slice(-4), currency, scale: currency === 'VND' ? 0 : 2,
-    supported: currency === 'VND', unsupported_reason: currency === 'VND' ? null : 'Пока подтверждена только история VND.'}]};
+    supported: currency === 'VND', unsupported_reason: currency === 'VND' ? null : 'Only VND history has been verified so far.'}]};
 }
 
 export async function inspect(tab, profileKey) {

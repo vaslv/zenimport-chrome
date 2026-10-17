@@ -1,258 +1,172 @@
-# Состояние выполнения
+# Implementation status
 
-15 октября 2026: пользователь разрешил последовательную реализацию и регулярные локальные коммиты.
+October 15, 2026: the user authorized sequential implementation and regular local commits.
 
-| Этап | Статус / результат |
+| Stage | Status / result |
 |---|---|
-| B0 | Завершён: docs/sync-api-v1.md, backend/sync_contracts.py, fixtures/sync-v1/examples.json; 56 контрактных тестов в Docker прошли |
-| S1 | Завершён в ZenMoneyAPI, commit 880aa19; 244 теста, mypy, покрытие 99% |
-| S2 | Не требуется: функциональных пробелов SDK не обнаружено |
-| S3 | Завершён: прежний wheel 0.6.0 установлен в чистый контейнер самостоятельного backend, checksum и непросмотренная точная запись проверены |
-| B1 | Завершён, ZenImportBackend commit e856175: самостоятельный проект, Docker runtime/config/tests, health/info, явные настройки и защита чужой БД; 93 теста и HTTP/persistence smoke прошли |
-| B2 | Завершён в ZenImportBackend, реализация ffecceb, журнал ac93657: финансовая схема v2, явная миграция legacy v12 на искусственной базе; 169 тестов и Docker smoke прошли |
-| B3 | Завершён в ZenImportBackend, реализация 29315a5, документация 7da6060: настройки счетов, периоды/задания/lease, атомарный приём и полнота; схема v3; 235 тестов и Docker HTTP/resume smoke прошли |
-| B4 | Завершён в ZenImportBackend, реализация 4cbd4f3, документация a09f33d: read-only SDK зеркало/cursor/удаления, прогноз по независимым подтверждённым платежам, схема v4; 292 теста и Docker HTTP/resume smoke прошли |
-| B5 | Завершён в ZenImportBackend, реализация 825c9d4, документация ff00f76: долговечные разрешения полных версий, один worker, SDK viewed=false, UUID-проверка результата и crash recovery без слепой повторной записи; схема v5; 340 тестов и Docker HTTP/resume/persistence smoke прошли |
-| B6 | Самостоятельная часть завершена 16 октября в ZenImportBackend, реализация c6a5c9f, документация 2a14cbc: по 347 тестов на ARM64/AMD64 (эмуляция), HTTP/lifecycle/snapshot restore прошли; общая E5-интеграция ожидает новое расширение |
-| E1 | Каркас выделен: самостоятельный MV3, минимальный popup, клиент v1, закрытое хранилище и воспроизводимая сборка. 3 unit-проверки в Docker прошли; браузерная приёмка после E4/E5. |
-| E2–E4 | Реализованы; ограничения настоящего банка проверяются M3 |
-| E5 | Завершён: 13 unit + 2 popup + 7 сквозных browser-проверок в Docker; воспроизводимый ZIP; docs/testing.md |
-| M1–M4 | Не начаты; реальные данные не менялись |
+| B0 | Complete: docs/sync-api-v1.md, backend/sync_contracts.py, fixtures/sync-v1/examples.json; 56 Docker contract tests passed |
+| S1 | Complete in ZenMoneyAPI, 880aa19; 244 tests, mypy, 99% coverage |
+| S2 | Unnecessary: no SDK capability gaps |
+| S3 | Complete: wheel 0.6.0 installed in a clean independent backend container; checksum/exact unreviewed write checked |
+| B1 | Complete, ZenImportBackend e856175: independent project, Docker runtime/config/tests, health/info, explicit settings/foreign database protection; 93 tests and HTTP/persistence smoke passed |
+| B2 | Complete in ZenImportBackend, ffecceb/log ac93657: financial schema v2, explicit synthetic legacy v12 migration; 169 tests/Docker smoke passed |
+| B3 | Complete in ZenImportBackend, 29315a5/docs 7da6060: account settings, periods/jobs/lease, atomic ingestion/completeness; schema v3; 235 tests/HTTP/resume passed |
+| B4 | Complete in ZenImportBackend, 4cbd4f3/docs a09f33d: read-only SDK mirror/cursor/deletions, independent confirmed-payment predictions; schema v4; 292 tests/HTTP/resume passed |
+| B5 | Complete in ZenImportBackend, 825c9d4/docs ff00f76: durable complete-version authorization, one worker, SDK viewed=false, UUID verification/crash recovery without blind retries; schema v5; 340 tests/HTTP/resume/persistence passed |
+| B6 | Independent portion complete October 16 in ZenImportBackend, c6a5c9f/docs 2a14cbc: 347 tests each ARM64/emulated AMD64, HTTP/lifecycle/snapshot; E5 awaits new extension |
+| E1 | Skeleton extracted: independent MV3, minimal popup, v1 client, private storage, reproducible build. Three Docker unit checks passed; browser acceptance follows E4/E5 |
+| E2–E4 | Implemented; actual bank limits require M3 |
+| E5 | Complete: 13 unit + two popup + seven end-to-end browser checks in Docker; reproducible ZIP; docs/testing.md |
+| M1–M4 | Not started at this checkpoint; real data unchanged |
 
-Ближайший этап: E1 — выделение самостоятельного Chrome-проекта. Самостоятельная часть B6 готова; общая E5-интеграция после E1–E4. Рабочая папка этого проекта — ZenImportBackend. Настройки/приём истории и read-only SDK зеркало/прогноз реализованы; отправитель B5 реализован. Настоящий API в проверках не вызывался. Прежний сервер и расширение продолжают работать отдельно. Актуальный журнал backend находится в ZenImportBackend/docs/refactor/05-progress.md; этот файл — сводка выделения в исходном проекте.
+Historical next stage: E1, independent Chrome extraction; independent B6 ready, joint E5 follows E1–E4. Backend work belongs to ZenImportBackend; settings/capture/read-only mirror/prediction/sender implemented. No real API in those checks. Legacy server/extension continue separately. Current backend log: ZenImportBackend/docs/refactor/05-progress.md; this file started as the original project's extraction summary.
 
-## Проверки
+## Checks
 
-- B6 (16 октября): scripts/test-platforms.sh в ZenImportBackend, Docker 29.4.0 / Compose 5.1.2 / CPython 3.12.15: **347 passed на ARM64 и 347 passed на AMD64**. Фактически исполнены Linux/aarch64 и Linux/x86_64; AMD64 под эмуляцией OrbStack на ARM64-хосте. HTTP/auth/resume, SIGKILL во время отправки после fake API commit, штатный shutdown с ещё незавершённым запросом (exit 143 + Application shutdown complete), перезапуск и восстановленный в новый файл snapshot — прежние UUID/identity, ровно три viewed=false записи, без повторных upsert. UID 10001/read-only root, WAL/CLI/приватность/гонки snapshot также проверены. Ресурсы тестов удалены; настоящие API/банк/БД не использовались. Отчёт: ZenImportBackend/docs/b6-validation.md; эксплуатация: docs/operations.md. E5 ждёт нового Chrome.
+- B6 (October 16): ZenImportBackend scripts/test-platforms.sh, Docker 29.4.0 / Compose 5.1.2 / CPython 3.12.15: **347 passed ARM64/347 AMD64**. Actual Linux/aarch64/x86_64; AMD64 emulated through OrbStack on ARM64. HTTP/auth/resume, post-fake-commit SIGKILL, graceful in-flight shutdown (exit 143/Application shutdown complete), restart/new-file snapshot restore: original UUIDs/identity, exactly three viewed=false records, no repeat upsert. UID 10001/read-only root, WAL/CLI/privacy/snapshot races checked. Resources removed; no real API/bank/database. ZenImportBackend/docs/b6-validation.md, docs/operations.md. E5 awaits new Chrome.
+- B5: same Docker/Compose/linux/arm64/CPython: **340 passed**, 48 new checks. Network-isolated SDK/stateful fake: expense/income/viewed=false, categories/NULL, full versions/backlog, UUIDs, lost/partial responses, HTTP rejection, mobile edits/deletion, two workers, settings/disabling/token/accounts, backoff, intent rollback, v4→v5, background delivery without new browser requests. Actual child-process crashes before requests/after fake commits recover without upsert. Database deletion race uses mode=rw. HTTP/auth/resume/persistent authorization/financial preservation after recreation passed. Test resources removed; no real bank/API/database. ZenImportBackend/docs/delivery.md.
+- B4: same environment: **292 passed**, 57 new checks. Every SDK entity/raw/exact amount, incremental cursor/deletions, mobile edits, absent UUIDs, failures/retries/atomicity/races, freshness/restart, SDK-outage capture, threshold 2/3/5, split/N:M/exclusions, viewed=false, payees/directions/rules, started payload preservation, v3→v4 rollback. HTTP/auth/resume/recreation preservation passed. Resources removed; no real API/bank/database.
+- B3: same environment: **235 passed**. Concurrent commands/settings/leases, repeat/reordered/duplicate pages, completeness, gaps/overlap/one-time reread, calendar boundaries, disabling/account failures, v2→v3 rollback. Actual Docker HTTP: partial job, recreation, repeated command/page, completion. Synthetic only; test resources removed.
+- B2: same environment: **169 passed**. Synthetic v12, exact SDK money/JSON, 1:N/N:M, exclusions, UUIDs/attempts/deletions, source/schema/BLOB archives, repetition, WAL/rollback. CLI conversion/HTTP/preservation after recreation. Resources removed; no real data/API.
+- B1: same environment: 93 passed, network-isolated config container, HTTP/auth, recreation preserving identity. Containers/unique volume removed; AMD64 then awaited B6.
+- One Starlette httpx TestClient warning remains; tests pass. SDK retains httpx 0.28.1. Changing test-client dependencies was outside extraction.
+- ZenImport scripts/test-contracts.sh, Docker/CPython 3.12.15: 56 passed, new contract only, not full application.
+- ZenMoneyAPI scripts/test.sh, Docker/CPython 3.12.15: 244 passed, strict package/typing_contract mypy, 99% lines, no test network.
+- Vendored SDK SHA256 b28722f6ee09ea79726cbab64fa769171904b6c9a2e6b825bc2d2c88437e1e58; all nine files matched source.
+- No actual API/bank/mobile UI in these stages; production database not opened for changes.
+- Preexisting SDK untracked .idea/ excluded from commits.
 
-- B5: scripts/test-docker.sh в ZenImportBackend, Docker 29.4.0 / Compose 5.1.2 / linux/arm64 / CPython 3.12.15: **340 passed**, 48 новых проверок. SDK/stateful fake API без сети: расход/приход/viewed=false, категории/NULL, полные версии/backlog, UUID, потерянный/частичный ответ, HTTP-отказ, мобильные изменения/удаления, два workers, настройки/отключение/токен, несколько счетов, backoff, rollback intent и v4→v5, фоновой worker без новых запросов браузера. Реальные дочерние процессы в контейнере аварийно завершены до запроса/после fake API commit; восстановление не повторяет upsert. Проверена гонка удаления БД (runtime mode=rw). HTTP/auth/resume и постоянное разрешение/финансы после пересоздания контейнера прошли. Тестовые ресурсы удалены; настоящие банк/API/БД не использовались. Подробности: ZenImportBackend/docs/delivery.md.
+## Contracts for subsequent stages
 
-- B4: scripts/test-docker.sh в ZenImportBackend, Docker 29.4.0 / Compose 5.1.2 / linux/arm64 / CPython 3.12.15: **292 passed**, 57 новых проверок. Все виды SDK/raw/точные суммы, инкрементальный cursor и удаления, мобильные изменения, отсутствие UUID, сбои/повторы/атомарность и гонки, свежесть/перезапуск, сбор при сбое SDK, порог 2/3/5, split/N:M/исключения, viewed=false, получатели/направления/правила, сохранность начатых payload и миграция/rollback v3→v4. HTTP/auth/resume и сохранность после пересоздания контейнера прошли. Тестовые ресурсы удалены; настоящие API/банк/БД не использовались.
+B3 preserved wire v1; ZenImportBackend/docs/capture.md. B4 refreshes catalog outside transactions, freshness up to 300 seconds; new jobs force refresh. SDK outages permit capture, block delivery. B4 never sends; B5 uses its mirror before every attempt. job_accounts/job_context retain snapshots; captured_records exact versions; coverage only complete. One-time reread preserves remaining work independently of old coverage. B5 checks enabled/version/target/needs_rebuild, not mere bank-row presence. Real rehearsal/mobile acceptance remain M1/M3.
 
-- B3: scripts/test-docker.sh в ZenImportBackend, Docker 29.4.0 / Compose 5.1.2 / linux/arm64 / CPython 3.12.15: **235 passed**. Конкурентные команды/настройки/lease, повторы/перестановка/дубли страниц, полнота, пробелы/перекрытие/разовое перечитывание, календарные границы, отключение/сбой одного счёта, upgrade/rollback v2→v3. Настоящий HTTP в Docker: частичный job, пересоздание сервиса, повтор команды/страницы и завершение. Только искусственные данные; тестовые ресурсы удалены.
-- B2: scripts/test-docker.sh в ZenImportBackend, Docker 29.4.0 / Compose 5.1.2 / linux/arm64 / CPython 3.12.15: **169 passed**. Искусственная v12, точные суммы/JSON всех видов SDK, группы 1:N/N:M, исключения, UUID/попытки/удаления, архив исходных строк/схемы/BLOB, повтор, WAL и rollback. Проверены CLI-конвертация, HTTP и финансовая сохранность после пересоздания контейнера. Тестовые ресурсы удалены. Реальные данные и API не использовались.
-- B1: scripts/test-docker.sh, Docker Engine 29.4.0 / Compose 5.1.2 / linux/arm64 / CPython 3.12.15: 93 passed, конфигурационный контейнер без сети, HTTP/auth, повторное создание backend с сохранением identity БД. Контейнеры и уникальный тестовый том удалены. AMD64 ещё не проверен; это B6.
-- Есть одно предупреждение Starlette о тестовом httpx TestClient; тесты проходят. SDK сохраняет свою зависимость httpx 0.28.1. Смена тестового клиента/зависимостей не входила в выделение B1.
+B2 preserved wire format; ZenImportBackend/docs/financial-storage.md. Legacy bindings remain historical, accounts unconfigured, coverage never presumed. Permanent receipts survive mirror changes. Started payload/UUID immutable; needs_rebuild=1 blocks until safe preparation. B4 recomputes category_evidence/category_payments from actual linked reviewed payments. Production migration remains M1.
 
-- ZenImport: scripts/test-contracts.sh, Docker/CPython 3.12.15, 56 passed; только новый контракт, не полный прогон приложения.
-- ZenMoneyAPI: scripts/test.sh, Docker/CPython 3.12.15, 244 passed; строгий mypy для пакета и typing_contract, 99% строк. Сеть тестовых контейнеров отключена.
-- Vendored SDK: SHA256 b28722f6ee09ea79726cbab64fa769171904b6c9a2e6b825bc2d2c88437e1e58, все 9 файлов совпали с исходником SDK.
-- Настоящий API/банк и мобильный UI в этих этапах не проверялись. Рабочая БД не открывалась для изменений.
-- В SDK найден ранее существовавший неотслеживаемый .idea/; в коммит не включён.
+docs/sync-api-v1.md fixes routes/errors, amount/time formats, versioned settings, idempotency, capture leases, completeness, independent delivery. Models validate shapes; B2–B5 implement database completeness, details allowlists, currency/scale, settings, delivery states.
 
-## Контракты для следующих этапов
+## Historical B4 → B5 handoff (completed)
 
-B3 сохранил wire-контракт v1. Подробности: ZenImportBackend/docs/capture.md. Каталог B4 актуализируется SDK вне транзакции (свежесть до 300 секунд); новая команда job принудительно обновляет зеркало. При сбое SDK сбор продолжается, доставка blocked. B4 сам ничего не отправляет; B5 использует его зеркало перед каждой попыткой. job_accounts/job_context сохраняют снимки, captured_records — конкретные версии, coverage — только complete. Разовое перечитывание хранит остаток независимо от старого покрытия. Для отправки B5 проверяет enabled/версию/цель и needs_rebuild, а не только наличие банковской строки. Реальная репетиция/мобильная приёмка остаются M1/M3.
+ZenImportBackend/docs/mirror-predictions.md. Force Mirror.refresh before delivery outside transactions, then check enabled/version/target and completed-interval version. Manual choice → rule → three independent consistent viewed=true payments → NULL. Splits do not multiply examples; our viewed=false never trains. Started payloads/UUIDs immutable. Existing UUID confirms despite mobile edits; explicit deletion suppresses forever. Absence never authorizes uncertain retries. Actual initial/empty-account response, mobile UI, real data, AMD64 then untested. Real writes/migration await later stages.
 
-B2 не менял wire-контракт. Подробности хранилища/переноса: ZenImportBackend/docs/financial-storage.md. Старые привязки сохранены исторически, счета остаются unconfigured; покрытие не предполагается. Постоянные подтверждения не зависят от зеркала. Начатый payload/UUID неизменяемы; needs_rebuild=1 блокирует попытку до безопасной подготовки. B4 пересчитывает category_evidence/category_payments из актуальных явно связанных просмотренных платежей. Рабочая миграция остаётся M1.
+## Historical B5 → B6/E5 handoff (independent portion complete)
 
-Документ docs/sync-api-v1.md определяет маршруты/ошибки, формат сумм и времени, настройки с версиями, идемпотентность, lease сборщика, полноту интервала и независимую очередь доставки. Форма проверяется моделями; полнота по БД, whitelist деталей, валюта/scale, текущие настройки и состояния доставки реализуются в B2–B5.
+ZenImportBackend/docs/delivery.md and current backend log. v5 authorizations bind exact complete version/job/target and freeze after attempts. Server worker resumes authorized work after Chrome/server restart but creates no new capture jobs. SDK expense/income viewed=false/category-or-NULL. Persist exact payload/UUID/intent before network; network outside write lock, single sender via flock. Atomic diff/read-only forceFetch transaction verifies UUIDs. Mobile edits never revert; deletions terminal suppressed. HTTP codes/UUID absence do not prove nonapplication; intent-before-request crashes can remain uncertain without retry. Reads use durable 15…300-second delays. Upgrade alone never authorizes unproven legacy rows. At this checkpoint B6/AMD64/E1–E5/M1–M3 remain ahead; production server/extension/SDK unchanged.
 
-## Историческая передача B4 → B5 (выполнена)
+## B6 → E1 handoff
 
-Зеркало и правила прогноза: ZenImportBackend/docs/mirror-predictions.md. Перед отправкой принудительный Mirror.refresh вне транзакции; затем актуальные enabled/версия/цель и конкретная версия завершённого интервала. Ручной выбор → явное правило → три независимых viewed=true платежа одной категории без противоречий → NULL. Split не увеличивает число примеров, собственные viewed=false не учат. Начатые payload/UUID неизменяемы. Найденный UUID подтверждает существование несмотря на мобильные правки; явное удаление подавляет повтор навсегда. Отсутствие UUID не разрешает повтор uncertain. Фактический ответ первичного/пустого аккаунта, мобильный UI, реальные данные и AMD64 ещё не проверены. Настоящие записи и миграция — только после следующих этапов.
+Backend ready for v1 Chrome development, independent B6 complete, E5 ahead. Next E1 per docs/refactor/03-extension.md in history-preserving neighboring ZenImportChrome. Never restore financial editors/reconciliation/injected bank UI. SDK separate/unchanged. Snapshot helper publishes current own schema only to new destinations; actual migration M1, production unchanged. Native AMD64/external HTTPS/mobile ZenMoney untested.
 
-## Историческая передача B5 → B6/E5 (самостоятельная часть выполнена)
+## Next-stage entry template
 
-Текущий контракт: ZenImportBackend/docs/delivery.md; актуальный журнал в соседнем backend. Схема v5, delivery_authorizations привязаны к полной конкретной версии/заданию/цели и заморожены после попытки. Worker принадлежит серверу, продолжает разрешённое после закрытия Chrome и перезапуска, но не создаёт новых заданий сбора. SDK expense/income с viewed=false и категорией либо NULL. До сети сохраняются точный payload/UUID/intent; сеть вне write-lock, один отправитель защищён flock. Затем diff и read-only forceFetch transaction подтверждают прежний UUID. Мобильные правки не откатываются, удаления terminal suppressed. HTTP-код/отсутствие UUID не доказывают неприменение; crash между intent и реальным запросом тоже может оставить uncertain без автоматической повторной записи. Чтения повторяются с долговечной задержкой 15…300 секунд. Upgrade сам не авторизует legacy-строки без полного банковского доказательства. B6/AMD64, E1–E5 и реальные M1–M3 остаются впереди; рабочий сервер/расширение и SDK не менялись.
+- Stage / date / project / commit:
+- Changes and locations:
+- Checks and results:
+- Not checked:
+- Contract changes:
+- Next specific stage:
 
-## Передача B6 → E1
+## E1 — October 16, 2026
 
-Backend готов для разработки нового Chrome по контракту v1. Самостоятельная часть B6 выполнена, общая интеграция E5 ещё впереди. Следующий этап — E1 по docs/refactor/03-extension.md, соседний ZenImportChrome с сохранением истории. Не возвращать финансовые редакторы/сверки/инъекции в банковский UI. SDK остаётся отдельным проектом без изменений. Новый snapshot helper сохраняет текущую собственную схему только в новое назначение; реальная миграция остаётся M1, текущие рабочие сервер/расширение/данные не менялись. Нативный AMD64-сервер, внешний HTTPS и мобильный ZenMoney не проверялись.
+Created independent ZenImportChrome Git-history copy without hardlinks/remotes. Removed backend, SDK wheel, SPA/options/devtools, inline UI, legacy commands. Source project/production data unchanged. Standard-library Python build; dependency-free runtime. Three Docker unit tests passed. Installation/worker/popup acceptance belongs to E5; skeleton only.
 
-## Запись после следующего этапа
+## E2 — October 16, 2026
 
-- Этап / дата / проект / commit:
-- Что изменено и где:
-- Проверки и результат:
-- Что не проверено:
-- Изменения контракта:
-- Следующий конкретный этап:
+Separated connector registry, VietinBank probe/account switching, strict v1 DTO parser, bank calendar. Existing vib:id/vib:f1 unchanged; null details excluded from wire allowlist. Eight Docker unit checks passed. No complete list claim: accounts_complete=false, only observed selected Current account discovered; server accumulates known accounts. Prior observations confirm VND; other currencies disabled. Actual URL switching/account-list markup needs M3, not fixture claims.
 
-## E1 — 16 октября 2026
+## E3 — October 16, 2026
 
-Создан ZenImportChrome как независимая копия Git-истории без hardlinks/remotes. Удалены backend, SDK wheel, SPA/options/devtools, inline UI и прежние команды. Никаких изменений в исходном проекте и рабочих данных. Сборка Python standard library; runtime без зависимостей. Docker unit: 3 passed. Установка/worker/popup проверяются E5, пока только каркас.
+Coordinator stores command/UUID/lease/context in private local storage; server owns pages/completeness. ACK before checkpoint, same request_id after response loss; restart reads server and safely repeats intervals. Guards tab/document/run/account; disabled accounts not read. Login pauses, incomplete history fails, Stop halts capture only. Passive MAIN observer never reads auth/request body; button alone starts. No keepalive. Twelve unit checks passed, including synthetic second bank/coordinator recreation. Actual Chrome worker/bank DOM in E5/M3.
 
-## E2 — 16 октября 2026
+## E4 — October 16, 2026
 
-Отделены реестр коннекторов, VietinBank probe/смена счёта, строгий парсер v1 DTO и банковский календарь. Прежние vib:id/vib:f1 не изменены, null детали исключаются из wire whitelist. 8 unit-проверок в Docker прошли. Полный перечень счетов не заявлен: accounts_complete=false; обнаруживается только наблюдаемый выбранный Current account, известные счета накапливаются сервером. VND подтверждён прежними наблюдениями; иные валюты отключены. Автоматическое переключение URL/реальная разметка перечня требуют M3, фикстуры их не доказывают.
+One Synchronize/Stop capture button, brief result, collapsed server/token settings, compatible targets/explicit Do not import, 30-day/six-calendar-month/custom dates, one-time old capture. No ZenMoney token. New unconfigured accounts do not block configured accounts (backend clarification, wire v1 unchanged). None configured/all disabled prohibits start. Twelve Docker units passed; backend/browser regressions started, final E5 results later.
 
-## E3 — 16 октября 2026
+## E5 — October 16, 2026
 
-Координатор хранит команду/UUID/lease/контекст в закрытом local storage, сервер — страницы и полноту. ACK перед checkpoint, неизменный request_id при потерянном ответе; перезапуск читает сервер и повторяет интервал безопасно. Проверяются tab/document/run/account, выключенные счета не читаются. При входе пауза, при неполной истории сбой, Stop только прекращает сбор. Пассивный MAIN observer не читает auth/request body; сбор запускает только кнопка. Keepalive отсутствует. Docker unit: 12 passed, включая искусственный второй банк и воссоздание coordinator. Настоящий Chrome SW и банковский DOM проверяются E5/M3.
+Results/limits: docs/testing.md. Actual built-extension tests found/fixed fetch binding, refresh/selection races, delayed responses, old-driver cleanup, alarm recovery, repeat resume commands, port loss when stopping workers. Synthetic bank/ZenMoney only. Next M1/M2 copy rehearsal/overall matrix; M3/M4 require actual bank/agreed live writes and acceptance before cutover.
 
-## E4 — 16 октября 2026
+## M2 and popup 0.1.1 — October 16, 2026
 
-Popup: одна кнопка Синхронизировать/Остановить сбор, короткий итог, свёрнутые настройки сервера/токена, совместимые счета или явное Не загружать, даты 30 дней/6 календарных месяцев/произвольная, разовое старое чтение. Токен ZenMoney в Chrome отсутствует. Новый unconfigured счёт не блокирует ранее настроенные (уточнение реализации backend без изменения wire v1). Все не настроены/отключены — запуск запрещён. Chrome Docker unit 12 passed. Backend regression и браузерная проверка запущены; окончательные результаты в E5.
+Synthetic data/real restored copy checked without network: backend 352 ARM64 + 352 emulated AMD64; Chrome 13 unit/nine browser-integration (three popup/six end-to-end). Copy financial fingerprint unchanged after startup/stop. Fixed native popup 115 → 390 px with regression. Backend docs/m2-validation.md, docs/live-acceptance.md; Chrome docs/testing.md. M3/M4 need live acceptance; production/SDK unchanged, no pushes/tags.
 
-## E5 — 16 октября 2026
+## M3 — live bank portion, October 16, 2026
 
-Итоги и ограничения: docs/testing.md. Тесты настоящего собранного расширения выявили и устранили binding fetch, гонки refresh/выбора, поздних ответов и cleanup старого драйвера, восстановление alarms, повторный запрос resume и потерю порта при остановке worker. Данные банка/ZenMoney только искусственные. Следующие M1/M2 — репетиция копии и общая матрица. M3/M4 требуют реального банка/согласованного набора live-записей и приёмки перед переключением.
+Inspected selected VND-account DOM, calendar/filters, pages 1/2/13 (130 rows total), payment details in the user's session. Does not prove complete automated capture/JSON; multiple accounts unavailable. No ZenMoney delivery. Redacted details: docs/m3-bank-observation.md. Mobile/M4 await agreed test account/results.
 
-## M2 и popup 0.1.1 — 16 октября 2026
+## Popup completion 0.1.2 — October 16, 2026
 
-Проверки завершены на искусственных данных и реальной восстановленной копии без сети: backend 352 ARM64 + 352 AMD64 под эмуляцией, Chrome 13 unit + 9 browser/integration (3 popup и 6 интеграционных). Финансовый отпечаток копии после запуска/остановки неизменен. Исправлено сжатие нативного popup: 115 → 390 px, отдельный регрессионный тест. Документы backend: docs/m2-validation.md, docs/live-acceptance.md; Chrome: docs/testing.md. M3/M4 требуют живой приёмки; рабочая БД/сервер не переключались. SDK без изменений. Push/теги не выполнялись.
+User deferred live ZenMoney testing; M3 mobile/M4 not performed. Minimal UI complete: one button/brief status, collapsed settings, connection/accounts/one-time history sections, clear server token, waiting indicator, unavailable fields hidden. Stable 390 px. Three existing synthetic Docker popup checks passed; no real ZenMoney/cutover.
 
-## M3 — живая банковская часть, 16 октября 2026
+## Popup draft preservation 0.1.3 — October 16, 2026
 
-В кабинете пользователя сверены DOM выбранного VND-счёта, календарь/фильтры, страницы 1/2/13 (130 строк всего) и подробности платежа. Полный автоматический захват и JSON этим не доказаны, несколько счетов отсутствуют. Отправки в ZenMoney не было. Подробности без реквизитов: docs/m3-bank-observation.md. Мобильная приёмка и M4 ожидают согласованного тестового счёта/результата.
+Fixed losing address/token on window switching: immediate input session drafts, restoration without overwriting active typing, clear only after successful worker connection verification. Fields protected during connecting. 13 unit/five browser passed on synthetic data. Regressions close immediately after both field orders, failed/successful connections, and bank-page draft isolation. No real bank/ZenMoney.
 
-## Завершение popup 0.1.2 — 16 октября 2026
+## Collapsed configured settings 0.1.4 — October 16, 2026
 
-По просьбе пользователя живые тесты ZenMoney отложены; M3 mobile/M4 не выполняются. Завершён минимальный интерфейс: основной экран с одной кнопкой и коротким статусом, свёрнутые настройки, разделы подключения/счетов/разовой истории, понятный токен сервера, индикатор ожидания, скрытые недоступные поля. Устойчивые 390 px сохранены. Три существующие проверки popup прошли в Docker только на искусственных данных; отправки в настоящий ZenMoney и рабочее переключение не запускались.
+Configured popup opens collapsed; saving the last account closes settings. Independent expandable connection section keeps address/token out of new-account setup. Setup errors expand the relevant section; manual expansion/unsaved drafts retained. 13 unit/six browser passed with synthetic data. Production backend unchanged.
 
-## Сохранение ввода popup 0.1.3 — 16 октября 2026
+## Account save confirmation 0.1.5 — October 16, 2026
 
-Исправлена потеря адреса/токена при переключении окна: немедленный session-черновик по input, восстановление без перезаписи начатого ввода, очистка только после успешной проверки подключения в worker. Во время подключения поля защищены от изменений. 13 unit + 5 browser в Docker прошли; настоящие банк/ZenMoney не затрагивались. Регрессионные сценарии закрывают окно сразу после ввода обоих полей в разном порядке, проверяют неуспешное/успешное подключение и недоступность черновика банковской странице.
+Waiting/errors/success appear beside account Save; fields disable during requests. Confirmed settings show Saved after reopening; form edits reenable Save. Other unsaved account forms survive. 13 unit/seven browser passed; standalone backend module skipped. Production diagnosis read-only; no actual sync started by this fix.
 
-## Свёрнутые готовые настройки 0.1.4 — 16 октября 2026
+## Last synchronization 0.1.6 — October 16, 2026
 
-Готовый popup открывается со свёрнутыми настройками; после сохранения последнего счёта общий раздел закрывается. Подключение к серверу стало отдельным раскрываемым разделом: при настройке нового счёта адрес/токен не занимают окно. Ошибки настройки раскрывают соответствующий раздел, ручное раскрытие и несохранённый черновик сохранены. 13 unit + 6 browser Docker passed, данные искусственные. Рабочий backend не изменён.
+Below the main button, show local date/time and live elapsed-time text. Worker retains first complete-success confirmation by server/connection; new/failed attempts never erase it. Never invent old-job dates. Successful no-new-record runs also update time. 15 unit/eight browser passed on synthetic data, standalone integration skipped. Production backend/actual sync not started.
 
+## Discrepancy page 0.1.7 — October 16, 2026
 
-## Подтверждение сохранения счёта 0.1.5 — 16 октября 2026
+Added one user-approved read-only extension tab. Popup Discrepancies opens current bank report; account/period filters and daily groups show extra candidates, bank/ZenMoney totals/difference. Explicit coverage/mirror/unfinished delivery; unchecked emptiness never implies equality. No financial actions/type/category edits. Worker limits report commands to reads. Updated AGENTS.md/contract exception to the previous no-page policy.
 
-Добавлены ожидание, ошибка и подтверждение непосредственно возле кнопки сохранения счёта; поля блокируются на время запроса. Подтверждённые настройки показывают «Сохранено» при повторном открытии, изменение формы включает сохранение снова. Несохранённые формы других счетов сохраняются. 13 unit + 7 browser passed в Docker на искусственных данных, интеграционный модуль без backend пропущен. Выполненная диагностика рабочего backend была только чтением; настоящая синхронизация этой правкой не запускалась.
+Standalone: 15 unit/nine browser passed; final integration: 16 passed. Backend 370 tests/lifecycle passed, local runtime updated. Actual read checked 184 covered days, returning 500 candidates/132 days with no new attempts; this does not prove every candidate wrong. All decisions stay in official ZenMoney. SDK/schema/manifest permissions unchanged. docs/testing.md and ZenImportBackend/docs/discrepancies.md. No pushes/tags.
 
+## October 16: bank-page readiness — 0.1.8
 
-## Последняя синхронизация 0.1.6 — 16 октября 2026
+Actual post-cleanup sync stopped after 32 seconds with capture_context_changed before page one. No new confirmed financial requests: 518 intent/518 response_applied unchanged. Seven originals preserved/eight copies previously deleted by separate explicit backend authorization.
 
-Под основной кнопкой показаны дата/местное время и обновляемая подпись «сколько времени назад». Worker сохраняет первое подтверждение полного успеха в локальную историю по серверу/подключению; новые и неудачные попытки не стирают прошлый успех. Старым заданиям точная дата не выдумывается. Без новых операций успешный проход также обновляет время. 15 unit + 8 browser passed в Docker на искусственных данных; полный интеграционный модуль без backend пропущен. Рабочий backend и настоящая синхронизация не запускались.
+Removed selectAccount/initial reload dependence on tab.status=complete. Readiness uses account DOM after parsing (interactive/complete) and documentId. Probe/start injectImmediately=true avoids document_idle delays from external resources. Account/type/date/document guards preserved; permissions/delivery contracts unchanged.
 
+Checked official scripting.executeScript through Context7 October 16. Regressions cover loading/complete, incomplete DOM, login redirects, observer registration, no unnecessary reload, documentIds. Updated an old semantic-duplicate integration expectation to agreed day/amount matching: five new instead of six; existing UUID unchanged on initial/reread.
 
-## Страница расхождений 0.1.7 — 16 октября 2026
-
-По подтверждённому пользователем сценарию только просмотра добавлена одна отдельная вкладка расширения. Кнопка «Расхождения» в popup открывает отчёт текущего банковского подключения; фильтры счёта/периода и группы по датам показывают кандидатов лишних записей, итоги банка/ZenMoney и разницу. Покрытие банка/зеркало/неоконченная отправка отображаются явно; пустая непроверенная история не объявляется совпадением. Финансовых действий нет; типы и категории не меняются. Worker ограничивает команды страницы отчёта только чтением. Исключение из прежнего запрета отдельной страницы внесено в AGENTS.md и контракт по новому требованию пользователя.
-
-Standalone Docker: 15 unit + 9 browser passed; финальная совместная проверка: 16 browser/integration passed. Backend: 370 tests/lifecycle passed, локальный runtime обновлён. Настоящее чтение проверило 184 покрытых дня и вернуло 500 кандидатов в 132 днях без новых попыток доставки. Это не доказательство ошибочности каждой записи; все решения остаются в официальном ZenMoney. SDK, схема БД и manifest permissions не менялись. Подробности: docs/testing.md и соседний ZenImportBackend/docs/discrepancies.md. Push/теги не выполнялись.
-
-
-## 16 октября: ожидание готовности страницы банка — 0.1.8
-
-При повторной реальной синхронизации после согласованной очистки задание
-остановилось через 32 секунды с capture_context_changed до первой страницы.
-Подтверждённых новых финансовых запросов нет: журнал остаётся 518 intent
-и 518 response_applied. Семь оригиналов сохранены, восемь копий удалены
-раньше отдельным явно разрешённым действием в backend.
-
-Устранена зависимость selectAccount/первого reload от tab.status=complete.
-Готовность подтверждается DOM счёта после окончания парсинга документа
-(interactive/complete) и documentId. Проверки и запуск выполняются с
-injectImmediately=true: document_idle не задерживает их при незагруженных
-внешних ресурсах. Валидаторы счёта, типа счёта, даты и привязки документа
-сохранены; разрешения/контракты финансовой доставки не менялись.
-
-Context7: официальная scripting.executeScript документация сверена
-16 октября. Регрессии покрывают loading/complete, незавершённый DOM,
-редирект на login, регистрацию observer, отсутствие лишнего reload и
-сохранение documentIds. Совместный тест со старым ожиданием создания
-семантического дубля обновлён под новое согласованное правило day/amount:
-5 новых вместо 6, существующий UUID остаётся без изменений и при перечитывании.
-
-Docker: **23 unit passed; 9 browser passed, 1 skipped** (backend-интеграция
-в базовом образе недоступна), затем **16 integration passed** с настоящим
-локальным HTTP backend и fake банком/ZenMoney, без внешней сети и рабочей БД.
-Расширение 0.1.8 перезагружено через Chrome Extensions; новая версия видна
-в установленном расширении. Живая успешная повторная синхронизация ещё
-не подтверждена: банковская сессия истекла, ожидается повторный вход
-пользователя. Фикстуры не выдаются за такую приёмку.
+Docker: **23 unit; nine browser passed, one skipped** (no backend in base image), then **16 integration passed** with actual local HTTP backend/fake bank/ZenMoney, no external network/production database. Reloaded 0.1.8 through Chrome Extensions and verified installed version. Live success still awaited user sign-in after session expiry; fixtures not misrepresented as acceptance.
 
 ZIP 0.1.8 SHA256: 5ef9aafe1bf311830ebfa301e617024ccbd3bcaed530340f6f62c788689db825.
-Изменения сохранены локально; push/теги не выполнялись.
+Local changes, no pushes/tags.
 
+### Live 0.1.8 acceptance complete — October 16, 21:36 (UTC+7)
 
-### Живая приёмка 0.1.8 завершена — 16 октября, 21:36 (UTC+7)
+After user sign-in, actual installed popup 0.1.8 read 67 records for October 2–16. Backend confirmed exactly two missing evening records; all 520 bank records delivered, capture/delivery complete, no errors. Journal increased exactly two intent/response pairs to 520+520, no old records resent.
 
-После повторного входа пользователя запуск из настоящего popup завершился
-успешно на установленном 0.1.8: прочитаны 67 операций за 2–16 октября.
-Backend подтвердил создание ровно двух недостающих вечерних записей; всего
-520 банковских записей delivered, задание capture/delivery complete, ошибок нет.
-Журнал увеличился ровно на две пары intent/response_applied: 520+520,
-повторных отправок прежних записей нет.
+Separate fresh ZenMoney read/backend audit: 184 covered days April 16–October 16; zero incomplete days/extra candidates/missing links/single or composite amount/daily mismatches. Eight deleted copies absent/seven originals unchanged. Extension report shows no extras; popup Done. Processed: 520. Suppressed: 0, plus last-sync time. Actual validation separate from Docker; user authorized these API calls. Private results/backups remain with the backend, not Git. No pushes/tags.
 
-Отдельное ручное контрольное чтение ZenMoney после доставки и аудит backend:
-184 покрытых дня за 16 апреля–16 октября, 0 неполных дней, 0 лишних кандидатов,
-0 отсутствующих связей, 0 расхождений одиночных/составных сумм и дневных итогов.
-Восемь удалённых копий отсутствуют, семь сохраняемых оригиналов неизменны.
-Страница расширения показывает отсутствие лишних операций; popup —
-«Готово. Обработано: 520. Исключено: 0» и время последней синхронизации.
-Фактическая проверка отделена от Docker-тестов; реальные API-вызовы разрешены
-пользователем для этой синхронизации. Приватные результаты и резервные копии
-находятся у backend и не включены в Git. Push/теги не выполнялись.
+## Interrupted capture recovery 0.1.9 — October 16, 2026
 
+Fixed two full-review findings. Lost first POST /jobs responses resume using current tabs/updated connection settings and the original unknown-job request_id. Known paused jobs still use a new resume command with prior job/worker IDs.
 
-## Восстановление прерванного сбора 0.1.9 — 16 октября 2026
+Paused capture permits verifying/storing a replacement token for the same server without deleting jobs/commands/checkpoints. Rejected tokens retain old data; another server/settings edits during active capture are blocked. Connecting never starts sync; users resume with the main button. Error/pause handling serializes with configuration to prevent token replacement overtaking recovery. Added clear pause status/existing_ownership_unknown text.
 
-Исправлены два замечания полного код-ревью. При потере первого ответа
-POST /jobs ручное продолжение использует текущую вкладку и обновлённые
-настройки подключения, сохраняя исходный request_id неизвестного задания.
-Для известного приостановленного задания, как и прежде, создаётся новая
-команда продолжения с прежними идентификаторами задания и worker.
+Docker: **31 unit; 10 browser passed, one skipped**. Regressions cover lost /jobs response/new tab, known/unknown job retention on token changes, rejected tokens, server-switch prohibition, pause/configuration races. Actual popup/background browser flow receives a fake 401, fixes token, resumes same job. Corrected backend schema 6/SDK 0.6.1 integration: **17 passed**.
 
-Приостановленный сбор позволяет проверить и сохранить замену токена для
-того же сервера без удаления задания, команд и контрольной точки. Неверный
-токен оставляет прежние данные; другой сервер и изменение настроек во время
-активного сбора заблокированы. Подключение не запускает синхронизацию само:
-пользователь продолжает её основной кнопкой. Обработка ошибки и приостановка
-включены в общую очередь, чтобы замена токена не обгоняла восстановление.
-Добавлены понятный статус паузы и перевод existing_ownership_unknown.
+Manifest/package updated to 0.1.9. No live bank/production/API; prior 0.1.8 live acceptance remains historical. New build not yet claimed installed. No pushes/tags.
 
-В Docker подтверждены **31 unit passed; 10 browser passed, 1 skipped**.
-Регрессии включают потерянный ответ /jobs и новую вкладку, сохранение известных
-и неизвестных заданий при замене токена, отклонённый токен, запрет смены
-сервера и гонку приостановки с настройкой. Браузерный тест проходит настоящие
-popup/background через искусственный ответ 401, исправление токена и
-возобновление того же задания. Совместный Docker-прогон с исправленным
-backend (схема 6, SDK 0.6.1) завершён: **17 integration passed**.
+## A/B switching through MV3 and HTTPS — October 17, 2026
 
-Manifest и package обновлены до 0.1.9. Живой банк, рабочие данные и API
-в этой проверке не использовались; приёмка 0.1.8 выше остаётся исторической.
-Новая сборка ещё не объявляется установленной. Push/теги не выполнялись.
+Unchanged MV3 0.1.9 loaded in a separate Docker profile. Ordinary popup fields/connect button switch A HTTP → B HTTPS/new API token with copied/empty databases. Bank always synthetic; backend/SQLite/SDK/Chromium/native permissions/certificate checks real. Live mode uses only historically pinned test ZenMoney, never production/installed extension.
 
+Twelve live jobs: each A creates two missing records, B creates zero old then one new. All repeats zero writes. Six expected UUIDs; transfers/debt/equal amounts never duplicated. Verified exact IDs/categories/viewed=false/daily movements/actual balances/original catalog/SQLite integrity/FKs. Permission denial, wrong token, hostname mismatch, and untrusted CA retain old config; no broad HTTPS permission.
 
-## Переключение A/B через MV3 и HTTPS — 17 октября 2026
+Ordinary regressions: **31 unit; 17 browser/integration passed**. Independent offline scenario also runs 12 jobs. Fixed fixture popup-button refresh waits/HTTPS-case shutdown; live resume verified completed prefixes without repeating seed/delivery. No claim of public-server/toolbar-popup/mobile UI acceptance. Existing deletion preservation still requires database transfer.
 
-В отдельном Docker-профиле загружен неизменённый MV3 0.1.9. Через штатные
-поля popup и кнопку подключения проверены A HTTP → B HTTPS с другим API-токеном,
-копией и пустой БД. Банк всегда искусственный; backend, SQLite, SDK, Chromium,
-нативные Chrome permissions и проверка сертификатов настоящие.
-Живой режим использовал только исторически закреплённый тестовый ZenMoney;
-рабочие данные и установленное расширение не использовались.
+Commands/limits/results: [server-migration-acceptance.md](../server-migration-acceptance.md).
+Local commits only, no pushes/tags/publication.
 
-12 живых заданий: в каждом наборе A создаёт 2 недостающих записи, B после
-переключения — 0 прежних, затем 1 новую. Все повторы — 0 записей. Всего 6
-ожидаемых UUID; переводы/долг/одинаковые суммы не дублировались. Проверены
-точные идентификаторы, категории, viewed=false, дневные движения, реальные
-остатки, сохранность исходного тестового каталога и SQLite integrity/FK.
-Отказ в разрешении, неверный токен, неверное имя сертификата и недоверенный CA
-не заменяют конфигурацию; широкое HTTPS-разрешение не выдаётся.
+## GitHub/ZIP preparation — October 17, 2026
 
-Обычные Docker-регрессии: **31 unit passed; 17 browser/integration passed**.
-Изолированный автономный сценарий также выполняет 12 заданий без внешней сети.
-В стенде исправлены ожидание обновления кнопки popup и завершение HTTPS-case;
-живое продолжение сверило завершённый префикс и не повторило seed/доставку.
-Публичный сервер и toolbar-popup/mобильный UI не объявляются проверенными.
-Для переезда с сохранением прежних удалений по-прежнему нужен перенос БД.
+MIT copied from user-approved `vaslv/zenimport-chrome`. Added PRIVACY.md/publication instructions/CI using synthetic services only. ZIP/unpacked builds include LICENSE/PRIVACY but no config/private data. Extension/connector business code unchanged. Docker: 31 unit/10 browser passed, one expected standalone integration skip. Joint acceptance uses new zenmoney-python 0.7.0; results recorded afterward. Gitleaks 8.30.1 history clean; initial GitHub MIT history preserved by ordinary merge. CI not yet run on GitHub. No production profile/bank/ZenMoney; no pushes/tags/publication.
 
-Команды, ограничения и результаты: [server-migration-acceptance.md](../server-migration-acceptance.md).
-Локальные коммиты; без push, Git-тегов и публикации.
+Joint Docker/current backend/new SDK: **17 passed**. Two independent build.py runs yielded identical ZIP SHA256 `7b109237d1d8a6adf760b8a30144923bd0ea74a06a558794e9c5984cc7395a37`. LICENSE/PRIVACY/manifest/no local configuration verified. Actionlint passed all three workflows; GitHub workflows had not yet run.
 
+## English documentation and interface — October 17, 2026
 
-## Подготовка GitHub/ZIP — 17 октября 2026
+Translated all documentation, comments, visible labels/status/errors, HTML language metadata, and date/relative-time formatting to English. Date locale en-GB; numeric display uses English separators. Test expectations and synthetic labels updated; protocol IDs, bank selectors, persistence, and financial behavior preserved. Production data and published SDK artifacts untouched.
 
-MIT перенесена из подтверждённого пользователем `vaslv/zenimport-chrome`.
-Добавлены PRIVACY.md, порядок публикации и CI только с искусственными сервисами.
-ZIP/распакованная сборка включают LICENSE/PRIVACY; конфигурация и приватные данные
-не включаются. Бизнес-код расширения/банковских коннекторов не менялся.
-Docker: 31 unit passed; 10 browser passed, 1 ожидаемый skip интеграционного модуля
-в самостоятельном образе без backend. Совместная проверка использует новый
-пакет zenmoney-python 0.7.0; результат фиксируется после её окончания.
-История проверена Gitleaks 8.30.1, секретов не найдено. Начальная MIT-история
-GitHub сохраняется обычным merge. CI ещё не запускался на GitHub.
-Рабочий профиль/банк/ZenMoney не использовались; без push, тегов, публикации.
-
-Совместный Docker-прогон с актуальным backend и новым SDK: **17 passed**.
-Два независимых запуска build.py дали одинаковый ZIP SHA256:
-`7b109237d1d8a6adf760b8a30144923bd0ea74a06a558794e9c5984cc7395a37`.
-Проверены LICENSE/PRIVACY/manifest и отсутствие локальных конфигураций в архиве.
-Actionlint прошёл для CI всех трёх проектов; GitHub workflows не запускались.
+Docker: **31 unit + 10 browser passed**, one expected standalone integration skip. Actual backend/fake ZenMoney integration: **17 passed**. Historical results above retain original dates/scope. Local commits only, no pushes/new tags/publication.

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -8,26 +8,26 @@
 </head>
 <body><main>
   <header><h1>ZenImport</h1><span id="bank"></span></header>
-  <button id="sync" class="primary" type="button" disabled>Синхронизировать</button>
+  <button id="sync" class="primary" type="button" disabled>Synchronize</button>
   <p id="last-sync" class="muted" hidden></p>
   <p id="status" role="status" aria-live="polite"></p>
-  <button id="discrepancies" type="button" disabled>Расхождения</button>
-  <details id="settings"><summary>Настройки</summary>
-    <details id="connection-settings" class="settings-section"><summary>Подключение</summary>
+  <button id="discrepancies" type="button" disabled>Discrepancies</button>
+  <details id="settings"><summary>Settings</summary>
+    <details id="connection-settings" class="settings-section"><summary>Connection</summary>
     <form id="server-form">
-      <label>Адрес сервера<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
-      <label>Токен сервера<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
-      <button id="connect" type="submit">Подключить</button>
+      <label>Server address<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
+      <label>Server token<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
+      <button id="connect" type="submit">Connect</button>
     </form>
     </details>
     <section id="account-settings" class="settings-section" hidden>
-      <h2>Счета банка</h2>
-      <section id="accounts" aria-label="Привязка счетов"></section>
-      <button id="refresh-accounts" type="button">Обновить список счетов</button>
+      <h2>Bank accounts</h2>
+      <section id="accounts" aria-label="Account mapping"></section>
+      <button id="refresh-accounts" type="button">Refresh account list</button>
     </section>
     <section id="history-settings" class="settings-section" hidden>
-      <label>Разовая загрузка истории с даты<input id="reimport" type="date" aria-describedby="reimport-hint"></label>
-      <p id="reimport-hint" class="muted">Необязательно. Применится при следующей синхронизации.</p>
+      <label>One-time history import start date<input id="reimport" type="date" aria-describedby="reimport-hint"></label>
+      <p id="reimport-hint" class="muted">Optional. Applies to the next synchronization.</p>
     </section>
   </details>
 </main><script type="module" src="popup.js"></script></body>

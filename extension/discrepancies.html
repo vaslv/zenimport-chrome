@@ -1,14 +1,14 @@
 <!doctype html>
-<html lang="ru">
+<html lang="en">
 <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Расхождения · ZenImport</title><link rel="stylesheet" href="discrepancies.css"></head>
+<title>Discrepancies · ZenImport</title><link rel="stylesheet" href="discrepancies.css"></head>
 <body><main>
-<header><span>ZenImport</span><h1>Расхождения <span id="bank"></span></h1>
-<p>Возможные лишние операции ZenMoney за полностью загруженные дни банка. Изменения и удаления выполняются в приложении ZenMoney.</p></header>
-<form id="filters"><label>Счёт<select id="account"><option value="">Все счета банка</option></select></label>
-<label>С<input id="from" type="date" required></label><label>По<input id="to" type="date" required></label>
-<button id="refresh" type="submit">Обновить</button></form>
-<p id="status" role="status" aria-live="polite">Получаем данные…</p>
+<header><span>ZenImport</span><h1>Discrepancies <span id="bank"></span></h1>
+<p>Potential extra ZenMoney transactions on days with complete bank history. Edit or delete transactions in the ZenMoney app.</p></header>
+<form id="filters"><label>Account<select id="account"><option value="">All bank accounts</option></select></label>
+<label>From<input id="from" type="date" required></label><label>To<input id="to" type="date" required></label>
+<button id="refresh" type="submit">Refresh</button></form>
+<p id="status" role="status" aria-live="polite">Loading data…</p>
 <p id="freshness"></p><div id="coverage"></div>
 <h2 id="summary"></h2><div id="days" aria-busy="true"></div>
 </main><script type="module" src="discrepancies.js"></script></body></html>

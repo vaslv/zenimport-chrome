@@ -267,7 +267,7 @@ class Acceptance:
         previous=(state(worker) or {}).get('command',{}).get('request_id')
         # Worker completion precedes the popup's next 1.5-second poll. Wait for
         # the actual Sync button, otherwise the click can mean Stop old capture.
-        expect(popup.locator('#sync')).to_have_text('Синхронизировать',timeout=10000)
+        expect(popup.locator('#sync')).to_have_text('Synchronize',timeout=10000)
         expect(popup.locator('#sync')).to_be_enabled()
         bank.bring_to_front();popup.locator('#sync').click()
         pump_until(popup,worker,lambda:(state(worker) or {}).get('command',{}).get('request_id') not in (None,previous),timeout=60)
@@ -326,8 +326,8 @@ def settings(popup, bank, plan, *, copied=False):
         if copied:continue
         form=popup.locator('.account').filter(has_text=source)
         form.locator('select').select_option(target['id']);form.locator('input[type=date]').fill(plan['import_start'])
-        form.get_by_role('button',name='Сохранить счёт',exact=True).click()
-        expect(popup.locator('#status')).to_contain_text('Счёт сохранён')
+        form.get_by_role('button',name='Save account',exact=True).click()
+        expect(popup.locator('#status')).to_contain_text('Account saved')
     bank.goto(ORIGIN+'/payment-history?accountNo=12345678');bank.bring_to_front()
     popup.locator('#settings').evaluate('(e)=>e.open=true');popup.locator('#refresh-accounts').click()
     expect(popup.locator('#sync')).to_be_enabled()
@@ -342,16 +342,16 @@ def security(directory,context,worker,bank,popup,trusted,untrusted):
         assert probe.hits==0 and config(worker)==old
         assert url+'/*' not in permissions(worker)
         connect(popup,bank,worker,url,'incorrect-token',screenshot=directory/'permission-allow.png')
-        expect(popup.locator('#status')).to_contain_text('Проверьте токен')
+        expect(popup.locator('#status')).to_contain_text('Check the server token')
         assert probe.hits==1 and config(worker)==old
         # A valid chain with the wrong hostname must still fail.
         before=probe.hits
         connect(popup,bank,worker,url.replace('localhost','127.0.0.1'),probe.token)
-        expect(popup.locator('#status')).to_contain_text('Нет связи')
+        expect(popup.locator('#status')).to_contain_text('Cannot reach')
         assert probe.hits==before and config(worker)==old
     with endpoint(probe,untrusted) as url:
         before=probe.hits;connect(popup,bank,worker,url,probe.token)
-        expect(popup.locator('#status')).to_contain_text('Нет связи')
+        expect(popup.locator('#status')).to_contain_text('Cannot reach')
         assert probe.hits==before and config(worker)==old
     assert 'https://*/*' not in permissions(worker)
     return dict(native_permission_denied=True,native_permission_allowed=True,wrong_token_rejected=True,

@@ -1,21 +1,24 @@
-# M3 — наблюдение живого VietinBank, 16 октября 2026
+# M3 — live VietinBank observation, October 16, 2026
 
-Проверка выполнена в кабинете, в который пользователь вошёл самостоятельно. Использовались штатные элементы банка; синхронизация расширения и отправка в настоящий ZenMoney не запускались. Токены, пароль и полные банковские реквизиты в отчёт не сохранялись.
+Inspected the account after the user signed in independently. Only native bank
+controls were used; neither extension synchronization nor real ZenMoney delivery
+was initiated. No tokens, password, or complete bank details were saved in this report.
 
-## Подтверждено
+## Confirmed
 
-- Главная страница показывает Current account (1); в выпадающем списке истории ровно один доступный Current account. На данном счёте валюта VND.
-- Переход в историю использует /payment-history?accountNo=...; текст выбранного счёта находится в .vt-select__single-value .cus-option и соответствует формату probe коннектора.
-- За период 16 сентября — 16 октября 2026 банк показывает 130 операций, 10 строк на странице. Страницы 1/2/13 доступны; после завершения загрузки диапазоны 1–10 / 11–20 / 121–130, total=130. Переключение active page происходит раньше обновления диапазона; драйвер ожидает смену диапазона, не считает клик завершённой загрузкой.
-- Селекторы .table-pagination-total-range, .table-pagination-total-total и aria-label Page N / is your current page соответствуют текущему DOM.
-- Поля Choose time range (readonly), Input keyword to search, From, To и radio All присутствуют. Календарь имеет role=application, aria-label=Calendar; дни — role=button с английской полной датой, навигация img alt=button back/next, подтверждение Chọn. Текущий период подтверждён без его изменения.
-- Клик по банковской строке открывает Transaction details: reference, source account, amount/currency, beneficiary account/name, bank, description, status, channel и дата со временем. Окно закрыто, история возвращена на первую страницу.
-- В банковской таблице нет добавленных расширением финансовых редакторов.
+- Home shows Current account (1); the history selector contains exactly one available Current account. Its currency is VND.
+- History navigation uses /payment-history?accountNo=...; selected account text is in .vt-select__single-value .cus-option and matches the connector probe format.
+- For September 16–October 16, 2026, the bank shows 130 transactions, 10 rows per page. Pages 1/2/13 are available; after loading, ranges are 1–10 / 11–20 / 121–130, total=130. Active-page switching precedes range refresh; the driver waits for the range change and does not equate a click with completed loading.
+- .table-pagination-total-range, .table-pagination-total-total, and aria-label Page N / is your current page match the current DOM.
+- Choose time range (readonly), Input keyword to search, From, To, and radio All exist. The calendar has role=application, aria-label=Calendar; days are role=button with full English dates; navigation uses img alt=button back/next and confirmation Chọn. The current period was confirmed unchanged.
+- Clicking a bank row opens Transaction details: reference, source account, amount/currency, beneficiary account/name, bank, description, status, channel, and date/time. The dialog was closed and history returned to page one.
+- The bank table contains no extension-injected financial editors.
 
-## Не подтверждено этой проверкой
+## Not established by this check
 
-- Несколько реальных счетов, автоматическое переключение между ними, иные валюты: у текущего логина только один счёт. accounts_complete=false сохраняется.
-- Предел старой истории, полное автоматическое чтение всех 130 операций, актуальный JSON ответа/набор его полей, устойчивость trxId/f1 при повторном захвате. Ручной осмотр DOM не заменяет сквозной запуск коннектора.
-- Создание viewed=false в настоящем ZenMoney, мобильные правки/удаление и повторная синхронизация. Для этого требуется согласованный отдельный тестовый счёт и искусственная запись; вопрос пользователю задан.
+- Multiple actual accounts, automatic switching, other currencies: this login has one account only. accounts_complete=false remains.
+- Maximum historical depth, complete automatic reading of all 130 transactions, current response JSON/fields, and trxId/f1 stability across repeated captures. Manual DOM inspection does not replace an end-to-end connector run.
+- viewed=false creation in actual ZenMoney, mobile edits/deletion, and repeat synchronization. These need an agreed separate test account and synthetic record; the user has been asked.
 
-M3 выполнен частично (живой DOM банка); M4 не начат. Исторические данные, рабочая БД и записи ZenMoney не изменялись.
+M3 is partial (live bank DOM); M4 has not started. Historical data, production database,
+and ZenMoney records are unchanged.

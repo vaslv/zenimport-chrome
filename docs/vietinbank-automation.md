@@ -1,183 +1,200 @@
-# VietinBank: автоматическая загрузка истории
+# VietinBank: automatic history capture
 
-## Цель
+## Goal
 
-Один запуск из расширения: найти/открыть банковскую вкладку, дождаться ручного входа при необходимости, открыть историю выбранного счёта, применить месяц/6 месяцев/произвольный диапазон, собрать все части, сохранить локально и показать результат. Сопоставление и запись в ZenMoney не входят в этот этап.
+One extension command: find/open the bank tab, wait for manual sign-in if needed,
+open the selected account's history, apply a month/six months/custom range, collect
+all parts, persist locally, and show results. Matching/ZenMoney writes are outside
+this stage.
 
-## Что подтверждено
+## Confirmed
 
-- Страница истории текущего счёта: /payment-history?accountNo=…; номер дополнительно проверяется по выбранному счёту в DOM.
+- Current-account history: /payment-history?accountNo=…; also verify the number against the selected account in DOM.
 - Endpoint https://api-ipay.vietinbank.vn/ipay/wa/getHistTransactions.
-- JSON-ответ: accountNo, currentPage, nextPage, pageSize, totalRecords, transactions. Наблюдение: currentPage=0, nextPage=1, pageSize=100, totalRecords=135, 100 строк.
-- Подробности операций доступны в JSON; 4 из 100 строк без trxId, нужен fingerprint и проверка неоднозначностей.
-- В локальной базе 100/135 операций. Повторы не создают дублей.
-- Страницы таблицы по 10 строк не равны страницам API по 100.
+- JSON: accountNo, currentPage, nextPage, pageSize, totalRecords, transactions. Observed currentPage=0, nextPage=1, pageSize=100, totalRecords=135, 100 rows.
+- Transaction details exist in JSON; four of 100 rows lack trxId, requiring fingerprints/ambiguity checks.
+- Local database has 100/135 transactions. Repeats create no duplicates.
+- Ten-row table pages are not 100-row API pages.
 
-## Что пока неизвестно (блокирует реализацию запросов)
+## Unknowns blocking request implementation
 
-- Точные поля тела запроса: номер счёта, даты, номер страницы, размер страницы; формат дат.
-- Зависимость запроса от банковской сессии, подписи/checksum, requestId; можно ли менять параметры и отправлять через обычный механизм приложения без обхода его защиты.
-- Ограничения периода и размера страницы, способ завершения пагинации, формат нулевого результата.
-- Возможность загрузить шесть месяцев одним запросом либо необходимость разбивать на интервалы.
-- Поведение при смене счёта, истечении сессии, повторном поиске и изменении истории между страницами.
+- Exact request fields: account number, dates, page number/size, date format.
+- Session/signature/checksum/requestId dependencies; whether ordinary app mechanisms can change/send parameters without bypassing protection.
+- Period/page-size limits, pagination termination, empty-result shape.
+- Whether six months fit one request or require intervals.
+- Account switching, session expiry, repeated searches, and history changes between pages.
 
-## Исследование в активной банковской сессии
+## Research in an active bank session
 
-1. Для выбранного счёта получить диагностическую схему первой страницы текущего периода.
-2. Изменить начало периода и сравнить схему: должны измениться только ожидаемые поля даты/идентификаторы запросов.
-3. Получить следующую API-страницу через обычное действие банка, сравнить параметр страницы и ответ. Проверить 35 оставшихся строк.
-4. Проверить пустой период и длинный диапазон. Ограничение банка фиксировать по фактическому ответу/UI, не предполагать.
-5. Выбрать транспорт: предпочтительно штатный механизм запросов приложения; если подпись/сессия недоступны без небезопасного копирования, использовать автоматизацию видимых банковских фильтров и страниц плюс наблюдение JSON.
+1. Obtain the diagnostic schema of the current period's first page for the selected account.
+2. Change the start date and compare: only expected date/request-identifier fields should differ.
+3. Request the next API page through native bank actions; compare page parameters/response and check the remaining 35 rows.
+4. Check empty/long periods. Establish limits from actual responses/UI, never assumptions.
+5. Prefer native app requests; if signature/session reuse requires unsafe copying, automate visible filters/pages and observe JSON instead.
 
-Схема запроса собирается отдельным действием в диагностике расширения при открытом Network. В ней сохраняются имена полей и типы; значения разрешены только для ограниченного перечня полей даты/пагинации. Токены, cookies, заголовки, accountNo, sessionId, checksum, requestId и произвольные текстовые значения не экспортируются. Полный HAR/cURL не нужен. Схема — инструмент исследования, не доказательство готовности автоматической загрузки.
+Capture request schemas through a separate diagnostic action with Network open.
+Store field names/types; permit values only for a bounded date/pagination allowlist.
+Never export tokens, cookies, headers, accountNo, sessionId, checksum, requestId, or
+arbitrary text. Full HAR/cURL is unnecessary. A schema is a research tool, not proof
+of automatic capture readiness.
 
-## План реализации после подтверждения протокола
+## Implementation plan after protocol confirmation
 
-- Контроллер загрузки вне popup: состояния ожидания входа, подготовки, загрузки, локального сохранения, завершения, отмены и ошибки. Закрытие popup не прерывает процесс.
-- Обработка только разрешённого history endpoint. Пароли/OTP вводит пользователь; банковские credentials остаются в контексте банка, не попадают в backend/логи.
-- Перед каждым интервалом/страницей сверять счёт и параметры; при смене контекста остановка. Не переходить к платежным действиям.
-- Задать подтверждённый диапазон; разбивать согласно установленному лимиту банка, проверять границы без дыр и с безопасной дедупликацией перекрытий.
-- Собирать только ожидаемую страницу; проверять счётчик, повтор страницы, направление пагинации, уникальность ID и корректность строк. Не объединять разные поиски по одному совпадению totalRecords.
-- Сохранять прогресс и метаданные покрытия в отдельной сессии импорта; текущие лимиты backend 2000 строк/2 МБ относятся к пакету, а не всему периоду.
-- Полный статус только после доказанного покрытия всех страниц/интервалов; отменённый/прерванный сбор явно частичный. Повторный запуск безопасен.
-- По завершении — обзор количества новых/повторных/сомнительных строк и покрытия периода. В ZenMoney не отправлять ничего.
+- Capture controller outside the popup: waiting for login, preparing, capturing, saving locally, complete, cancelled, failed. Popup closure never stops it.
+- Process only the approved history endpoint. Users enter passwords/OTP; bank credentials stay in bank context, outside backend/logs.
+- Verify account/parameters before each interval/page; stop on context changes. Never navigate to payment actions.
+- Apply a confirmed range; split by proven bank limits, verify gap-free boundaries and safely deduplicate overlaps.
+- Collect expected pages only; validate counts, repeated pages, pagination direction, ID uniqueness, row validity. Equal totalRecords alone never combines different searches.
+- Save progress/coverage metadata in a separate import session; current 2000-row/2 MB backend limits apply per batch, not entire period.
+- Claim complete only after proving all pages/intervals; cancelled/interrupted capture is explicitly partial. Repeated runs are safe.
+- End with new/repeated/uncertain row counts and period coverage. Send nothing to ZenMoney.
 
-## Приёмка
+## Acceptance
 
-Синтетические контрактные и браузерные тесты: 0/1/100/135/более 2000 строк; несколько интервалов; отмена/перезапуск; истёкшая сессия; ошибка/повтор страницы; изменившийся счёт/totalRecords; конфликты ID; отсутствие секретов в хранилище и логах. Затем живой текущий период (135 строк) и шестимесячный период с сопоставлением количества по банку. До этой проверки автоматическую загрузку не считать реализованной.
+Synthetic contract/browser checks: 0/1/100/135/over 2000 rows; multiple intervals;
+cancel/restart; expired session; error/repeated page; changed account/totalRecords;
+ID conflicts; no stored/logged secrets. Then actual current period (135 rows) and
+six-month range with independent bank count reconciliation. Do not claim automatic
+capture before these checks.
 
-Статус: план и диагностика подготовлены. На момент начала исследования вкладка банка на /login; нужен ручной вход пользователя.
+Initial status: plan/diagnostics prepared. Bank tab was at /login when research began;
+the user must sign in manually.
 
-## Живое наблюдение 6 октября вечером
+## Live observation on the evening of October 6
 
-После входа текущий месячный счётчик стал 136 (в банке добавилась новая операция). Через календарь выбран диапазон 06.04.2026–06.10.2026 и нажат Search. Банк показал: «Khoảng thời gian tìm kiếm không quá 30 ngày. Vui lòng kiểm tra lại» — период поиска не более 30 дней. Таблица осталась от предыдущего поиска; её нельзя считать результатом запрошенных шести месяцев. Для автоматизации использовать интервалы максимум 30 календарных дат (29 суток между началом/концом), пока точная включительность лимита не проверена.
+After sign-in, the monthly count became 136 because a transaction was added. Calendar
+range 06.04.2026–06.10.2026 followed by Search produced:
+“Khoảng thời gian tìm kiếm không quá 30 ngày. Vui lòng kiểm tra lại” — search periods
+cannot exceed 30 days. The table retained the previous search and is not the six-month
+result. Use at most 30 calendar dates (29 days between endpoints) until precise
+inclusivity is verified.
 
-Календарь: readonly input placeholder Choose time range; application Calendar, стрелки img alt="button back"/"button next" внутри role=button, дни имеют aria-label с полной английской датой и состоянием start/end, кнопка применения «Chọn». Нажатие на img предыдущего месяца сработало, родительский role=button через инструмент не сработал. Начальный день можно сменить с сохранением старого конца: перед Search всегда проверять оба конца, а не только один клик.
+Calendar: readonly Choose time range input; application Calendar; navigation img
+alt="button back"/"button next" inside role=button; days have full English date
+aria-labels and start/end state; apply button Chọn. Clicking the previous-month image
+worked; the parent role=button did not through the tool. A start-day change can retain
+the old end: verify both endpoints before Search, not only one click.
 
-Дальнейшее исследование прервано банковским сообщением «Your session has timed out. Please login again». Необходимы повторный вход и диагностическая схема тела запроса. Готовность автоматического загрузчика не заявляется.
+Research stopped on “Your session has timed out. Please login again”. Another sign-in
+and request-body diagnostic schema are needed. Automatic capture readiness is not claimed.
 
-## Реализация 0.2.0: автоматизация интерфейса и журнал
+## Version 0.2.0: interface automation and journal
 
-Основная кнопка «Получить историю» запускает сохраняемую в `chrome.storage.local` задачу.
-Пользователь входит в банк и выбирает месяц либо шесть месяцев. При первом использовании
-Chrome запрашивает доступ только к `https://ipay.vietinbank.vn/*`. Счёт берётся из открытой
-истории; если она закрыта — из единственного локального банковского счёта VietinBank.
-При неоднозначности нужно один раз открыть историю нужного счёта.
+The primary Get history button starts a job persisted in `chrome.storage.local`.
+Users sign in and select a month or six months. First use requests Chrome access
+only to `https://ipay.vietinbank.vn/*`. Account comes from open history or the sole
+local VietinBank account if history is closed. Ambiguity requires opening the desired
+account's history once.
 
-Загрузчик регистрирует MAIN observer на `document_start` и переоткрывает историю.
-Раннее подключение позволяет видеть и запросы через сохранённую банком ссылку на fetch.
-Регистрация снимается после окончания/остановки. Содержимое запросов, заголовки, cookies,
-сессии и полный HTML не читаются и не записываются. Разрешение Chrome остаётся до отзыва
-пользователем. DevTools остаётся резервным источником ответа, но штатный сценарий его не требует.
+The loader registers a MAIN observer at `document_start` and reopens history. Early
+registration also catches requests through the bank's saved fetch reference. Unregister
+after completion/stop. Never read/store request contents, headers, cookies, sessions,
+or full HTML. Chrome permission remains until user revocation. DevTools stays a
+fallback response source but is unnecessary for ordinary use.
 
-Контроллер в ISOLATED world выбирает интервалы не более 30 календарных дат, очищает
-текстовые/суммовые фильтры, выбирает All, управляет календарём и Search. Затем проходит
-табличные страницы до запроса следующей страницы JSON. Подробности операций извлекаются
-из разрешённых полей JSON, а не модальных окон. Закрытие меню не останавливает процесс.
-Банковскую вкладку нельзя закрывать, перезагружать или менять во время выполнения.
+The ISOLATED controller uses windows of at most 30 calendar dates, clears text/amount
+filters, selects All, controls calendar/Search, then walks table pages until another
+JSON page is requested. Transaction details come from allowlisted JSON fields, not
+modals. Closing the popup never stops capture. Do not close/reload/change the bank
+tab while running.
 
-Это управление штатным интерфейсом: приватные имена параметров, подписи и авторизацию
-запросов формирует сам банк. Прямой API-клиент с воспроизведением банковской сессии не создан.
-Поддерживается исследованная английская разметка Current account, Filter/Search и календарь
-с кнопкой Chọn. Изменение разметки даёт явную ошибку, а не молчаливый неполный импорт.
+This controls native UI: the bank itself constructs private parameters, signatures,
+and authentication. No direct session-replaying API client was created. Supports the
+observed English Current account, Filter/Search, and calendar with Chọn. Changed markup
+produces explicit errors, not silently incomplete imports.
 
-Перед каждым сохранением проверяются счёт, номер страницы, неизменность totalRecords,
-число строк, диапазон дат и отсутствие повторных ID между страницами интервала.
-Backend атомарно сохраняет страницу и дедуплицирует операции по банковскому ID либо
-отпечатку. Уже сохранённые страницы остаются при ошибке; запуск можно повторить.
-Состояние «Весь период сохранён» появляется только после всех интервалов и страниц.
-Пустой корректный ответ отмечается как завершённый пустой интервал.
+Before each save, check account, page number, stable totalRecords, row count, date
+range, and no duplicate IDs across interval pages. The backend atomically saves pages
+and deduplicates by bank ID/fingerprint. Saved pages survive errors; runs may repeat.
+Entire period saved appears only after all intervals/pages. A valid empty response
+completes an empty interval.
 
-Журнал содержит время каждого действия, этап, выбранные даты, номер интервала/страницы,
-ожидания и длительности, счётчики ответа, добавлений и дублей, ошибки. Хранятся текущий
-и предыдущий запуск; максимум 4000 событий на запуск, последние 80 видны в меню.
-«Скачать журнал» выгружает оба запуска, исключая номер счёта, URL и идентификатор вкладки.
-Финансовые строки сохраняются в базе, а не в журнале. Это журнал действий загрузчика,
-не полный браузерный HAR/console trace. Старые ручные инструменты остаются в диагностике.
+The journal stores action time/stage, dates, interval/page, waits/durations, response/
+added/duplicate counts, errors. Retain current/previous run, at most 4000 events each;
+show the latest 80 in the menu. Download journal exports both runs without account
+number, URL, or tab ID. Financial rows belong in the database, not the journal.
+This is a loader action journal, not full browser HAR/console trace. Old manual tools
+remain in diagnostics.
 
-Задача ограничена 20 минутами, отдельные ожидания — 30–45 секундами; запись backend —
-60 секундами. При открытом меню отсутствие прогресса 90 секунд завершает зависшую задачу
-ошибкой. Перезапуск браузера/обновление расширения отменяет незавершённую задачу.
-При выходе банка требуется повторный вход. Искусственный бесконечный keepalive не используется.
+Jobs are limited to 20 minutes; individual waits to 30–45 seconds; backend writes to
+60 seconds. With an open menu, 90 seconds without progress terminates a stuck job.
+Browser restart/extension update cancels unfinished jobs. Bank logout requires sign-in.
+No artificial infinite keepalive.
 
-### Проверка
+### Validation
 
-`./scripts/test-docker.sh` проверяет полный путь на синтетическом банке с сохранённым fetch:
-шесть месяцев, несколько интервалов, 103 строки на интервал (две страницы API), закрытое
-меню и повторную загрузку без новых дублей. Отдельно проверяются другой счёт, даты вне
-периода, изменившийся total, отмена, logout и пустые интервалы. Это не доказывает совместимость
-с текущей живой разметкой: после обновления установленного расширения нужна проверка
-реального месяца, особенно календаря и перехода через сотую строку. Только после неё
-переходим к обучению категорий/сопоставлению. ZenMoney автоматически не обновляется.
+`./scripts/test-docker.sh` checks the complete synthetic-bank flow with a saved fetch:
+six months, multiple intervals, 103 rows per interval (two API pages), closed popup,
+and repeat capture without new duplicates. Separately checks wrong account, out-of-range
+dates, changed totals, cancellation, logout, empty intervals. This does not prove
+current live markup compatibility: after updating the installed extension, verify a
+real month, especially calendar and crossing row 100. Only then proceed to category
+learning/matching. ZenMoney is not updated automatically.
 
-## Диагностика ответов 0.2.1
+## Response diagnostics 0.2.1
 
-После запуска истории каждый перехваченный ответ сохраняется в диагностике **до**
-проверок полноты и импорта, включая ответ с неожиданным номером страницы или totalRecords.
-Ручная работа с Network для получения этих счётчиков больше не требуется.
-Кнопка «Скачать отчёт диагностики» выгружает прежний zenimport-actions.json с разделом
-`responses` в текущем и предыдущем запуске. Отчёт содержит:
+During capture, save every intercepted response to diagnostics **before** completeness/
+import checks, even unexpected page numbers/totalRecords. Manual Network inspection
+is no longer needed for these counts. Download diagnostic report exports the previous
+zenimport-actions.json with `responses` in current/previous runs:
 
-- ожидаемые страницу, total, уже сохранённое количество и выбранный интервал;
-- фактические currentPage, nextPage, pageSize, totalRecords, error и их типы;
-- количество строк, тип transactions и типы разрешённых полей операций;
-- совпадение счёта (boolean), диапазон дат, количество пустых/повторных ID;
-- отметку ошибки чтения ответа и прежний журнал действий/причину остановки.
+- Expected page, total, already saved count, selected interval.
+- Actual currentPage, nextPage, pageSize, totalRecords, error, and types.
+- Row count, transactions type, allowlisted transaction field types.
+- Boolean account match, date range, empty/duplicate ID counts.
+- Response-read error marker and previous action journal/stop reason.
 
-Сохраняются последние 200 диагностик ответа на запуск, число отброшенных указано
-в `responsesDropped`. Финансовые значения, идентификаторы транзакций, реквизиты,
-имена получателей, описания, произвольные строки, заголовки, cookies, request body,
-sessionId и полный HTML в этот отчёт не включаются. Значения счётчиков сохраняются
-только как числа, boolean, null либо короткие строки из цифр; прочее представлено типом.
-Это диагностическая сводка, не полный HAR. Импорт и проверки полноты не ослаблены.
-Старые журналы 0.2.0 нельзя дополнить задним числом: нужен новый запуск после обновления.
+Retain the latest 200 diagnostics per run; `responsesDropped` counts discarded ones.
+Exclude financial values, transaction IDs, account details, payee names, descriptions,
+arbitrary strings, headers, cookies, request body, sessionId, and full HTML. Counts
+are only numbers, booleans, null, or short digit strings; other values are represented
+by type. This is a diagnostic summary, not full HAR. Import/completeness checks are
+unchanged. Old 0.2.0 journals cannot be retroactively enriched: run again after updating.
 
-## Пагинация 0.2.2
+## Pagination 0.2.2
 
-Живой диагностический отчёт 7 октября подтвердил: page 0 / pageSize 100 /
-totalRecords 132 / 100 строк; затем page 1 / pageSize 100 / totalRecords 0 /
-32 строки. Счёт совпадает, даты второго ответа — 7–13 сентября внутри выбранного
-периода. nextPage=2 не означает наличие ещё одной неполученной страницы.
+A live October 7 report confirmed page 0 / pageSize 100 / totalRecords 132 / 100 rows;
+then page 1 / pageSize 100 / totalRecords 0 / 32 rows. Account matched; second response
+dates September 7–13 were in range. nextPage=2 does not prove another missing page.
 
-При продолжении (currentPage > 0) нулевой totalRecords теперь заменяется для
-валидации и импорта положительным total первой страницы того же интервала.
-Диагностика сохраняет исходный ноль. Ненулевой изменившийся total всё ещё вызывает
-остановку. Парсер проверяет точное ожидаемое количество строк и последовательность
-страниц; проверка счёта, дат и повторов остаётся. Вне автоматического запуска
-одиночный JSON с totalRecords=0 и строками по-прежнему не импортируется: без первой
-страницы невозможно доказать полноту. Пустой первый ответ обрабатывается отдельно.
+For continuation currentPage > 0, zero totalRecords is now replaced during validation/
+import with the positive first-page total from the same interval. Diagnostics retain
+the original zero. Changed nonzero totals still stop capture. The parser validates
+exact expected row counts/page sequence; account/date/duplicate checks remain.
+Outside automatic runs, standalone JSON with totalRecords=0 and rows remains rejected:
+without page one, completeness cannot be proven. Empty first responses are separate.
 
-## Диагностика денежных полей 0.2.3
+## Monetary field diagnostics 0.2.3
 
-Живая шестимесячная загрузка 0.2.2 завершила интервалы 7 апреля–6 мая (101 строка)
-и 7 мая–5 июня (112 строк), затем остановилась на первом ответе 6 июня–5 июля
-с общей ошибкой формата VND. Журнал 0.2.2 не различал amount и balance и не содержал
-формы значения, поэтому конкретная причина пока не установлена.
+Live 0.2.2 six-month capture completed April 7–May 6 (101 rows) and May 7–June 5
+(112 rows), then stopped on June 6–July 5's first response with a generic VND-format
+error. The old journal distinguished neither amount/balance nor value shape, so the
+specific cause was unknown.
 
-Теперь парсер сообщает номер строки в ответе и точное поле, а `responses.moneyIssues`
-записывается до парсинга: тип, причина (type/format/limit), длина, маска формата и
-признак нулевой дробной части для простых десятичных форм. Цифры заменены #, буквы и
-прочие символы — ?, остаются только разделители/знаки; значения не сохраняются.
-До 20 примеров на ответ, полное количество — moneyIssueCount. Валидатор общий для
-диагностики и парсинга. Правила приёма денежных значений не изменены. Для определения
-фактического формата нужен новый запуск 0.2.3; автоматически угадывать сумму нельзя.
+The parser now reports response row/exact field, while `responses.moneyIssues` is
+recorded before parsing: type, reason (type/format/limit), length, format mask, and
+zero-fraction flag for plain decimals. Replace digits with #, letters/other characters
+with ?, retaining separators/signs only; no original values. Up to 20 samples per
+response; moneyIssueCount gives the full count. Diagnostics/parser share one validator.
+Money acceptance rules are unchanged. Determine actual format with a new 0.2.3 run;
+never automatically guess amounts.
 
-## Отрицательные суммы 0.2.4
+## Negative amounts 0.2.4
 
-Отчёт 0.2.3 выявил отрицательное целое amount в строке 46 периода 6 июня–5 июля.
-При живой проверке строки 41–50 банк показывал для этой операции отрицательную сумму,
-но остаток относительно непосредственно предшествующей по времени строки увеличился
-на её модуль. Поэтому отображаемый знак не является достаточным источником направления.
+The 0.2.3 report identified negative integer amount on row 46 for June 6–July 5.
+Live inspection of rows 41–50 showed a negative displayed amount, but the balance
+increased by its magnitude relative to the immediately preceding chronological row.
+The displayed sign therefore cannot alone establish direction.
 
-Парсер допускает отрицательное целое amount в прежнем диапазоне. Расчёт net остаётся
-amount × (-1 для D, +1 для C), то есть отрицательный дебет обращает списание. Для каждого
-отрицательного amount обязательно независимое подтверждение: разность текущего остатка
-и остатка следующей, строго более ранней строки ответа должна точно равняться net.
-Сравнение выполняется BigInt. Если сосед отсутствует (граница страницы), время одинаково,
-валюта/остаток не подходят или разность не совпала, импорт страницы останавливается
-с конкретной причиной, а не угадывает направление. Неотрицательные операции не меняются.
-Исходный signed amount сохраняется; fingerprint использует подтверждённый net.
-В диагностике negativeAmounts указаны строка, D/C и результат balanceCheck без сумм.
+The parser accepts negative integer amount within the previous limits. Net remains
+amount × (-1 for D, +1 for C): negative debit reverses the debit. Every negative amount
+requires independent confirmation: current balance minus the next strictly earlier
+response row balance must exactly equal net. Comparison uses BigInt. Missing neighbors
+(page boundaries), equal timestamps, incompatible currency/balances, or differing
+movements stop page import with a specific reason rather than guessing direction.
+Nonnegative transactions are unchanged. Preserve original signed amount; fingerprints
+use confirmed net. negativeAmounts diagnostics contain row, D/C, and balanceCheck,
+without amounts.
 
-Ограничение: автоматическое подтверждение отрицательных сумм на границе страниц
-и при одинаковом времени соседей пока не реализовано; они потребуют отдельного решения.
+Limitation: automatic negative-amount confirmation at page boundaries/equal neighbor
+timestamps is not implemented; those cases need a separate decision.

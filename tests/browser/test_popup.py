@@ -17,15 +17,15 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         expect(popup.locator('#server-form')).to_be_hidden()
         expect(popup.locator('.account select option')).to_have_count(3) # unset, ignored, same currency
         assert popup.locator('.account input[type=date]').input_value()
-        popup.get_by_role('button',name='6 месяцев',exact=True).is_hidden() # unset, no accidental default target
+        popup.get_by_role('button',name='6 months',exact=True).is_hidden() # unset, no accidental default target
         popup.locator('.account select').select_option('target-vnd')
-        expect(popup.get_by_role('button',name='6 месяцев',exact=True)).to_be_visible()
+        expect(popup.get_by_role('button',name='6 months',exact=True)).to_be_visible()
         first_date=popup.locator('.account input[type=date]').input_value()
-        popup.get_by_role('button',name='6 месяцев',exact=True).click()
+        popup.get_by_role('button',name='6 months',exact=True).click()
         assert popup.locator('.account input[type=date]').input_value()<first_date
-        popup.get_by_role('button',name='30 дней',exact=True).click()
+        popup.get_by_role('button',name='30 days',exact=True).click()
         assert popup.locator('.account input[type=date]').input_value()==first_date
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
         expect(popup.locator('#settings')).not_to_have_attribute('open','')
         popup.locator('#settings > summary').click()
@@ -41,7 +41,7 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         assert worker.evaluate("async()=>{const [{result}]=await chrome.scripting.executeScript({target:{tabId:(await chrome.tabs.query({url:'https://ipay.vietinbank.vn/*'}))[0].id},func:async()=>{try{return await chrome.storage.local.get('config')}catch{return {denied:true}}}});return !result?.config}")
         popup.reload();popup.locator('#settings').evaluate('(e)=>e.open=true');bank.bring_to_front();popup.locator('#refresh-accounts').click()
         expect(popup.locator('.account select')).to_have_value('target-vnd')
-        popup.locator('.account select').select_option('ignored');popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.locator('.account select').select_option('ignored');popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_disabled()
         assert not errors
 
@@ -50,7 +50,7 @@ def test_incompatible_backend_and_unsupported_page_do_not_start_jobs():
     service=PopupBackend();service.version=2
     with http_server(service) as url, sync_playwright() as p, installed(p,url) as (_,_,bank,popup,_):
         connect(popup,bank,url)
-        expect(popup.locator('#status')).to_contain_text('несовместимы')
+        expect(popup.locator('#status')).to_contain_text('incompatible')
         expect(popup.locator('#sync')).to_be_disabled()
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
 
@@ -124,7 +124,7 @@ def test_connection_draft_survives_popup_closure_and_failed_connection(first):
         assert worker.evaluate("async()=>{const [{result}]=await chrome.scripting.executeScript({target:{tabId:(await chrome.tabs.query({url:'https://ipay.vietinbank.vn/*'}))[0].id},func:async()=>{try{return !(await chrome.storage.session.get('connectionDraft')).connectionDraft}catch{return true}}});return result}")
         service.version=2
         popup.locator('#connect').click()
-        expect(popup.locator('#status')).to_contain_text('несовместимы')
+        expect(popup.locator('#status')).to_contain_text('incompatible')
         popup=reopen(popup)
         for field,value in values.items():expect(popup.locator('#'+field)).to_have_value(value)
         service.version=1
@@ -146,7 +146,7 @@ def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
         expect(popup.locator('#settings')).to_have_attribute('open','')
         expect(popup.locator('#server-form')).to_be_hidden()
         popup.locator('.account select').select_option('target-vnd')
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#settings')).not_to_have_attribute('open','')
         popup.reload()
         expect(popup.locator('#sync')).to_be_enabled()
@@ -164,11 +164,11 @@ def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
         expect(popup.locator('#settings')).to_have_attribute('open','')
         expect(popup.locator('#server-form')).to_be_hidden()
         popup.locator('.account').nth(1).locator('select').select_option('ignored')
-        popup.locator('.account').nth(1).get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.locator('.account').nth(1).get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#settings')).not_to_have_attribute('open','')
         service.version=2
         popup.reload()
-        expect(popup.locator('#status')).to_contain_text('несовместимы')
+        expect(popup.locator('#status')).to_contain_text('incompatible')
         expect(popup.locator('#server-form')).to_be_visible()
 
 
@@ -188,31 +188,31 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.locator('.account')).to_have_count(1)
         popup.locator('.account select').select_option('target-vnd')
         popup.set_viewport_size({'width':390,'height':300})
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
-        expect(popup.get_by_role('button',name='Сохраняем…',exact=True)).to_be_disabled()
+        popup.get_by_role('button',name='Save account',exact=True).click()
+        expect(popup.get_by_role('button',name='Saving…',exact=True)).to_be_disabled()
         expect(popup.locator('.account-status')).to_be_visible()
-        expect(popup.locator('.account-status')).to_contain_text('Сохраняем счёт')
+        expect(popup.locator('.account-status')).to_contain_text('Saving account')
         expect(popup.locator('.account select')).to_be_disabled()
         assert service.started.is_set()
         if Path('/results').is_dir():popup.screenshot(path='/results/account-saving.png')
         service.release.set()
         expect(popup.locator('.account-status')).to_have_attribute('data-tone','error')
         expect(popup.locator('.account-status')).to_be_visible()
-        expect(popup.get_by_role('button',name='Сохранить счёт',exact=True)).to_be_enabled()
+        expect(popup.get_by_role('button',name='Save account',exact=True)).to_be_enabled()
         expect(popup.locator('.account select')).to_have_value('target-vnd')
         service.reject=False
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#settings')).not_to_have_attribute('open','')
         popup.locator('#settings > summary').click()
-        expect(popup.get_by_role('button',name='Сохранено',exact=True)).to_be_disabled()
-        expect(popup.locator('.account-status')).to_contain_text('Счёт сохранён')
+        expect(popup.get_by_role('button',name='Saved',exact=True)).to_be_disabled()
+        expect(popup.locator('.account-status')).to_contain_text('Account saved')
         expect(popup.locator('.account-status')).to_have_attribute('data-tone','success')
         popup.reload()
         expect(popup.locator('#sync')).to_be_enabled()
         popup.locator('#settings > summary').click()
-        expect(popup.get_by_role('button',name='Сохранено',exact=True)).to_be_disabled()
+        expect(popup.get_by_role('button',name='Saved',exact=True)).to_be_disabled()
         popup.locator('.account input[type=date]').fill('2026-04-16')
-        expect(popup.get_by_role('button',name='Сохранить счёт',exact=True)).to_be_enabled()
+        expect(popup.get_by_role('button',name='Save account',exact=True)).to_be_enabled()
         expect(popup.locator('.account-status')).to_be_hidden()
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
 
@@ -231,7 +231,7 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         connect(popup,bank,url)
         expect(popup.locator('.account')).to_have_count(1)
         popup.locator('.account select').select_option('target-vnd')
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
         expect(popup.locator('#last-sync')).to_be_hidden()
         worker.evaluate("""async()=>{
@@ -242,26 +242,26 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         }""")
         # Fire via real alarm without a long wall-clock wait.
         run_clock(popup,worker)
-        expect(popup.locator('#status')).to_contain_text('Сервер отправляет')
+        expect(popup.locator('#status')).to_contain_text('The server is sending')
         expect(popup.locator('#last-sync')).to_be_hidden()
         service.job['delivery_state']='complete'
         service.job['delivery'].update(pending=0)
         run_clock(popup,worker)
-        expect(popup.locator('#last-sync')).to_contain_text('16 октября 2026')
-        expect(popup.locator('#last-sync')).to_contain_text('только что')
+        expect(popup.locator('#last-sync')).to_contain_text('16 October 2026')
+        expect(popup.locator('#last-sync')).to_contain_text('just now')
         saved=worker.evaluate("async()=> (await chrome.storage.local.get('syncHistory')).syncHistory")
         assert list(saved.values())==['2026-10-16T05:00:00.000Z']
         popup.reload()
-        expect(popup.locator('#last-sync')).to_contain_text('16 октября 2026')
+        expect(popup.locator('#last-sync')).to_contain_text('16 October 2026')
         popup.evaluate("Date.now=()=>Date.parse('2026-10-16T07:00:00Z')")
-        expect(popup.locator('#last-sync')).to_contain_text('2 часа назад')
+        expect(popup.locator('#last-sync')).to_contain_text('2 hours ago')
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-last-sync.png',clip=popup.locator('main').bounding_box())
         worker.evaluate("""async()=>{
           const {capture}=await chrome.storage.local.get('capture');
           await chrome.storage.local.set({capture:{...capture,completedAt:undefined,phase:'failed',error:'history_incomplete'}});
         }""")
-        expect(popup.locator('#status')).to_contain_text('Сбор прерван')
-        expect(popup.locator('#last-sync')).to_contain_text('2 часа назад')
+        expect(popup.locator('#status')).to_contain_text('History capture interrupted')
+        expect(popup.locator('#last-sync')).to_contain_text('2 hours ago')
         assert worker.evaluate("async()=> (await chrome.storage.local.get('syncHistory')).syncHistory")==saved
         service.connection_id=str(uuid4())
         popup.reload()
@@ -269,9 +269,9 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         expect(popup.locator('#last-sync')).to_be_hidden()
         service.connection_id=next(iter(saved)).split('|')[-1]
         popup.reload()
-        expect(popup.locator('#last-sync')).to_contain_text('16 октября 2026')
+        expect(popup.locator('#last-sync')).to_contain_text('16 October 2026')
         bank.goto('about:blank');bank.bring_to_front();popup.reload()
-        expect(popup.locator('#status')).to_contain_text('Откройте историю')
+        expect(popup.locator('#status')).to_contain_text('Open transaction history')
         expect(popup.locator('#last-sync')).to_be_hidden()
         assert not [call for call in service.calls if call[0]=='POST' and call[1]=='/api/v1/jobs']
 
@@ -290,7 +290,7 @@ def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
     with http_server(service) as url, sync_playwright() as p, installed(p,url) as (_,worker,bank,popup,_):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1)
         popup.locator('.account select').select_option('target-vnd')
-        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
         worker.evaluate("""async()=>{
           const {view}=await chrome.storage.local.get('view');
@@ -310,7 +310,7 @@ def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
         expect(popup.locator('#server-form')).to_be_visible()
         # A failed replacement must leave the old checkpoint and credentials intact.
         popup.locator('#token').fill('fixture-wrong-token');popup.locator('#connect').click()
-        expect(popup.locator('#status')).to_contain_text('Проверьте токен')
+        expect(popup.locator('#status')).to_contain_text('Check the server token')
         expect(popup.locator('#connect')).to_be_enabled()
         assert worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")==paused
         assert worker.evaluate("async()=> (await chrome.storage.local.get('config')).config.token")==TOKEN
@@ -322,9 +322,9 @@ def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
         assert not [call for call in service.calls if call[:2]==('POST','/api/v1/jobs')]
         assert not worker.evaluate("async()=> (await chrome.storage.session.get('connectionDraft')).connectionDraft")
         popup.reload();bank.bring_to_front();expect(popup.locator('#sync')).to_be_enabled()
-        expect(popup.locator('#status')).to_contain_text('Сбор приостановлен')
+        expect(popup.locator('#status')).to_contain_text('Capture paused')
         popup.locator('#sync').click()
-        expect(popup.locator('#status')).to_contain_text('Готово.',timeout=10000)
+        expect(popup.locator('#status')).to_contain_text('Done.',timeout=10000)
         completed=worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
         assert completed['job']['id']==paused['job']['id']
         assert completed['workerId']==paused['workerId']

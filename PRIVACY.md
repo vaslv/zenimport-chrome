@@ -1,31 +1,31 @@
-# Данные в ZenImport Chrome
+# Data in ZenImport Chrome
 
-Расширение предназначено для чтения истории в уже открытом личном кабинете банка
-по явному нажатию «Синхронизировать». Авторизацию выполняет пользователь на сайте
-банка. Пароль, SMS-код и банковские auth-поля не передаются в ZenImportBackend.
+The extension reads history in an already open bank session only after an explicit
+Synchronize click. Users sign in on the bank website themselves. Passwords, SMS
+codes, and bank authentication fields are not sent to ZenImportBackend.
 
-История операций (сумма, дата, описание, доступные реквизиты получателя/баланс)
-передаётся на выбранный вами backend. Он сохраняет историю в своей базе,
-получает зеркало ZenMoney, прогнозирует категории и добавляет недостающие записи
-в ZenMoney. Финансовые правки выполняются в официальном приложении ZenMoney.
-Данные хранятся на компьютере/сервере, где вы развернули backend, и в ZenMoney.
-Автоматического срока удаления серверной истории нет; её жизненным циклом и
-резервными копиями управляет владелец backend. Не удаляйте журнал доставки
-просто как кеш: это может привести к повторному импорту прежних удалений.
+Transaction history (amount, date, description, available payee details/balance)
+is sent to the backend you choose. It stores history in its database, fetches a
+ZenMoney mirror, predicts categories, and adds missing transactions to ZenMoney.
+Financial edits are made in the official ZenMoney app. Data is stored on the
+computer/server where you deploy the backend and in ZenMoney. Server history has
+no automatic deletion period; the backend owner manages its lifecycle/backups.
+Do not treat the delivery journal as disposable cache: removing it can reimport
+previously deleted transactions.
 
-Chrome хранит адрес и API-токен backend, настройки подключения и контрольные
-точки сбора в закрытом storage расширения. Незавершённый ввод адреса/токена
-хранится в session storage до подключения или перезапуска браузера/расширения.
-Токен ZenMoney находится только на backend; его не нужно вводить в расширение.
-Токен backend не передаётся JavaScript страницы банка. Не используйте общий
-непроверенный backend: его владелец получает ваши финансовые данные.
+Chrome keeps the backend address/API token, connection settings, and capture
+checkpoints in private extension storage. Unfinished address/token input stays
+in session storage until connection or browser/extension restart. The ZenMoney
+token stays on the backend; do not enter it in the extension. Backend tokens are
+never passed to bank-page JavaScript. Do not use an untrusted shared backend:
+its owner receives your financial data.
 
-HTTPS обязателен для удалённого backend; HTTP допускается только для localhost
-и 127.0.0.1. Доступ к конкретному серверу/сайту банка запрашивается у Chrome.
-Расширение не добавляет редактор операций в личный кабинет банка и не содержит
-аналитики, рекламных модулей или отправки данных разработчику.
+Remote backends require HTTPS; HTTP is allowed only for localhost and 127.0.0.1.
+Chrome requests access to the specific backend/bank host. The extension injects
+no transaction editor into online banking and contains no analytics, advertising,
+or data delivery to the developer.
 
-Функциональная страница «Расхождения» показывает сведения через ваш backend
-только для чтения. Не прикладывайте реальные финансовые записи и токены к
-публичным GitHub Issues. Для удаления локальных настроек можно удалить
-расширение; серверная база и данные ZenMoney при этом автоматически не удаляются.
+The Discrepancies page reads information through your backend only. Do not attach
+actual financial records or tokens to public GitHub Issues. Uninstalling the
+extension removes local settings; it does not automatically delete the server
+database or ZenMoney data.

@@ -24,7 +24,7 @@ export function syncTime(value, now = Date.now()) {
   const [amount,unit] = seconds<60 ? [0,'second'] : seconds<3600 ? [Math.floor(seconds/60),'minute'] :
     seconds<86400 ? [Math.floor(seconds/3600),'hour'] : [Math.floor(seconds/86400),'day'];
   return {
-    date: new Intl.DateTimeFormat('ru-RU',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(time),
-    ago: seconds<60 ? 'только что' : new Intl.RelativeTimeFormat('ru-RU',{numeric:'always'}).format(-amount,unit),
+    date: new Intl.DateTimeFormat('en-GB',{day:'numeric',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'}).format(time),
+    ago: seconds<60 ? 'just now' : new Intl.RelativeTimeFormat('en-GB',{numeric:'always'}).format(-amount,unit),
   };
 }

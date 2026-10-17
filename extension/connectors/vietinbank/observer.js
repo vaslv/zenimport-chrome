@@ -21,7 +21,7 @@
       if(JSON.stringify(clean).length>1500000)throw Error();
       if(inline)lastHistory={data:clean,startedAt};
       emit({data:clean,startedAt});
-    } catch {emit({startedAt,error:'Ответ истории не удалось прочитать. Повторите захват или загрузите JSON файлом.'});}
+    } catch {emit({startedAt,error:'Could not read the history response. Retry capture or import a JSON file.'});}
   };
   function wrappedFetch(...args) {
     const startedAt=Date.now();
@@ -34,7 +34,7 @@
         while(true){const {value,done}=await reader.read();if(done)break;bytes+=value.byteLength;if(bytes>1500000){reader.cancel();throw Error();}chunks.push(value);}
         const joined=new Uint8Array(bytes);let offset=0;for(const chunk of chunks){joined.set(chunk,offset);offset+=chunk.length;}
         receive(JSON.parse(new TextDecoder().decode(joined)),startedAt);
-      }catch{emit({startedAt,error:'Не удалось прочитать ответ истории банка.'});}},()=>emit({startedAt,error:'Запрос истории завершился ошибкой.'}));
+      }catch{emit({startedAt,error:'Could not read the bank history response.'});}},()=>emit({startedAt,error:'The history request failed.'}));
     }
     return result;
   }
@@ -46,7 +46,7 @@
       if(this.responseType==='json')receive(this.response,startedAt);
       else if((this.responseType===''||this.responseType==='text')&&this.responseText.length<=1500000)receive(JSON.parse(this.responseText),startedAt);
       else throw Error();
-    }catch{emit({startedAt,error:'Не удалось прочитать ответ истории банка.'});}},{once:true});
+    }catch{emit({startedAt,error:'Could not read the bank history response.'});}},{once:true});
     return originalSend.apply(this,args);
   }
   const replay=e=>{

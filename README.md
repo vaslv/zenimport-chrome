@@ -1,46 +1,45 @@
 # ZenImport Chrome
 
-Самостоятельное расширение MV3. Читает историю в открытом кабинете банка и передаёт её ZenImportBackend. Финансовые операции пользователь разбирает в мобильном ZenMoney.
+An independent MV3 extension. Reads history from an open online banking session and sends it to ZenImportBackend. Users review financial transactions in mobile ZenMoney.
 
-Проекты рядом: `ZenImportBackend`, `ZenMoneyAPI`. Сборка расширения не требует их исходников.
+Neighboring projects: `ZenImportBackend`, `ZenMoneyAPI`. Extension builds do not require their source.
 
-`python3 scripts/build.py` создаёт воспроизводимый ZIP и `dist/extension`. В Chrome откройте `chrome://extensions`, включите режим разработчика и загрузите эту папку как распакованное расширение. Старое расширение предварительно отключите. В popup укажите сервер и **токен backend**, а не ZenMoney. HTTPS обязателен, кроме localhost/127.0.0.1. Учётные данные банка серверу не передаются.
+`python3 scripts/build.py` creates a reproducible ZIP and `dist/extension`. Open `chrome://extensions`, enable Developer mode, and load this directory as an unpacked extension. Disable the old extension first. In the popup, enter the server address and **backend token**, not the ZenMoney token. HTTPS is mandatory except for localhost/127.0.0.1. Bank credentials are never sent to the server.
 
-План и фактические ограничения: `docs/refactor/03-extension.md`, `docs/refactor/05-progress.md`. Публикация в Store не выполняется.
+Plan and actual limitations: `docs/refactor/03-extension.md`, `docs/refactor/05-progress.md`. No Store publication is performed.
 
-## Синхронизация
+## Synchronization
 
-Откройте в банке историю нужного счёта. При первом подключении выберите счёт ZenMoney либо «Не загружать» и дату (по умолчанию 30 дней назад). Полный перечень счетов VietinBank пока не подтверждён: откройте остальные счета и обновите список. Настроенные счета можно синхронизировать, пока новые ещё не выбраны.
+Open history for the desired bank account. On first connection, select a ZenMoney account or Do not import and a date (default: 30 days ago). A complete VietinBank account list is not yet verified: open other accounts and refresh the list. Configured accounts can synchronize while new ones remain unconfigured.
 
-Нажатие «Синхронизировать» разрешает чтение и отправку всех недостающих операций настроенных счетов. Сервер дополняет только уверенно известные категории; все новые записи имеют viewed=false. Правки и удаления телефона окончательны. Пауза/закрытие вкладки сохраняют страницы; для продолжения снова откройте историю и нажмите кнопку. «Остановить сбор» не отменяет уже отправленные записи и разрешённую доставку полных интервалов.
+Synchronize authorizes capture and delivery of all missing transactions for configured accounts. The server adds only confidently known categories; every new record has viewed=false. Mobile changes/deletions are final. Pausing/closing the tab preserves pages; to resume, reopen history and click again. Stop capture does not undo sent records or revoke delivery of authorized complete intervals.
 
-Для разовой старой истории заполните дату в настройках перед нажатием кнопки. После полного чтения она очистится. При обычной синхронизации сервер использует прошлую полную границу с запасом 14 дней, а не заново всю историю.
+For a one-time older import, set its start date before clicking. It clears after complete capture. Ordinary synchronization uses the server's previous complete boundary with a 14-day overlap rather than rereading all history.
 
-Сбор и доставка через Chrome 0.1.8 проверены на настоящем VietinBank; итог записан в [журнале приёмки](docs/refactor/05-progress.md). Проверка списка новых операций, правок и удалений в мобильном приложении остаётся отдельной отложенной приёмкой. Автоматические тесты используют только искусственные банк, ZenMoney и базу данных.
+Chrome 0.1.8 capture/delivery was verified against actual VietinBank; results are in the [acceptance log](docs/refactor/05-progress.md). Mobile New-tab, edit, and deletion checks remain separately deferred. Automated tests use only synthetic banks, ZenMoney, and databases.
 
-## Проверки
+## Checks
 
-`./scripts/test-docker.sh` — самостоятельные unit/popup. `./scripts/test-integration.sh ../ZenImportBackend` — совместная проверка с настоящим backend и fake ZenMoney; только ей нужны соседние исходники. Контейнеры запускаются без внешней сети. Подробные границы проверки: docs/testing.md.
+`./scripts/test-docker.sh`: independent unit/popup checks. `./scripts/test-integration.sh ../ZenImportBackend`: joint validation with the actual backend and fake ZenMoney; only this needs neighboring source. Containers have no external networking. Detailed boundaries: docs/testing.md.
 
-Для обновления уже загруженной распакованной сборки пересоберите dist/extension, нажмите «Обновить» на карточке ZenImport в chrome://extensions и заново откройте popup. Текущая версия — 0.1.9. Если была загружена копия папки в другом месте, сначала замените её новой сборкой.
+To update an already loaded unpacked build, rebuild dist/extension, click Reload on the ZenImport card in chrome://extensions, and reopen the popup. Current version: 0.1.9. If a copied directory elsewhere was loaded, replace it with the new build first.
 
-Незавершённые адрес и токен восстанавливаются после закрытия popup. Черновик хранится только в закрытом session storage расширения до успешного подключения либо перезапуска Chrome/перезагрузки расширения. Он не подключает сервер автоматически и не доступен странице банка.
+Unfinished server address/token input is restored after popup closure. Drafts stay only in private extension session storage until successful connection or Chrome/extension reload. They never connect automatically and are inaccessible to the bank page.
 
-Если сбор приостановлен из-за недействительного токена backend, укажите новый токен для прежнего адреса сервера и подключитесь снова. Задание и полученные страницы сохранятся; продолжение запускается кнопкой «Синхронизировать» из текущей вкладки истории банка. Смена сервера во время незавершённого сбора заблокирована.
+If an invalid backend token pauses capture, enter a new token for the same server address and reconnect. Jobs/captured pages survive; resume using Synchronize from the current bank history tab. Server switching during unfinished capture is blocked.
 
-Готовые настройки при открытии popup свёрнуты; незавершённое подключение, новый счёт или недоступная привязка раскрывают нужный раздел. После сохранения последнего счёта настройки сворачиваются. Подключение к серверу можно отдельно раскрыть вручную.
+Configured settings are collapsed when opening the popup; incomplete connection, new accounts, or unavailable mappings expand the appropriate section. Saving the last account collapses settings. Connection settings can be expanded manually.
 
-Под кнопкой синхронизации показаны дата и местное время последней успешной синхронизации и сколько времени прошло. Учитывается подтверждение полного сбора и доставки в ZenMoney; незавершённые/ошибочные попытки дату не меняют. Время хранится в закрытом локальном хранилище расширения отдельно для каждого сервера и банковского подключения. Оно фиксируется при первом подтверждении успеха worker и обновляется в открытом popup. В старых версиях время не сохранялось: для них дата не восстанавливается приблизительно, строка появится после следующей успешной синхронизации на 0.1.6. Очистка данных расширения удаляет эту локальную отметку.
+Below Synchronize, the popup shows the last successful synchronization's local date/time and elapsed time. It requires confirmed complete capture and ZenMoney delivery; incomplete/failed attempts do not change the timestamp. Private extension local storage retains it separately for each server/bank connection. It is recorded at the worker's first success confirmation and refreshes in an open popup. Older versions did not store timestamps, so no approximate date is reconstructed: the row appears after the next successful synchronization on 0.1.6. Clearing extension data removes this local marker.
 
-В меню на странице банка доступна кнопка **Расхождения**. Она открывает отдельную вкладку расширения с возможными лишними записями ZenMoney, сгруппированными по датам и счетам банка. Выберите период и счёт; «Обновить» получает свежие данные ZenMoney. Проверяются только полностью полученные дни банка; пока идёт сбор/отправка, отчёт предупреждает об этом. Операции без соответствия — кандидаты, которые нужно проверить, а изменения и удаления выполнять в мобильном ZenMoney. Страница не отправляет операции, не сохраняет связи и не добавляет интерфейс в банк. Нужен backend с GET `/api/v1/connections/{id}/discrepancies` (добавлен 16 октября). Автокатегории без изменений.
+On a bank page, the menu offers **Discrepancies**. It opens a separate extension tab listing potentially extra ZenMoney records grouped by bank date/account. Select period/account; Refresh obtains current ZenMoney data. Only fully captured bank days are checked; the report warns during capture/delivery. Unmatched records are review candidates; edit/delete them in mobile ZenMoney. The page neither sends transactions, stores links, nor injects bank UI. Requires backend GET `/api/v1/connections/{id}/discrepancies` (added October 16). Automatic categories are unchanged.
 
-Отдельная проверка смены сервера через расширение и HTTPS:
+Separate extension server-switch/HTTPS validation:
 [scripts/test-server-migration.sh](scripts/test-server-migration.sh),
-[границы проверки и безопасный запуск](docs/server-migration-acceptance.md).
-По умолчанию внешняя сеть отключена; живой режим требует явно указанной
-исторически проверенной тестовой идентичности ZenMoney.
+[scope and safe execution](docs/server-migration-acceptance.md).
+External networking is disabled by default; live mode requires an explicitly supplied,
+historically verified ZenMoney test identity.
 
-Исходный репозиторий: https://github.com/vaslv/zenimport-chrome. Лицензия MIT;
-обработка данных описана в [PRIVACY.md](PRIVACY.md). Подготовка ZIP, CI и порядок
-публикации: [docs/publication.md](docs/publication.md). Автоматической отправки
-в GitHub Release/Chrome Web Store нет.
+Source repository: https://github.com/vaslv/zenimport-chrome. MIT license;
+data handling: [PRIVACY.md](PRIVACY.md). ZIP preparation, CI, and publication:
+[docs/publication.md](docs/publication.md). No automatic GitHub Release/Chrome Web Store uploads.
