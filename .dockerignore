@@ -5,3 +5,4 @@
 !scripts/build.py
 !tests/**
 !Dockerfile.integration
+!scripts/browser_migration.py

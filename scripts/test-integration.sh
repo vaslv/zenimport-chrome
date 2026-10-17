@@ -8,5 +8,5 @@ mkdir -p "$root/test-results"
 name="zenimport-chrome-integration-$$"
 cleanup() { docker image rm "$name" >/dev/null 2>&1 || true; }
 trap cleanup EXIT
-docker build -f "$root/Dockerfile.integration" --build-context "backend=$backend" -t "$name" "$root"
+docker build -f "$root/Dockerfile.integration" --target integration --build-context "backend=$backend" -t "$name" "$root"
 docker run --rm --network none --ipc=private --shm-size=512m --mount "type=bind,source=$root/test-results,target=/results" "$name" python -m pytest -q -p no:cacheprovider tests/browser "$@"

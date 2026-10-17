@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM mcr.microsoft.com/playwright/python:v1.58.0-noble@sha256:678457c4c323b981d8b4befc57b95366bb1bb6aa30057b1269f6b171e8d9975a
+FROM mcr.microsoft.com/playwright/python:v1.58.0-noble@sha256:678457c4c323b981d8b4befc57b95366bb1bb6aa30057b1269f6b171e8d9975a AS integration
 WORKDIR /app
 COPY --from=backend requirements.runtime.lock.txt ./
 RUN pip install --no-cache-dir -r requirements.runtime.lock.txt playwright==1.58.0 pytest==8.3.5
@@ -13,3 +13,12 @@ RUN python scripts/build.py
 COPY tests/browser ./tests/browser
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app:/app/fixture_helpers
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/browser"]
+
+# Explicit acceptance target: local CA and native permission dialogs in Xvfb.
+# It is never part of the shipped extension or the backend runtime image.
+FROM integration AS migration-acceptance
+RUN apt-get update && apt-get install -y --no-install-recommends libnss3-tools xdotool scrot && rm -rf /var/lib/apt/lists/*
+COPY --from=backend scripts/migration_lab.py scripts/migration_history.py ./scripts/
+COPY scripts/browser_migration.py ./scripts/browser_migration.py
+ENV PYTHONPATH=/app:/app/fixture_helpers:/app/tests/browser:/app/scripts
+CMD ["xvfb-run", "-a", "python", "scripts/browser_migration.py", "--fake"]
