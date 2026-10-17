@@ -31,15 +31,15 @@ label { display: block; margin: 12px 0; overflow-wrap: anywhere; }
 input, select { display: block; width: 100%; margin-top: 6px; }
 #status { margin: 12px 0 18px; font-size: 13px; color: #52525b; overflow-wrap: anywhere; }
 #status:empty { display: none; }
-#status[data-tone="error"], .account-status[data-tone="error"] { color: #b42318; }
-#status[data-tone="success"], .account-status[data-tone="success"] { color: #167347; }
-#status[data-tone="loading"]::before, .account-status[data-tone="loading"]::before {
+#status[data-tone="error"], :is(.account-status,.migration-status)[data-tone="error"] { color: #b42318; }
+#status[data-tone="success"], :is(.account-status,.migration-status)[data-tone="success"] { color: #167347; }
+#status[data-tone="loading"]::before, :is(.account-status,.migration-status)[data-tone="loading"]::before {
   content: ""; display: inline-block; width: 10px; height: 10px; margin-right: 7px;
   border: 2px solid #d4d4d8; border-top-color: #e96158; border-radius: 50%;
   animation: spin .8s linear infinite;
 }
 @keyframes spin { to { transform: rotate(360deg); } }
-@media (prefers-reduced-motion: reduce) { #status[data-tone="loading"]::before, .account-status[data-tone="loading"]::before { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #status[data-tone="loading"]::before, :is(.account-status,.migration-status)[data-tone="loading"]::before { animation: none; } }
 #settings { border-top: 1px solid #e4e4e7; padding-top: 14px; }
 summary { cursor: pointer; color: #52525b; }
 .settings-section { padding-top: 18px; }
@@ -59,6 +59,6 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 #connection-settings > summary { font-weight: 600; color: #24252b; }
 
-.account-status { margin: 8px 0 0; font-size: 13px; overflow-wrap: anywhere; }
+.account-status, .migration-status { margin: 8px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 
 #discrepancies { width: 100%; margin: 0 0 16px; }

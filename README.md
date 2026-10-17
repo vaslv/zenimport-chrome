@@ -1,5 +1,9 @@
 # ZenImport Chrome
 
+Local **0.2.0** adds **Settings → Data migration**: export one ZIP, connect to a new
+backend, and import before its first sync. Requires backend 0.2.0+; not included
+in the published 0.1.9 release. [Migration instructions](docs/data-migration.md).
+
 An independent MV3 extension. Reads history from an open online banking session and sends it to ZenImportBackend. Users review financial transactions in mobile ZenMoney.
 
 ## Install
@@ -32,7 +36,7 @@ Chrome 0.1.8 capture/delivery was verified against actual VietinBank; results ar
 
 `./scripts/test-docker.sh`: independent unit/popup checks. `./scripts/test-integration.sh ../ZenImportBackend`: joint validation with the actual backend and fake ZenMoney; only this needs neighboring source. Containers have no external networking. Detailed boundaries: docs/testing.md.
 
-To update an already loaded unpacked build, rebuild dist/extension, click Reload on the ZenImport card in chrome://extensions, and reopen the popup. Current version: 0.1.9. If a copied directory elsewhere was loaded, replace it with the new build first.
+To update an already loaded unpacked build, rebuild dist/extension, click Reload on the ZenImport card in chrome://extensions, and reopen the popup. Prepared version: 0.2.0; last public release: 0.1.9. If a copied directory elsewhere was loaded, replace it with the new build first.
 
 Unfinished server address/token input is restored after popup closure. Drafts stay only in private extension session storage until successful connection or Chrome/extension reload. They never connect automatically and are inaccessible to the bank page.
 

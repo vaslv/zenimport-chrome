@@ -93,6 +93,11 @@ session draft and is cleared by extension reload. Updates from GitHub are manual
 
 ## Switch backends safely
 
+Extension/backend 0.2.0 add a browser-driven move using **Settings → Data migration**:
+[export/import instructions](data-migration.md). These buttons are not included in
+the public 0.1.9 ZIP or 0.1.0 backend image. The snapshot guidance below also applies
+when using the manual backend procedure.
+
 Complete any unfinished capture before changing servers. Use the new address and
 the **new backend token** in Connection settings; verify account mappings again.
 Keep the old backend's database and delivery journal backed up. The server can

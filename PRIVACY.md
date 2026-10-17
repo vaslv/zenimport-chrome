@@ -29,3 +29,12 @@ The Discrepancies page reads information through your backend only. Do not attac
 actual financial records or tokens to public GitHub Issues. Uninstalling the
 extension removes local settings; it does not automatically delete the server
 database or ZenMoney data.
+
+Data migration in 0.2.0 downloads an unencrypted ZIP of the backend's financial
+history and delivery journal, including account mappings and deletion records.
+It excludes server and ZenMoney tokens. Store it privately and import only trusted
+archives. The selected ZIP is sent only to your configured backend, which verifies
+it before restoration and refuses import after its first synchronization. Export
+persistently pauses the source server; the imported server waits for your explicit
+Synchronize click before financial delivery. Temporary private server files are
+removed after the request; downloaded files remain under your control.

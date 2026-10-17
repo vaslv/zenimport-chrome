@@ -1,5 +1,6 @@
 import {permissionOrigin} from './backend-client.js';
 import {today,daysAgo,monthsAgo,validDate,syncTime} from './dates.js';
+import {setupMigration} from './popup-migration.js';
 const $ = id => document.getElementById(id);
 const rpc = async data => {
   const result=await chrome.runtime.sendMessage(data);
@@ -17,6 +18,8 @@ const messages={
   zenmoney_unavailable:'ZenMoney is temporarily unavailable.',history_incomplete:'History capture interrupted: the bank returned incomplete history. Synchronize again.',
   existing_ownership_unknown:'Could not identify the account used by the previous match.',
   capture_context_changed:'The page or account has changed. Synchronize again.',validation_error:'Check the selected accounts and date.',
+  migration_paused:'This server is paused after export. Import the archive on the new server, or resume this server in Settings.',
+  migration_busy:'A server operation is in progress. Try again shortly.',
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
 const showError=error=>{
@@ -33,7 +36,7 @@ function renderLastSync(value=lastSyncedAt) {
   element.textContent=time ? `Last synchronized: ${time.date} · ${time.ago}.` : '';
 }
 let connectionDraftPending=false;
-let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='';
+let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='',migrationPaused=false;
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
 function updateButton() {
   const active=['planned','collecting'].includes(capture?.phase);
@@ -43,7 +46,7 @@ function updateButton() {
   $('connect').disabled=busy;
   $('url').disabled=busy;$('token').disabled=busy;
   $('sync').textContent=active?'Stop capture':'Synchronize';
-  $('sync').disabled=busy || (!active && (!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported)));
+  $('sync').disabled=busy || migrationPaused || (!active && (!compatible || !view?.connection.accounts.some(a=>a.selection==='enabled' && a.supported)));
 }
 function progress(state) {
   capture=state;updateButton();
@@ -146,6 +149,8 @@ async function refreshData() {
   } catch(error){showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
 }
 let connectionEdited=false;
+const migration=setupMigration({rpc,refresh:async()=>{capture=null;view=null;await refresh();},
+  lock:value=>{busy=value;updateButton();},pause:value=>{migrationPaused=value;updateButton();}});
 for(const id of ['url','token'])$(id).addEventListener('input',()=>{
   connectionEdited=true;connectionDraftPending=true;
   // Issue the write on input, before the popup can close; no debounce/unload hook.
@@ -158,7 +163,7 @@ $('server-form').addEventListener('submit',async event=>{
     if(!await chrome.permissions.request({origins:[permissionOrigin($('url').value)]}))throw Object.assign(Error(),{code:'invalid_server'});
     await rpc({type:'configure',url:$('url').value,token:$('token').value});
     $('token').value='';configured=true;connectionDraftPending=false;capture=null;
-    $('connection-settings').open=false;$('settings').open=false;renderLastSync(null);await refresh();
+    $('connection-settings').open=false;$('settings').open=false;renderLastSync(null);await migration.refresh();await refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('discrepancies').addEventListener('click',async()=>{try{await rpc({type:'open-discrepancies'});}catch(error){showError(error);}});
@@ -177,7 +182,7 @@ $('sync').addEventListener('click',async()=>{
       reimportSaved=date;
       status('Starting synchronization…','loading');await rpc({type:'start'});
     }
-    const state=await rpc({type:'status'});progress(state.capture);
+    const state=await rpc({type:'status'});progress(state.capture);await migration.refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 try {
@@ -189,7 +194,7 @@ try {
  connectionDraftPending=connectionEdited || !!connectionDraft;
  $('connection-settings').open=!state.configured || connectionDraftPending;
  $('settings').open=!state.configured || connectionDraftPending;capture=state.capture;
- if(state.configured)await refresh();else status(messages.not_configured);
+ if(state.configured){await migration.refresh();await refresh();}else status(messages.not_configured);
  if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}
 setInterval(async()=>{

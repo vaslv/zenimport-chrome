@@ -203,3 +203,38 @@ No production database, installed extension, bank session, or real ZenMoney acco
 was accessed by these checks. A fresh server still cannot preserve prior deletions
 without its delivery journal. GitHub CI and release-download verification remain
 pending explicit push/tag approval; no publication is claimed by this entry.
+
+## Popup export/import — October 17, 2026, local 0.2.0
+
+Added a collapsed **Settings → Data migration** panel: Export data, Import data,
+and explicit Resume this server for cancelled moves. Export stops this extension's
+capture, obtains one private ZIP from the authenticated backend, and downloads a
+Blob without new browser permissions. The source stays persistently paused, even
+if the popup closes. Users then change the server/token and upload the selected
+ZIP before the destination's first sync. Import availability is read from the
+backend, refreshed after starting sync, and enforced again on the server.
+
+Transfers omit cookies, reject redirects, and use only the authorized backend
+origin. No archive/base64/token is stored in the bank page or extension settings.
+Progress, unsupported older backend, invalid/oversized/wrong-account archive,
+unknown transfer result, and durable pause/restored state are shown in the panel.
+Restoration resets local capture/view checkpoints; saved settings/coverage come
+from the imported server history. Import does not deliver financial writes until
+the next explicit Synchronize. Documentation/privacy disclose the unencrypted
+financial ZIP, limits, interrupted transfer handling, and source-resume restrictions.
+
+Fresh Docker: **32 unit + 10 standalone browser passed**, one expected backend
+module skip; **18 real-backend/browser integration passed**. The new flow exercised
+actual ZIP download, persistent source pause, normal server-address change, broken
+ZIP rejection with retry, file chooser/upload, restored mappings and disabled
+reimport, first sync with zero duplicate writes, and preservation of a mobile
+deletion. Native action-popup width regression also passed. Inspected the migration
+panel screenshot; no horizontal overflow or bank-injected UI. Upstream Starlette/
+httpx warning remains test-only. All bank/ZenMoney data and profiles were synthetic.
+
+Backend b258376 separately passed 508 native ARM64 Docker tests and HTTP/auth,
+SIGKILL, graceful stop and restored-delivery checks. ZIP 0.2.0 is reproducible:
+SHA256 `1fcd1d96a0137ecb2437f96a35744d05fd05307d6a8cdbf3481f9d746ff772b1`.
+Local commits only: no push, tags, new GitHub/GHCR publication, production restart,
+installed-extension update, or real API was used. Public 0.1.9/0.1.0 artifacts
+remain unchanged. Both components must be updated to use migration.

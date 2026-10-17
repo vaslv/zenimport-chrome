@@ -20,6 +20,13 @@
       <button id="connect" type="submit">Connect</button>
     </form>
     </details>
+    <details id="migration-settings" class="settings-section" hidden><summary>Data migration</summary>
+      <p class="muted">Export pauses this server. Connect to the new server, then import before its first synchronization. The ZIP contains private financial data, not server tokens.</p>
+      <div class="shortcuts"><button id="export-data" type="button">Export data</button><button id="import-data" type="button" disabled>Import data</button></div>
+      <input id="migration-file" type="file" accept=".zip,application/zip" hidden>
+      <p id="migration-status" class="migration-status" role="status" aria-live="polite"></p>
+      <button id="migration-resume" type="button" hidden>Resume this server</button>
+    </details>
     <section id="account-settings" class="settings-section" hidden>
       <h2>Bank accounts</h2>
       <section id="accounts" aria-label="Account mapping"></section>

@@ -45,6 +45,19 @@ async function inspect() {
   return view;
 }
 async function popup(data) {
+  if(data.type==='migration-status')return new Backend(await configuration()).request('/migration/status');
+  if(data.type==='migration-prepare-export'){
+    const current=await store.get();
+    if(current && ['planned','collecting','paused'].includes(current.phase))await (await coordinator()).stop();
+    await chrome.alarms.clear('capture');
+    return {};
+  }
+  if(data.type==='migration-imported'){
+    await chrome.storage.local.remove(['view','capture','reimportFrom']);
+    await chrome.alarms.clear('capture');
+    return {};
+  }
+  if(data.type==='migration-resume')return new Backend(await configuration()).request('/migration/resume','POST',{});
   if (data.type === 'status') {
     const {config,view,capture,reimportFrom,syncHistory={}} = await chrome.storage.local.get(['config','view','capture','reimportFrom','syncHistory']);
     return {configured:!!config,url:config?.url || '',view,capture,reimportFrom:reimportFrom || '',

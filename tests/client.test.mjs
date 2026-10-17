@@ -29,3 +29,19 @@ test('standalone manifest has no editor or automatic bank content injection', ()
   for(const key of ['options_page','devtools_page','content_scripts','web_accessible_resources','host_permissions']) assert.equal(manifest[key],undefined);
   assert.equal(fs.existsSync('extension/app.html'),false);
 });
+
+test('migration binary transfer keeps credentials private and rejects bad responses',async()=>{
+  const config={url:'https://fixture.invalid',token:'fixture-token'};
+  let sent;
+  const backend=new Backend(config,async(url,options)=>{sent={url,...options};return new Response('fixture-zip',{headers:{'Content-Type':'application/zip'}});});
+  assert.equal(await (await backend.transfer('export')).text(),'fixture-zip');
+  assert.equal(sent.url,'https://fixture.invalid/api/v1/migration/export');
+  assert.equal(sent.credentials,'omit');assert.equal(sent.redirect,'error');
+  assert.equal(sent.headers.Authorization,'Bearer fixture-token');
+  const file=new Blob(['fixture-zip']);
+  const importer=new Backend(config,async(url,options)=>{sent={url,...options};return Response.json({restored:true});});
+  assert.deepEqual(await importer.transfer('import',file),{restored:true});
+  assert.equal(sent.body,file);assert.equal(sent.headers['Content-Type'],'application/zip');
+  await assert.rejects(new Backend(config,async()=>Response.json({error:{code:'migration_not_empty',message:'private'}} ,{status:409})).transfer('import',file),{code:'migration_not_empty',message:'migration_not_empty'});
+  await assert.rejects(new Backend(config,async()=>new Response('private')).transfer('export'),{code:'invalid_response'});
+});

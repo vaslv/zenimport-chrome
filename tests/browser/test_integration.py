@@ -98,6 +98,62 @@ def start_sync(popup,bank,worker):
     pump_until(popup,worker,lambda:(state(worker) or {}).get('command',{}).get('request_id') not in (None,previous))
 
 
+def test_popup_zip_export_switch_import_and_no_duplicate_or_restored_deletion(tmp_path):
+    bank_api=Bank()
+    with service(tmp_path/'a') as (url_a,path_a,remote_a,app_a), service(tmp_path/'b') as (url_b,path_b,remote_b,app_b), \
+         sync_playwright() as p, installed(p,url_a,bank_api) as (context,worker,bank,popup,identifier):
+        connect(popup,bank,url_a);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
+        start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
+        assert sum(map(len,remote_a.writes))==3
+        expect(popup.locator('#import-data')).to_be_disabled()
+        deleted=next(iter(remote_a.transactions))
+        del remote_a.transactions[deleted]
+        remote_a.deletions.append({'object':'transaction','id':deleted})
+        app_a.state.mirror.refresh(force=True,transactions=True)
+        popup.locator('#settings').evaluate('(e)=>e.open=true')
+        popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
+        expect(popup.locator('#import-data')).to_be_disabled()
+        with popup.expect_download() as pending:
+            popup.locator('#export-data').click()
+        downloaded=pending.value
+        archive=tmp_path/'move.zip';downloaded.save_as(archive)
+        assert archive.read_bytes().startswith(b'PK')
+        expect(popup.locator('#migration-status')).to_contain_text('server stays paused')
+        expect(popup.locator('#sync')).to_be_disabled()
+        assert app_a.state.migration.status()['paused']
+        remote_b.transactions=deepcopy(remote_a.transactions)
+        remote_b.deletions=deepcopy(remote_a.deletions)
+        popup.locator('#connection-settings').evaluate('(e)=>e.open=true')
+        connect(popup,bank,url_b)
+        expect(popup.locator('#url')).to_have_value(url_b)
+        popup.locator('#settings').evaluate('(e)=>e.open=true')
+        popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
+        expect(popup.locator('#import-data')).to_be_enabled()
+        popup.locator('#migration-file').set_input_files({'name':'broken.zip','mimeType':'application/zip','buffer':b'not a ZIP'})
+        expect(popup.locator('#migration-status')).to_contain_text('damaged or incompatible')
+        expect(popup.locator('#import-data')).to_be_enabled()
+        assert not remote_b.writes
+        with popup.expect_file_chooser() as chooser:
+            popup.locator('#import-data').click()
+        chooser.value.set_files(archive)
+        expect(popup.locator('#migration-status')).to_contain_text('Data restored',timeout=15000)
+        assert not remote_b.writes
+        assert app_b.state.migration.status()['awaiting_sync']
+        assert app_a.state.migration.status()['paused']
+        if Path('/results').is_dir():popup.screenshot(path='/results/popup-migration.png',full_page=True)
+        popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
+        expect(popup.locator('#import-data')).to_be_disabled()
+        start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
+        assert not remote_b.writes
+        assert deleted not in remote_b.transactions
+        with storage.transaction(path_b,read_only=True) as db:
+            assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==3
+            assert db.execute('SELECT 1 FROM zen_tombstones WHERE entity_id=?',(deleted,)).fetchone()
+            storage.check_integrity(db)
+
+
 def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfill(tmp_path):
     bank_api=Bank()
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (context,worker,bank,popup,identifier):
