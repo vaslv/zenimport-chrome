@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {Coordinator} from '../extension/coordinator.js';
 
 function fixture(bank='synthetic-second-bank') {
- let state, count=0, failAck=false, running=false;
+ let state, count=0, failAck=false, failStartAck=false, running=false;
  const events=[], persisted=[];
  const connection={id:'connection',accounts:[{id:'account-a',source_key:'source-a',selection:'enabled'},
    {id:'account-b',source_key:'source-b',selection:'enabled'},{id:'account-c',source_key:'source-c',selection:'ignored'}]};
@@ -12,7 +12,10 @@ function fixture(bank='synthetic-second-bank') {
  const pages = new Map();
  const backend={request:async(path,method,body)=>{
    events.push({path,method,body});
-   if(path==='/jobs')return structuredClone(job);
+   if(path==='/jobs'){
+     if(failStartAck){failStartAck=false;throw Object.assign(Error(),{code:'backend_unavailable'});}
+     return structuredClone(job);
+   }
    if(path.endsWith('/lease'))return {epoch:1,expires_at:'2099-01-01T00:00:00Z'};
    if(method==='PUT') {
      const old=pages.get(path);if(old)assert.deepEqual(old,body);else pages.set(path,structuredClone(body));
@@ -26,11 +29,11 @@ function fixture(bank='synthetic-second-bank') {
    return structuredClone(job);
  }};
  const store={get:async()=>structuredClone(state),set:async value=>{state=structuredClone(value);persisted.push(structuredClone(value));}};
- const adapter={running:async()=>running,selectAccount:async(tab,source)=>{events.push({select:source});return 'document';},
+ const adapter={running:async()=>running,selectAccount:async(tab,source)=>{events.push({select:source,tabId:tab});return 'document';},
    launch:async()=>{running=true;},abort:async()=>{running=false;},parsePage:async()=>({records:[{external_id:'fixture'}],total:1,size:100,totalPages:1})};
  const create=(options={})=>new Coordinator({store,backend,...options,connector:name=>{assert.equal(name,bank);return adapter;},uuid:()=>`uuid-${++count}`});
  return {create,store,events,persisted,pages,job,connection,start:{connection,bank,tabId:42},source:{tabId:42,documentId:'document',account:'source-a'},
-   loseAck:()=>{failAck=true;},stopDriver:()=>{running=false;}};
+   loseAck:()=>{failAck=true;},loseStartAck:()=>{failStartAck=true;},stopDriver:()=>{running=false;}};
 }
 test('ACK-before-checkpoint, worker re-creation, lost ACK replay and ignored account',async()=>{
  const f=fixture();let engine=f.create();await engine.start(f.start);
@@ -67,6 +70,23 @@ test('manual resume rebinds a paused job to a reopened bank tab with a new comma
  const old=(await f.store.get()).command.request_id;
  await engine.pause();await engine.start({...f.start,tabId:77});
  const state=await f.store.get();assert.equal(state.tabId,77);assert.notEqual(state.command.request_id,old);
+ assert.equal(state.job.id,'job');
+});
+
+test('lost start ACK resumes in the new tab with the original command and worker identity',async()=>{
+ const f=fixture();let engine=f.create();f.loseStartAck();
+ await assert.rejects(engine.start(f.start),{code:'backend_unavailable'});
+ await engine.pause('backend_unavailable');
+ const paused=await f.store.get();assert.equal(paused.phase,'paused');assert.equal(paused.job,undefined);
+ engine=f.create(); // A restarted worker reads the durable unknown-job command.
+ const connection={...f.connection,accounts:f.connection.accounts.map(a=>({...a,label:'Fresh discovery'}))};
+ await engine.start({...f.start,connection,tabId:77});
+ const state=await f.store.get();
+ assert.equal(state.phase,'collecting');assert.equal(state.error,null);
+ assert.equal(state.tabId,77);assert.deepEqual(state.connection,connection);
+ assert.equal(state.workerId,paused.workerId);assert.deepEqual(state.command,paused.command);
+ assert.deepEqual(f.events.filter(e=>e.path==='/jobs').map(e=>e.body.request_id),[paused.command.request_id,paused.command.request_id]);
+ assert.deepEqual(f.events.filter(e=>e.select).map(e=>e.tabId),[77]);
  assert.equal(state.job.id,'job');
 });
 

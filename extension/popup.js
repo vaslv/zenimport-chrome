@@ -15,6 +15,7 @@ const messages={
   account_busy:'Сначала завершите или остановите текущий сбор.',capture_busy:'Историю уже читает другое расширение.',
   settings_conflict:'Настройки изменились. Обновите список счетов.',zenmoney_account_unavailable:'Счёт ZenMoney недоступен. Проверьте привязку.',
   zenmoney_unavailable:'ZenMoney временно недоступен.',history_incomplete:'Сбор прерван: банк вернул неполную историю. Повторите синхронизацию.',
+  existing_ownership_unknown:'Не удалось определить счёт прежнего сопоставления.',
   capture_context_changed:'Страница или счёт изменились. Повторите синхронизацию.',validation_error:'Проверьте выбранные счета и дату.',
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
@@ -48,6 +49,7 @@ function progress(state) {
   capture=state;updateButton();
   if(!state)return;
   if(state.error && ['failed','paused'].includes(state.phase)){showError({code:state.error});return;}
+  if(state.phase==='paused'){status('Сбор приостановлен. Нажмите «Синхронизировать», чтобы продолжить.');return;}
   const job=state.job;
   if(['planned','collecting'].includes(state.phase)){
     const intervals=job?.accounts.flatMap(a=>a.intervals) || [];

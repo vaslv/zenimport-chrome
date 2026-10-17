@@ -51,15 +51,18 @@ async function popup(data) {
       lastSyncedAt:config && view ? syncHistory[config.url+'|'+view.connection.id] || null : null};
   }
   if (data.type === 'configure') {
-    const capture = await store.get();
-    if (capture && ['collecting','planned','paused'].includes(capture.phase)) throw new SyncError('account_busy');
+    const {capture,config:previous} = await chrome.storage.local.get(['capture','config']);
     const config = {url:serverAddress(data.url),token:data.token.trim()};
+    const resume = capture?.phase === 'paused' && previous?.url === config.url;
+    if (capture && ['collecting','planned','paused'].includes(capture.phase) && !resume) throw new SyncError('account_busy');
     if (!config.token || config.token.length > 4096) throw new SyncError('unauthorized');
     await new Backend(config).info();
-    await chrome.storage.local.set({config});
+    // A repaired credential must not lose a paused job or an unknown POST ACK.
+    // Store both atomically; synchronization still needs the user's next click.
+    await chrome.storage.local.set({config,...(resume ? {capture:{...capture,error:null}} : {})});
     // Clear even when the popup closed while the connection was being checked.
     await chrome.storage.session.remove('connectionDraft');
-    await chrome.storage.local.remove(['view','capture']);
+    if (!resume) await chrome.storage.local.remove(['view','capture']);
     return {configured:true};
   }
   if (data.type === 'open-discrepancies') {
@@ -142,18 +145,22 @@ async function tick() {
 }
 chrome.runtime.onMessage.addListener((data,sender,reply) => {
   serial(async()=>{
-    await secureStorage;
-    if (sender.id !== chrome.runtime.id) throw new SyncError('unauthorized');
-    const isPopup = sender.url === chrome.runtime.getURL('popup.html');
-    const isReport=sender.url?.split('?')[0]===chrome.runtime.getURL('discrepancies.html');
-    return isPopup ? popup(data) : isReport ? discrepancyReport(data,sender) : captured(data,sender);
-  }).then(value=>reply({ok:true,...value}),async error=>{
-    const current=await store.get();
-    const ownsCapture=current?.driver?.runId===data.runId && current?.tabId===sender.tab?.id && current?.driver?.documentId===sender.documentId;
-    // A stale or forged content message must not cancel a newer valid run.
-    if (data.type==='start' || ownsCapture) await recover(error).catch(()=>{});
-    reply({ok:false,error:error.code || 'internal_error'});
-  });
+    try {
+      await secureStorage;
+      if (sender.id !== chrome.runtime.id) throw new SyncError('unauthorized');
+      const isPopup = sender.url === chrome.runtime.getURL('popup.html');
+      const isReport=sender.url?.split('?')[0]===chrome.runtime.getURL('discrepancies.html');
+      const value = await (isPopup ? popup(data) : isReport ? discrepancyReport(data,sender) : captured(data,sender));
+      return {ok:true,...value};
+    } catch(error) {
+      const current=await store.get();
+      const ownsCapture=current?.driver?.runId===data.runId && current?.tabId===sender.tab?.id && current?.driver?.documentId===sender.documentId;
+      // Recovery belongs to the same queue entry: token repair and another
+      // resume must not race with pausing the failed request.
+      if (data.type==='start' || ownsCapture) await recover(error).catch(()=>{});
+      return {ok:false,error:error.code || 'internal_error'};
+    }
+  }).then(reply,()=>reply({ok:false,error:'internal_error'}));
   return true;
 });
 chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'capture') serial(tick); });

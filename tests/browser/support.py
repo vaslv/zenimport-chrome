@@ -47,7 +47,9 @@ def http_server(service):
         def do_PUT(self): self.respond()
         def do_POST(self): self.respond()
         def respond(self):
-            assert self.headers.get('Authorization') == 'Bearer '+TOKEN
+            if self.headers.get('Authorization') != 'Bearer '+getattr(service,'token',TOKEN):
+                self.send_response(401);self.send_header('Content-Type','application/json');self.end_headers()
+                self.wfile.write(json.dumps({'error':{'code':'unauthorized'}}).encode());return
             length=int(self.headers.get('Content-Length','0'))
             body=json.loads(self.rfile.read(length)) if length else None
             try: value=service.request(self.command,self.path,body); status=200

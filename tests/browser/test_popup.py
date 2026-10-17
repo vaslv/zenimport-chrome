@@ -274,3 +274,59 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         expect(popup.locator('#status')).to_contain_text('Откройте историю')
         expect(popup.locator('#last-sync')).to_be_hidden()
         assert not [call for call in service.calls if call[0]=='POST' and call[1]=='/api/v1/jobs']
+
+
+def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
+    class RotatingTokenBackend(PopupBackend):
+        def __init__(self):
+            super().__init__();self.token=TOKEN
+            self.job={'id':'fixture-recoverable-job','capture_state':'complete','delivery_state':'complete','accounts':[],
+                'delivery':{'delivered':0,'suppressed':0,'pending':0,'uncertain':0},'errors':[]}
+        def request(self,method,path,body):
+            if path in ['/api/v1/jobs','/api/v1/jobs/'+self.job['id']]:
+                self.calls.append((method,path,body));return self.job
+            return super().request(method,path,body)
+    service=RotatingTokenBackend()
+    with http_server(service) as url, sync_playwright() as p, installed(p,url) as (_,worker,bank,popup,_):
+        connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1)
+        popup.locator('.account select').select_option('target-vnd')
+        popup.get_by_role('button',name='Сохранить счёт',exact=True).click()
+        expect(popup.locator('#sync')).to_be_enabled()
+        worker.evaluate("""async()=>{
+          const {view}=await chrome.storage.local.get('view');
+          await chrome.storage.local.set({capture:{phase:'collecting',connection:view.connection,bank:view.bank,tabId:view.tabId,
+            startedAt:'2026-10-16T04:00:00Z',workerId:'fixture-worker',
+            command:{connection_id:view.connection.id,request_id:'fixture-original-command',reimport_from:null},
+            job:{id:'fixture-recoverable-job',capture_state:'collecting',delivery_state:'waiting',accounts:[]},
+            lease:{epoch:1,expires_at:'2099-01-01T00:00:00Z'},driver:null}});
+        }""")
+        service.token='fixture-rotated-token'
+        run_clock(popup,worker)
+        popup.wait_for_function("async()=> (await chrome.storage.local.get('capture')).capture?.phase==='paused'")
+        paused=worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
+        assert paused['error']=='unauthorized'
+        popup.reload();bank.bring_to_front()
+        expect(popup.locator('#sync')).to_be_disabled()
+        expect(popup.locator('#server-form')).to_be_visible()
+        # A failed replacement must leave the old checkpoint and credentials intact.
+        popup.locator('#token').fill('fixture-wrong-token');popup.locator('#connect').click()
+        expect(popup.locator('#status')).to_contain_text('Проверьте токен')
+        expect(popup.locator('#connect')).to_be_enabled()
+        assert worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")==paused
+        assert worker.evaluate("async()=> (await chrome.storage.local.get('config')).config.token")==TOKEN
+        # Repairing a credential is not authorization to create/resume a job.
+        popup.locator('#token').fill(service.token);popup.locator('#connect').click()
+        expect(popup.locator('#sync')).to_be_enabled()
+        expected=paused|{'error':None}
+        assert worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")==expected
+        assert not [call for call in service.calls if call[:2]==('POST','/api/v1/jobs')]
+        assert not worker.evaluate("async()=> (await chrome.storage.session.get('connectionDraft')).connectionDraft")
+        popup.reload();bank.bring_to_front();expect(popup.locator('#sync')).to_be_enabled()
+        expect(popup.locator('#status')).to_contain_text('Сбор приостановлен')
+        popup.locator('#sync').click()
+        expect(popup.locator('#status')).to_contain_text('Готово.',timeout=10000)
+        completed=worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
+        assert completed['job']['id']==paused['job']['id']
+        assert completed['workerId']==paused['workerId']
+        assert completed['command']['request_id']!=paused['command']['request_id']
+        assert len([call for call in service.calls if call[:2]==('POST','/api/v1/jobs')])==1

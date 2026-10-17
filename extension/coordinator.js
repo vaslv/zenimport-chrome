@@ -13,10 +13,10 @@ export class Coordinator {
     if (state && unfinished(state.phase)) {
       if (state.connection.id !== connection.id || (state.phase!=='paused' && state.tabId!==tabId)) throw new SyncError('account_busy');
       // A manual retry keeps the same command ID after a lost HTTP response.
-      if (state.phase === 'paused' && state.job) {
+      if (state.phase === 'paused') {
         // A known paused job needs a NEW resume command. Repeating its original
         // request_id only fetches the original idempotent result on the server.
-        state.command = {...state.command,request_id:this.uuid()};
+        if (state.job) state.command = {...state.command,request_id:this.uuid()};
         state.phase='planned';state.error=null;state.lease=null;
         state.connection=connection;state.tabId=tabId;
         await this.store.set(state);
