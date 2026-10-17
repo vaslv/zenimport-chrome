@@ -1,7 +1,8 @@
 # Publishing ZenImport Chrome on GitHub
 
 Repository: https://github.com/vaslv/zenimport-chrome. MIT license.
-Unpacked build and ZIP 0.2.0 are prepared; no Chrome Web Store publication.
+Version 0.2.0 is published as a GitHub Release with ZIP and SHA256SUMS; no Chrome
+Web Store publication. [Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.0).
 Local origin points to the created repository; its original license is preserved.
 
 ```sh
@@ -31,7 +32,7 @@ supported bank and minimum backend/browser versions, and disclose deferred mobil
 acceptance. This document
 itself publishes nothing.
 
-`zenmoney-python==0.7.0` is published on PyPI. Backend 0.2.0 targets
+`zenmoney-python==0.7.0` is published on PyPI. Backend 0.2.0 is published at
 `ghcr.io/vaslv/zenimport-backend:0.2.0` with that pinned SDK dependency; the extension
 connects to the backend HTTPS address and API_TOKEN. The joint Docker checks install
 the SDK from the backend's hash-locked PyPI requirement, not a sibling SDK checkout.

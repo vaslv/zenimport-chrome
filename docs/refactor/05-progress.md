@@ -238,3 +238,20 @@ SHA256 `1fcd1d96a0137ecb2437f96a35744d05fd05307d6a8cdbf3481f9d746ff772b1`.
 Local commits only: no push, tags, new GitHub/GHCR publication, production restart,
 installed-extension update, or real API was used. Public 0.1.9/0.1.0 artifacts
 remain unchanged. Both components must be updated to use migration.
+
+## Published 0.2.0 — October 17, 2026
+
+With explicit permission, pushed code/documentation and tag v0.2.0 at
+928d1f720d5ffa848ed1870a9aa634421d3f77ec, then published the GitHub Release with
+the verified ZIP and SHA256SUMS. [Chrome CI](https://github.com/vaslv/zenimport-chrome/actions/runs/39040271339)
+passed 32 units/10 standalone browser checks (one expected backend-module skip),
+reproducibility and artifact upload. Downloaded CI artifact matches local bytes.
+Separate current-backend/browser integration remains 18 passed, synthetic only.
+
+Backend 0.2.0 publication/native AMD64+ARM64 acceptance passed before this release.
+Both components are required for migration. Existing 0.1.9 release bytes were not
+replaced; no installed extension or production backend/data was updated.
+[Release/install](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.0).
+Independently downloaded both public release assets without account credentials:
+ZIP and SHA256SUMS match the local/CI artifacts exactly, including manifest 0.2.0
+and ZIP integrity. Source/tag remains immutable; subsequent docs do not replace it.
