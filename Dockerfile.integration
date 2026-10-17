@@ -3,8 +3,10 @@ FROM mcr.microsoft.com/playwright/python:v1.58.0-noble@sha256:678457c4c323b981d8
 WORKDIR /app
 COPY --from=backend requirements.runtime.lock.txt ./
 RUN pip install --no-cache-dir -r requirements.runtime.lock.txt playwright==1.58.0 pytest==8.3.5
-COPY --from=backend vendor ./vendor
-RUN cd vendor && sha256sum -c SHA256SUMS && pip install --no-cache-dir --no-deps ./*.whl
+COPY --from=backend requirements.sdk.lock.txt ./
+RUN python -m pip --isolated install --no-cache-dir --no-deps --only-binary=:all: \
+    --index-url https://pypi.org/simple --require-hashes -r requirements.sdk.lock.txt \
+    && python -m pip check
 COPY --from=backend backend ./backend
 COPY --from=backend tests/capture_factory.py tests/mirror_factory.py tests/delivery_factory.py ./fixture_helpers/
 COPY extension ./extension

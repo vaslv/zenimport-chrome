@@ -10,4 +10,6 @@ corrections/deletions take place only in the official mobile application.
 Never pass backend tokens to the bank page or retain bank authentication fields.
 Tests use only synthetic banks, ZenMoney, and databases in isolated Docker.
 Verify live bank capabilities separately; never claim them based on fixtures.
-Work in stages with checks and local commits. No push, tags, or publication.
+Work in stages with checks and local commits. Push, Git tags, and publication
+each require separate explicit user permission. A release request alone does
+not authorize Git tags or push. Keep production tokens/data out of all tests.

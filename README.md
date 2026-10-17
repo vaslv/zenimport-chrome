@@ -2,9 +2,19 @@
 
 An independent MV3 extension. Reads history from an open online banking session and sends it to ZenImportBackend. Users review financial transactions in mobile ZenMoney.
 
+## Install
+
+Download the ZIP and `SHA256SUMS` from [GitHub Releases](https://github.com/vaslv/zenimport-chrome/releases), verify the checksum, and extract the ZIP into a permanent directory. In desktop Chrome 120 or newer, open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**. Select the extracted directory containing `manifest.json`. The ZIP is not installed directly and this distribution does not update automatically.
+
+Follow the [installation and update guide](docs/installation.md) to connect your backend, select bank accounts, and synchronize. Currently supported: **VietinBank VND current-account history**. The extension requires ZenImportBackend 0.1.0 (API v1); see the [published backend deployment guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.1.0.md).
+
+Keep the same installation directory when updating and click **Reload** on the extension card. Do not uninstall the extension if you want to retain its local settings and capture checkpoints. GitHub ZIP installation is separate from Chrome Web Store publication.
+
+## Build from source
+
 Neighboring projects: `ZenImportBackend`, `ZenMoneyAPI`. Extension builds do not require their source.
 
-`python3 scripts/build.py` creates a reproducible ZIP and `dist/extension`. Open `chrome://extensions`, enable Developer mode, and load this directory as an unpacked extension. Disable the old extension first. In the popup, enter the server address and **backend token**, not the ZenMoney token. HTTPS is mandatory except for localhost/127.0.0.1. Bank credentials are never sent to the server.
+`python3 scripts/build.py` creates a reproducible ZIP, `dist/SHA256SUMS`, and `dist/extension`. Open `chrome://extensions`, enable Developer mode, and load this directory as an unpacked extension. Disable any separate legacy extension first. In the popup, enter the server address and **backend token**, not the ZenMoney token. HTTPS is mandatory except for localhost/127.0.0.1. Bank credentials are never sent to the server.
 
 Plan and actual limitations: `docs/refactor/03-extension.md`, `docs/refactor/05-progress.md`. No Store publication is performed.
 

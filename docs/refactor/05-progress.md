@@ -170,3 +170,36 @@ Joint Docker/current backend/new SDK: **17 passed**. Two independent build.py ru
 Translated all documentation, comments, visible labels/status/errors, HTML language metadata, and date/relative-time formatting to English. Date locale en-GB; numeric display uses English separators. Test expectations and synthetic labels updated; protocol IDs, bank selectors, persistence, and financial behavior preserved. Production data and published SDK artifacts untouched.
 
 Docker: **31 unit + 10 browser passed**, one expected standalone integration skip. Actual backend/fake ZenMoney integration: **17 passed**. Historical results above retain original dates/scope. Local commits only, no pushes/new tags/publication.
+
+## GitHub Release 0.1.9 readiness — October 17, 2026
+
+Prepared first public ZIP distribution and an English installation/manual-update
+guide. Keep the loaded directory and use Chrome Reload to retain local settings;
+uninstalling removes them. Documented Chrome 120+, VietinBank VND current accounts,
+backend 0.1.0/API v1, trusted HTTPS, explicit synchronization, and journal retention
+when changing servers. No Chrome Web Store submission or automatic updater.
+
+Fixed the joint test image after backend publication: install zenmoney-python 0.7.0
+from PyPI using the backend's exact SHA256 lock instead of the removed vendor
+directory. Runtime extension code and manifest permissions are unchanged. Build
+now emits SHA256SUMS; CI compares two builds and retains both release files.
+
+Fresh isolated Docker results: **31 unit + 10 standalone browser passed**, one
+expected backend-module skip; **17 current-backend integration passed** (one
+upstream Starlette/httpx deprecation warning). Actionlint passed. Gitleaks scanned
+all 123 existing commits without findings. Reproducible ZIP: 20 allowlisted source,
+license, and privacy files; version/root manifest/content checked, no local data.
+SHA256: `9e0b09111c094b5fe25dd8ab3f39fc3175b3edd5c45576c7a78915b713dd1112`.
+
+Fresh offline HTTPS/MV3 acceptance: **12 completed jobs**, copied and empty server-B
+databases, six expected newly created UUIDs total, zero writes on repeats or first
+server-B synchronization. Daily movements, exact IDs, categories/viewed=false,
+original records, and artifact bytes preserved. Native permission rejection/allow,
+wrong token, certificate hostname mismatch, and untrusted CA checked with prior
+config retained. Fake-mode balance validation is not implemented; actual-account
+balances and the current mobile UI are not claimed from these fixtures.
+
+No production database, installed extension, bank session, or real ZenMoney account
+was accessed by these checks. A fresh server still cannot preserve prior deletions
+without its delivery journal. GitHub CI and release-download verification remain
+pending explicit push/tag approval; no publication is claimed by this entry.

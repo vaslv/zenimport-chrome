@@ -26,4 +26,6 @@ with zipfile.ZipFile(archive, 'w', compression=zipfile.ZIP_DEFLATED, compresslev
             entry.compress_type = zipfile.ZIP_DEFLATED
             entry.external_attr = 0o100644 << 16
             output.writestr(entry, path.read_bytes(), compresslevel=9)
-print(f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}')
+checksum = f'{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n'
+(dist / 'SHA256SUMS').write_text(checksum)
+print(checksum, end='')
