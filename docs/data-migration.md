@@ -1,7 +1,7 @@
 # Move data to another backend (0.2.0)
 
-Both backends and the extension must support migration (0.2.0+). These changes are
-currently local preparation; the public 0.1.9 ZIP does not contain the buttons.
+Both backends and the extension must support migration (0.2.0+). The earlier 0.1.9
+ZIP does not contain the buttons. Upgrade both servers and the extension first.
 
 1. In **Settings → Data migration**, click **Export data** on the old server.
    This stops bank capture and persistently pauses that backend. Save the ZIP and

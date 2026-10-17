@@ -3,12 +3,12 @@
 ## Requirements
 
 - Desktop Google Chrome 120 or newer with permission to load unpacked extensions.
-- ZenImportBackend 0.1.0, API v1, running at an address this computer can reach.
+- ZenImportBackend 0.2.0, API v1, running at an address this computer can reach.
 - The backend's `API_TOKEN`. The ZenMoney token is configured on the server only.
 - An authenticated VietinBank session with VND current-account transaction history open.
 
-The backend image is available at `ghcr.io/vaslv/zenimport-backend:0.1.0`.
-Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.1.0.md)
+The release backend image is `ghcr.io/vaslv/zenimport-backend:0.2.0`.
+Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.0.md)
 for Docker configuration, HTTPS, persistent data, and backups. A remote backend
 requires HTTPS with a certificate trusted by Chrome. Local HTTP is allowed for
 `http://localhost:18792` and `http://127.0.0.1:18792`.
@@ -20,7 +20,7 @@ not a Chrome Web Store installation; managed browsers may prohibit Developer mod
 ## Download and install
 
 1. Open [Releases](https://github.com/vaslv/zenimport-chrome/releases) and download
-   `zenimport-chrome-0.1.9.zip` and `SHA256SUMS` from the same release.
+   `zenimport-chrome-0.2.0.zip` and `SHA256SUMS` from the same release.
 2. Verify the ZIP before extraction. On macOS, run the following from the directory
    containing both files:
 
@@ -95,7 +95,7 @@ session draft and is cleared by extension reload. Updates from GitHub are manual
 
 Extension/backend 0.2.0 add a browser-driven move using **Settings → Data migration**:
 [export/import instructions](data-migration.md). These buttons are not included in
-the public 0.1.9 ZIP or 0.1.0 backend image. The snapshot guidance below also applies
+the earlier 0.1.9 ZIP or 0.1.0 backend image. The snapshot guidance below also applies
 when using the manual backend procedure.
 
 Complete any unfinished capture before changing servers. Use the new address and
