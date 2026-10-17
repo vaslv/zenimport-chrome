@@ -30,7 +30,7 @@ class PopupBackend:
             for raw in body['accounts']:
                 self.accounts.setdefault(raw['source_key'],raw|{'id':str(uuid4()),'selection':'unconfigured','settings_version':0,
                     'zenmoney_account_id':None,'import_start':None,'last_complete_end':None})
-            return {'id':self.connection_id,'bank':'vietinbank','accounts_complete':False,'accounts':list(self.accounts.values())}
+            return {'id':self.connection_id,'bank':body['bank'],'accounts_complete':False,'accounts':list(self.accounts.values())}
         if '/settings' in path:
             for account in self.accounts.values():
                 if account['id'] == path.split('/')[4]:
@@ -61,14 +61,14 @@ def http_server(service):
     finally: server.shutdown();server.server_close();thread.join()
 
 @contextmanager
-def installed(playwright, url, bank_api=None):
+def installed(playwright, url, bank_api=None, *, bank_origin=ORIGIN, bank_html=BANK, bank_url=None):
     with tempfile.TemporaryDirectory() as temporary:
         extension=Path(temporary)/'extension';shutil.copytree('/app/dist/extension',extension)
         manifest=json.loads((extension/'manifest.json').read_text())
         # Test-only installation grants exactly these two fixture origins to
         # avoid Chrome's native install/permission prompt in headless mode.
         # All shipped JavaScript and the artifact are otherwise unchanged.
-        manifest['host_permissions']=['http://127.0.0.1/*',ORIGIN+'/*']
+        manifest['host_permissions']=['http://127.0.0.1/*',bank_origin+'/*']
         (extension/'manifest.json').write_text(json.dumps(manifest))
         context=playwright.chromium.launch_persistent_context(str(Path(temporary)/'profile'),channel='chromium',headless=True,
             args=[f'--disable-extensions-except={extension}',f'--load-extension={extension}','--no-sandbox'],viewport={'width':1000,'height':800})
@@ -77,11 +77,11 @@ def installed(playwright, url, bank_api=None):
         context.add_init_script("""(() => {const Original=Date;const skew=Original.parse('2026-10-16T05:00:00Z')-Original.now();globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[Original.now()+skew]));}static now(){return Original.now()+(location.protocol==='chrome-extension:'?skew:0);}};})();""")
         if Path('/results').is_dir():
             Path('/results/runtime.json').write_text(json.dumps({'chromium':context.browser.version,'playwright':'1.58.0','python':platform.python_version(),'architecture':platform.machine()},sort_keys=True))
-        context.route(ORIGIN+'/**' ,lambda route:route.fulfill(content_type='text/html',body=BANK))
-        if bank_api: context.route('https://api-ipay.vietinbank.vn/**',bank_api)
+        context.route(bank_origin+'/**' ,lambda route:route.fulfill(content_type='text/html',body=bank_html))
+        if bank_api: context.route('https://api-ipay.vietinbank.vn/**' if bank_origin==ORIGIN else bank_origin+'/w2/process',bank_api)
         worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker')
         identifier=worker.url.split('/')[2]
-        bank=context.new_page();bank.goto(ORIGIN+'/payment-history?accountNo=12345678')
+        bank=context.new_page();bank.goto(bank_url or (bank_origin+'/payment-history?accountNo=12345678'))
         popup=context.new_page();popup.goto(f'chrome-extension://{identifier}/popup.html');bank.bring_to_front()
         yield context,worker,bank,popup,identifier
         context.close()

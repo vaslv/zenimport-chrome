@@ -140,7 +140,7 @@ async function refreshData() {
   compatible=false;renderLastSync(null);status('Loading account settings…','loading');$('refresh-accounts').disabled=true;$('accounts').inert=true;for(const control of $('accounts').querySelectorAll('input,select,button'))control.disabled=true;updateButton();
   try {
     view=await rpc({type:'inspect'});compatible=true;renderLastSync(view.lastSyncedAt);
-    $('bank').textContent=view.bank==='vietinbank'?'VietinBank':view.bank;
+    $('bank').textContent=({vietinbank:'VietinBank',bidv:'BIDV'})[view.bank] || view.bank;
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
     if(pending){$('settings').open=true;status('Select the accounts to import.');}

@@ -255,3 +255,35 @@ replaced; no installed extension or production backend/data was updated.
 Independently downloaded both public release assets without account credentials:
 ZIP and SHA256SUMS match the local/CI artifacts exactly, including manifest 0.2.0
 and ZIP integrity. Source/tag remains immutable; subsequent docs do not replace it.
+
+
+## October 17, 2026 — BIDV connector (local 0.2.1)
+
+- Added a separate `connectors/bidv` module for the English BIDV Accounts and
+  VND payment-account screens. Partial discovery brackets Payment cards before
+  Savings; account-specific capture verifies URL, DOM and document identity.
+- Capture resets the bank date filter, selects requested inclusive dates through
+  the calendar, reads All transactions at BIDV, and follows View more to an
+  explicit terminal marker. Only request lifecycle metadata crosses from MAIN;
+  request/response bodies, authentication and backend credentials do not.
+- Composite posting identities distinguish shared-reference principal/fees and
+  equal amounts with different balances. Exact VND amounts, bank-local timestamps
+  and all five available detail fields are preserved. Transport pages contain
+  100 records to fit the API body limit even with maximum Unicode remarks.
+- No new bank product UI, keepalive, editor, or automatic financial send. Existing
+  popup account mapping/date/synchronize controls are reused. New support requires
+  backend 0.2.1; the SDK remains unchanged. Documentation: `docs/bidv.md`.
+- Actual bank inspection confirmed account routes, English filter/calendar, a
+  nine-posting filtered interval, shared references, detail fields and terminal
+  marker. A complete run of the new connector against the real bank and actual
+  ZenMoney delivery remains pending. No real history was uploaded or synchronized.
+- Docker: 44 unit tests; standalone browser 11 passed / 1 expected backend-module
+  skip; full joint HTTP/SQLite/fake-ZenMoney suite 23 passed. Focused final BIDV
+  regression 5 passed, then 2 passed after narrowing the history-menu selector.
+  Tests cover 503-posting pagination, repeated import, mobile deletion, empty
+  ranges, duplicate rejection, HTTP 200 with stale UI, and hover/click menus.
+  Backend independently passed 516 tests plus lifecycle checks. Logs remain in
+  ignored `.local/bidv-*.log`; fixtures contain only artificial records.
+- Built `dist/zenimport-chrome-0.2.1.zip` and verified every archive member against
+  the unpacked artifact; no private settings are included. Local commits only.
+  No push, Git tags, release, installed-extension update or production deployment.

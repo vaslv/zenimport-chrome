@@ -1,5 +1,9 @@
 # ZenImport Chrome
 
+Local development **0.2.1** adds [BIDV VND payment-account history](docs/bidv.md).
+It requires backend 0.2.1+ and is not yet published; the latest published release
+below remains 0.2.0. Complete live BIDV synchronization acceptance is still pending.
+
 Version **0.2.0** adds **Settings → Data migration**: export one ZIP, connect to a new
 backend, and import before its first sync. Requires backend 0.2.0+; not included
 in the earlier 0.1.9 release. [Migration instructions](docs/data-migration.md).
@@ -10,7 +14,7 @@ An independent MV3 extension. Reads history from an open online banking session 
 
 Download the ZIP and `SHA256SUMS` from [GitHub Releases](https://github.com/vaslv/zenimport-chrome/releases), verify the checksum, and extract the ZIP into a permanent directory. In desktop Chrome 120 or newer, open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**. Select the extracted directory containing `manifest.json`. The ZIP is not installed directly and this distribution does not update automatically.
 
-Follow the [installation and update guide](docs/installation.md) to connect your backend, select bank accounts, and synchronize. Currently supported: **VietinBank VND current-account history**. Use ZenImportBackend 0.2.0 (API v1) for migration; ordinary synchronization remains compatible with 0.1.0. See the [backend deployment guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.0.md).
+Follow the [installation and update guide](docs/installation.md) to connect your backend, select bank accounts, and synchronize. The published build supports **VietinBank VND current-account history**; development adds BIDV as described above. Use ZenImportBackend 0.2.0 (API v1) for migration; VietinBank synchronization remains compatible with 0.1.0. See the [backend deployment guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.0.md).
 
 Keep the same installation directory when updating and click **Reload** on the extension card. Do not uninstall the extension if you want to retain its local settings and capture checkpoints. GitHub ZIP installation is separate from Chrome Web Store publication.
 
@@ -36,7 +40,7 @@ Chrome 0.1.8 capture/delivery was verified against actual VietinBank; results ar
 
 `./scripts/test-docker.sh`: independent unit/popup checks. `./scripts/test-integration.sh ../ZenImportBackend`: joint validation with the actual backend and fake ZenMoney; only this needs neighboring source. Containers have no external networking. Detailed boundaries: docs/testing.md.
 
-To update an already loaded unpacked build, rebuild dist/extension, click Reload on the ZenImport card in chrome://extensions, and reopen the popup. Current version: 0.2.0. If a copied directory elsewhere was loaded, replace it with the new build first.
+To update an already loaded unpacked build, rebuild dist/extension, click Reload on the ZenImport card in chrome://extensions, and reopen the popup. Current development version: 0.2.1. If a copied directory elsewhere was loaded, replace it with the new build first.
 
 Unfinished server address/token input is restored after popup closure. Drafts stay only in private extension session storage until successful connection or Chrome/extension reload. They never connect automatically and are inaccessible to the bank page.
 

@@ -20,6 +20,7 @@ from backend import storage
 from delivery_factory import FakeZenMoney
 from mirror_factory import Fixture, movement
 from support import TOKEN, ORIGIN, installed, connect, run_clock
+from test_bidv import BidvBank, bidv_install
 
 DAY=date(2026,10,16)
 NOW=int(datetime(2026,10,16,5,tzinfo=timezone.utc).timestamp())
@@ -325,3 +326,61 @@ def test_discrepancy_page_reads_actual_backend_and_refreshes_mobile_deletion(tmp
         page.locator('#refresh').click()
         expect(page.locator('#summary')).to_contain_text('extra transactions were found')
         assert len(remote.writes)==writes
+
+
+def test_bidv_full_sync_repeat_and_mobile_deletion_with_real_backend(tmp_path):
+    bank_api=BidvBank()
+    with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (context,worker,bank,popup,_):
+        connect(popup,bank,url);expect(popup.locator('#bank')).to_have_text('BIDV');account(popup,TARGET)
+        start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=35)
+        assert sum(map(len,remote.writes))==4
+        assert all(t['viewed'] is False for batch in remote.writes for t in batch)
+        deleted=next(iter(remote.transactions));del remote.transactions[deleted]
+        remote.deletions.append({'object':'transaction','id':deleted})
+        start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=35)
+        assert sum(map(len,remote.writes))==4 and deleted not in remote.transactions
+        with storage.transaction(path,read_only=True) as db:
+            assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==4
+            assert db.execute("SELECT bank FROM bank_accounts").fetchone()[0]=='bidv'
+
+
+def test_bidv_load_more_and_transport_split_preserve_all_postings(tmp_path):
+    bank_api=BidvBank(count=503)
+    with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (_,worker,bank,popup,_):
+        connect(popup,bank,url);account(popup,TARGET);start_sync(popup,bank,worker)
+        # Delivery batching/rate limits are covered separately; this large UI
+        # fixture checks complete capture and the 100-record transport boundary.
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('capture_state')=='complete',timeout=35)
+        with storage.transaction(path,read_only=True) as db:
+            assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==503
+            assert db.execute('SELECT max(page_number) FROM capture_pages').fetchone()[0]==6
+        assert max(c['page'] for c in bank_api.calls)==25
+
+
+def test_bidv_duplicate_posting_fails_without_delivery(tmp_path):
+    bank_api=BidvBank(corrupt=True)
+    with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (_,worker,bank,popup,_):
+        connect(popup,bank,url);account(popup,TARGET);start_sync(popup,bank,worker)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='failed',timeout=35)
+        assert not remote.writes
+        with storage.transaction(path,read_only=True) as db:
+            assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==0
+
+
+def test_bidv_http_success_with_stale_ui_never_marks_coverage_complete(tmp_path):
+    bank_api=BidvBank(stale=True)
+    with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (_,worker,bank,popup,_):
+        connect(popup,bank,url);account(popup,TARGET);start_sync(popup,bank,worker)
+        deadline=time.monotonic()+10
+        while len(bank_api.calls)<2 and time.monotonic()<deadline:popup.wait_for_timeout(100)
+        assert len(bank_api.calls)>=2
+        popup.wait_for_timeout(700)
+        with storage.transaction(path,read_only=True) as db:
+            assert db.execute('SELECT count(*) FROM capture_pages').fetchone()[0]==0
+            assert db.execute('SELECT count(*) FROM coverage').fetchone()[0]==0
+        assert not remote.writes
+        expect(popup.locator('#sync')).to_have_text('Stop capture')
+        popup.locator('#sync').click()
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='cancelled')

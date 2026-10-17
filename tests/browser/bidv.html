@@ -1,0 +1,55 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><title>Synthetic BIDV</title>
+<style>app-card-account,app-card-account-2,app-drawer,.drawer-body,app-modal-filter-history-transfer,.ant-picker-panel{display:block}td,button,a{padding:4px}a,td,button{cursor:pointer}#calendar{display:flex}input{width:120px}</style>
+<main><h1>Accounts</h1><button>Payment Open account</button><app-card-account-2><p class="card-account-2--no">12345678</p><p class="card-account-2--amount">900,000 VND</p></app-card-account-2><button>Savings Open account</button></main>
+<script>
+// Synthetic UI, modelled only on observed DOM. No real login or credentials.
+const account=location.pathname.match(/\/thanh-toan\/(\d+)$/)?.[1];
+let period={start:'2025-10-16',end:'2026-10-16'},rows=[],page=0,drawer,modal,chosen=0,month=9,year=2026;
+const main=document.querySelector('main');
+if(account){main.innerHTML=`<h1>Payment</h1><app-card-account><p class="card-account--no">${account}</p><p class="card-account--balance">900,000 VND</p><button class="ant-dropdown-trigger">Transaction history</button></app-card-account>`;
+main.querySelector('button').addEventListener(new URL(location.href).searchParams.has('clickMenu')?'click':'mouseenter',()=>{
+ if(document.querySelector('#history-menu'))return;
+ const menu=document.createElement('li');menu.id='history-menu';menu.textContent='All transactions at BIDV';document.body.append(menu);menu.onclick=()=>{menu.remove();openHistory();};
+});}
+function fetchRows(append=false){
+ const xhr=new XMLHttpRequest();xhr.open('POST','/w2/process');
+ xhr.onload=()=>{
+  const value=JSON.parse(xhr.responseText);
+  if(value.stale)return;
+  rows=append?[...rows,...value.rows]:value.rows;
+  const body=drawer.querySelector('.drawer-body');body.replaceChildren();
+  if(rows.length){const table=document.createElement('table');table.className='transaction-table__table';table.setAttribute('aria-label','transaction table');
+   table.innerHTML='<tbody>'+rows.map(r=>'<tr>'+['date','remark','amount','balance','reference'].map((k,i)=>`<td class="cell--${['date','content','amount','balance','code'][i]}">${r[k]}</td>`).join('')+'</tr>').join('')+'</tbody>';body.append(table);}
+  if(value.more){const more=document.createElement('button');more.textContent='View more';more.onclick=()=>{page++;fetchRows(true);};body.append(more);}
+  else{const end=document.createElement('p');end.textContent=rows.length?'All transactions viewed':'You have no transactions during this period.';body.append(end);}
+ };
+ xhr.send(JSON.stringify({account,period,page,password:'fixture-must-not-cross-bridge'}));
+}
+function openHistory(){
+ drawer=document.createElement('app-drawer');drawer.innerHTML='<p class="drawer-title">All transactions at BIDV</p><button aria-label="close">Close</button><input placeholder="Search"><button id="filter">Filter</button><button role="tab" aria-selected="true">All</button><div class="drawer-body"></div>';
+ document.body.append(drawer);drawer.querySelector('[aria-label="close"]').onclick=()=>drawer.remove();drawer.querySelector('#filter').onclick=showFilter;page=0;fetchRows();
+}
+function showFilter(){
+ modal=document.createElement('app-modal-filter-history-transfer');modal.setAttribute('role','dialog');
+ modal.innerHTML='<h3>Filter</h3><a class="modal-close">Close</a><nz-range-picker><input placeholder="dd/MM/yyyy" readonly><input placeholder="dd/MM/yyyy" readonly></nz-range-picker><a id="reset">Reset</a><a id="apply">Apply</a><div id="calendar"></div>';
+ document.body.append(modal);const inputs=modal.querySelectorAll('input');
+ const display=s=>s.split('-').reverse().join('/');inputs[0].value=display(period.start);inputs[1].value=display(period.end);
+ modal.querySelector('.modal-close').onclick=()=>modal.remove();
+ modal.querySelector('#reset').onclick=()=>{for(const i of inputs)i.value='';chosen=0;};
+ inputs[0].onclick=()=>{chosen=0;calendar();};
+ modal.querySelector('#apply').onclick=()=>{period={start:inputs[0].value.split('/').reverse().join('-'),end:inputs[1].value.split('/').reverse().join('-')};modal.remove();page=0;fetchRows();};
+}
+function calendar(){
+ const cal=modal.querySelector('#calendar');cal.innerHTML='';
+ for(let offset=0;offset<2;offset++){
+  const first=new Date(Date.UTC(year,month+offset,1)),y=first.getUTCFullYear(),m=first.getUTCMonth();
+  const panel=document.createElement('div');panel.className='ant-picker-panel';
+  panel.innerHTML='<button class="ant-picker-header-prev-btn">Previous month</button><button class="ant-picker-header-next-btn">Next month</button><table><tbody><tr></tr></tbody></table>';
+  panel.querySelector('.ant-picker-header-prev-btn').onclick=()=>{month--;calendar();};panel.querySelector('.ant-picker-header-next-btn').onclick=()=>{month++;calendar();};
+  for(let day=1;day<=new Date(Date.UTC(y,m+1,0)).getUTCDate();day++){
+   const cell=document.createElement('td');cell.className='ant-picker-cell ant-picker-cell-in-view';cell.title=`${m+1}/${day}/${y}`;cell.textContent=day;
+   cell.onclick=()=>{const fields=modal.querySelectorAll('input');fields[chosen].value=`${String(day).padStart(2,'0')}/${String(m+1).padStart(2,'0')}/${y}`;if(chosen++===1)cal.innerHTML='';};panel.querySelector('tr').append(cell);
+  }cal.append(panel);
+ }
+}
+</script></html>
