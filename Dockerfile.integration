@@ -9,6 +9,7 @@ COPY --from=backend backend ./backend
 COPY --from=backend tests/capture_factory.py tests/mirror_factory.py tests/delivery_factory.py ./fixture_helpers/
 COPY extension ./extension
 COPY scripts/build.py ./scripts/build.py
+COPY LICENSE PRIVACY.md ./
 RUN python scripts/build.py
 COPY tests/browser ./tests/browser
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app:/app/fixture_helpers

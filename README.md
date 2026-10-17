@@ -39,3 +39,8 @@
 [границы проверки и безопасный запуск](docs/server-migration-acceptance.md).
 По умолчанию внешняя сеть отключена; живой режим требует явно указанной
 исторически проверенной тестовой идентичности ZenMoney.
+
+Исходный репозиторий: https://github.com/vaslv/zenimport-chrome. Лицензия MIT;
+обработка данных описана в [PRIVACY.md](PRIVACY.md). Подготовка ZIP, CI и порядок
+публикации: [docs/publication.md](docs/publication.md). Автоматической отправки
+в GitHub Release/Chrome Web Store нет.

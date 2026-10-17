@@ -5,4 +5,6 @@
 !scripts/build.py
 !tests/**
 !Dockerfile.integration
+!LICENSE
+!PRIVACY.md
 !scripts/browser_migration.py

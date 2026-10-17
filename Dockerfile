@@ -11,6 +11,7 @@ WORKDIR /app
 RUN pip install --no-cache-dir playwright==1.58.0 pytest==8.3.5
 COPY extension ./extension
 COPY scripts/build.py ./scripts/build.py
+COPY LICENSE PRIVACY.md ./
 RUN python scripts/build.py
 COPY tests/browser ./tests/browser
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
