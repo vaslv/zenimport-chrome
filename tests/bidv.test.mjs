@@ -58,7 +58,7 @@ test('BIDV discovery reads only rendered VND payment cards',t=>{
   const card=(number,balance)=>({querySelector:selector=>({textContent:selector.endsWith('--no')?number:balance}),compareDocumentPosition:()=>4});
   globalThis.location={origin:'https://smartbanking.bidv.com.vn',pathname:'/tai-khoan'};
   const cards=[card('12345678','90,000 VND'),card('87654321','100 USD')];
-  globalThis.document={readyState:'interactive',querySelectorAll:selector=>selector==='main button'?
+  globalThis.document={readyState:'interactive',querySelectorAll:selector=>selector==='main button, main [role="button"]'?
     [{textContent:'Payment Open account',compareDocumentPosition:()=>4},{textContent:'Savings Open account'}]:cards};
   assert.equal(probePage().accounts_complete,false);assert.equal(probePage().accounts.length,1);
   location.pathname='/tai-khoan/thanh-toan/12345678';

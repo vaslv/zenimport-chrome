@@ -16,7 +16,7 @@ export function probePage() {
   let cards=current ? [...document.querySelectorAll('main app-card-account')] : [...document.querySelectorAll('main app-card-account-2')];
   if(!current) {
     const label=e=>e.textContent?.replace(/\s+/g,' ').trim();
-    const buttons=[...document.querySelectorAll('main button')];
+    const buttons=[...document.querySelectorAll('main button, main [role="button"]')];
     const payment=buttons.find(e=>/^Payment(?: Open account)?$/.test(label(e)));
     const savings=buttons.find(e=>/^Savings(?: Open account)?$/.test(label(e)));
     if(!payment || !savings)return null;
