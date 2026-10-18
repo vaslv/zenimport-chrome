@@ -31,7 +31,6 @@ export function setupMigration({rpc,refresh,lock,pause}) {
     $('migration-settings').hidden=false;
     try{
       state=await rpc({type:'migration-status'});pause(state.paused);
-      if(state.paused){$('settings').open=true;$('migration-settings').open=true;}
       if(!keepMessage)feedback(state.paused?'This server is paused. Save the archive before switching servers.':
         state.awaiting_sync?'Data restored. Ready for your first synchronization.':
         state.can_import?'Import is available before the first synchronization.':'Import is locked after the first synchronization or completed import.');
@@ -46,7 +45,7 @@ export function setupMigration({rpc,refresh,lock,pause}) {
     if(working)return;
     working=true;lock(true);render();
     try{await operation();}
-    catch(error){feedback(messages[error.code] || 'The result could not be confirmed. Reopen settings to check the server before trying again.','error');}
+    catch(error){feedback(messages[error.code] || 'The result could not be confirmed. Reopen Data migration to check the server before trying again.','error');}
     finally{await load({keepMessage:true});working=false;lock(false);render();}
   }
   $('migration-settings').addEventListener('toggle',()=>{
@@ -79,5 +78,6 @@ export function setupMigration({rpc,refresh,lock,pause}) {
     if(!confirm('Resume this server only if the move was cancelled. Do not run both servers. If synchronization continues, create a new export before moving.'))return;
     action(async()=>{await rpc({type:'migration-resume'});await refresh();feedback('This server has resumed. Any previous export is an older recovery point.','success');});
   });
+  render();
   return {refresh:load};
 }

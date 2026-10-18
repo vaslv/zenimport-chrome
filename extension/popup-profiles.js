@@ -11,7 +11,7 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
   async function edit(next) {
     mode=next;$('profile-name').value=next==='rename'?view.connection.label:bankName(view.bank)+' '+(view.connections.length+1);
     $('save-profile').textContent=next==='rename'?'Save name':'Add connection';
-    $('profile-form').hidden=false;$('settings').open=true;$('bank-profile-settings').open=true;
+    $('profile-form').hidden=false;$('bank-profile-settings').open=true;
     await draft();$('profile-name').focus();
   }
   async function action(operation) {
@@ -54,8 +54,8 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
     const restore=stored && stored.url===url && stored.bank===view.bank && stored.signature===accountSignature(view.detectedAccounts) &&
       (stored.mode==='create' || stored.profileKey===view.connection?.profile_key);
     mode=restore?stored.mode:null;$('profile-form').hidden=!mode;
-    if(mode){$('profile-name').value=stored.label;$('save-profile').textContent=mode==='rename'?'Save name':'Add connection';$('settings').open=true;$('bank-profile-settings').open=true;}
-    if(view.selectionRequired){$('settings').open=true;$('bank-profile-settings').open=true;}
+    if(mode){$('profile-name').value=stored.label;$('save-profile').textContent=mode==='rename'?'Save name':'Add connection';$('bank-profile-settings').open=true;}
+    if(view.selectionRequired){$('bank-profile-settings').open=true;}
     update(locked);
   }
   return {render,update};

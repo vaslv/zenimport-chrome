@@ -87,9 +87,7 @@ def account(popup,target,source="12345678"):
     expect(popup.locator('#status')).to_contain_text('Account saved')
 
 def refresh_accounts(popup):
-    # Ready settings collapse after saving; the user explicitly expands them.
     profile=popup.locator('#bank-profile').input_value()
-    popup.locator('#settings').evaluate('(e)=>e.open=true')
     popup.locator('#refresh-accounts').click()
     expect(popup.locator('#status')).not_to_contain_text('Loading account settings')
     # These fixture visits intentionally add another account of the SAME login.
@@ -119,7 +117,6 @@ def test_popup_zip_export_switch_import_and_no_duplicate_or_restored_deletion(tm
         del remote_a.transactions[deleted]
         remote_a.deletions.append({'object':'transaction','id':deleted})
         app_a.state.mirror.refresh(force=True,transactions=True)
-        popup.locator('#settings').evaluate('(e)=>e.open=true')
         popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
         expect(popup.locator('#import-data')).to_be_disabled()
         with popup.expect_download() as pending:
@@ -135,7 +132,6 @@ def test_popup_zip_export_switch_import_and_no_duplicate_or_restored_deletion(tm
         popup.locator('#connection-settings').evaluate('(e)=>e.open=true')
         connect(popup,bank,url_b)
         expect(popup.locator('#url')).to_have_value(url_b)
-        popup.locator('#settings').evaluate('(e)=>e.open=true')
         popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
         expect(popup.locator('#import-data')).to_be_enabled()
         popup.locator('#migration-file').set_input_files({'name':'broken.zip','mimeType':'application/zip','buffer':b'not a ZIP'})
@@ -203,7 +199,6 @@ def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfil
         edited=created[0]['id'];deleted=created[1]['id']
         remote.transactions[edited].update(viewed=True,tag=['category-b'],comment='Mobile edit')
         del remote.transactions[deleted];remote.deletions.append({'object':'transaction','id':deleted})
-        popup.locator('#settings').evaluate('(e)=>e.open=true')
         popup.locator('#reimport').fill('2026-09-01')
         start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')

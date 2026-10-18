@@ -5,7 +5,7 @@ Local development **0.2.1** adds [BIDV VND payment-account history](docs/bidv.md
 It requires backend 0.2.1+ and is not yet published; the latest published release
 below remains 0.2.0. Complete live BIDV synchronization acceptance is still pending.
 
-Version **0.2.0** adds **Settings → Data migration**: export one ZIP, connect to a new
+Version **0.2.0** adds **Data migration**: export one ZIP, connect to a new
 backend, and import before its first sync. Requires backend 0.2.0+; not included
 in the earlier 0.1.9 release. [Migration instructions](docs/data-migration.md).
 
@@ -29,7 +29,7 @@ Plan and actual limitations: `docs/refactor/03-extension.md`, `docs/refactor/05-
 
 ## Synchronization
 
-Open history for the desired bank login/account. Use the Bank connection selector for multiple logins of the same bank; add or rename connections in Settings. Sign in on the bank website yourself; ZenImport never stores bank passwords. On first connection, select a ZenMoney account or Do not import and a date (default: 30 days ago). A complete VietinBank account list is not yet verified: open other accounts and refresh the list. Configured accounts can synchronize while new ones remain unconfigured.
+Open history for the desired bank login/account. Use the Bank connection selector for multiple logins of the same bank; add or rename connections in Bank connections. Sign in on the bank website yourself; ZenImport never stores bank passwords. On first connection, select a ZenMoney account or Do not import and a date (default: 30 days ago). A complete VietinBank account list is not yet verified: open other accounts and refresh the list. Configured accounts can synchronize while new ones remain unconfigured.
 
 Synchronize authorizes capture and delivery of all missing transactions for configured accounts. The server adds only confidently known categories; every new record has viewed=false. Mobile changes/deletions are final. Pausing/closing the tab preserves pages; to resume, reopen history and click again. Stop capture does not undo sent records or revoke delivery of authorized complete intervals.
 
@@ -47,7 +47,7 @@ Unfinished server address/token input is restored after popup closure. Drafts st
 
 If an invalid backend token pauses capture, enter a new token for the same server address and reconnect. Jobs/captured pages survive; resume using Synchronize from the current bank history tab. Server switching during unfinished capture is blocked.
 
-Configured settings are collapsed when opening the popup; incomplete connection, new accounts, or unavailable mappings expand the appropriate section. Saving the last account collapses settings. Connection settings can be expanded manually.
+Server connection and Data migration are independent sections with always-visible headings. Both are collapsed when the popup opens with a configured connection. Missing configuration, an unfinished connection draft, or a connection configuration error opens Server connection. Bank connections and account mappings remain available separately.
 
 Below Synchronize, the popup shows the last successful synchronization's local date/time and elapsed time. It requires confirmed complete capture and ZenMoney delivery; incomplete/failed attempts do not change the timestamp. Private extension local storage retains it separately for each server/bank connection. It is recorded at the worker's first success confirmation and refreshes in an open popup. Older versions did not store timestamps, so no approximate date is reconstructed: the row appears after the next successful synchronization on 0.1.6. Clearing extension data removes this local marker.
 

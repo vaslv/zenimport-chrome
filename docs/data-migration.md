@@ -6,7 +6,7 @@ Backend 0.2.1 accepts verified archives from 0.2.0 (schema 6) and current schema
 0.2.0 cannot import a schema-7 archive. Named connections and memberships are
 included in the new archive.
 
-1. In **Settings → Data migration**, click **Export data** on the old server.
+1. In **Data migration**, click **Export data** on the old server.
    This stops bank capture and persistently pauses that backend. Save the ZIP and
    check that the download completed. If another server operation is in progress,
    retry when it finishes.
@@ -27,7 +27,7 @@ issues. Only import trusted files. Limits: 64 MiB ZIP, 256 MiB unpacked database
 use the manual backend snapshot procedure for larger histories. A remote HTTPS
 proxy must allow that upload size and sufficient time (up to 120s).
 
-If a popup closes during transfer, reopen settings to check the server state.
+If a popup closes during transfer, reopen Data migration to check the server state.
 The source stays paused. A completed import is reported as restored and cannot
 start financial delivery until you click Synchronize. Retrying the identical
 archive before that click is safe; replacing it with a different archive is blocked.

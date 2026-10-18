@@ -10,7 +10,11 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
     service=PopupBackend()
     with http_server(service) as url, sync_playwright() as p, installed(p,url) as (context,worker,bank,popup,identifier):
         errors=[];popup.on('pageerror',lambda error:errors.append(str(error)))
-        expect(popup.locator('#settings')).to_have_attribute('open','')
+        expect(popup.locator('#connection-settings')).to_have_attribute('open','')
+        expect(popup.locator('#settings')).to_have_count(0)
+        expect(popup.locator('#migration-settings > summary')).to_be_visible()
+        expect(popup.locator('#migration-settings')).not_to_have_attribute('open','')
+        expect(popup.locator('#export-data')).to_be_disabled()
         expect(popup.locator('#sync')).to_be_disabled()
         connect(popup,bank,url)
         expect(popup.locator('.account')).to_have_count(1)
@@ -27,19 +31,20 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         assert popup.locator('.account input[type=date]').input_value()==first_date
         popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
-        expect(popup.locator('#settings')).not_to_have_attribute('open','')
-        popup.locator('#settings > summary').click()
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         popup.set_viewport_size({'width':390,'height':700})
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-settings.png',full_page=True)
         assert popup.evaluate('document.documentElement.scrollWidth<=innerWidth')
-        popup.locator('#settings > summary').focus();popup.keyboard.press('Space')
+        popup.locator('#connection-settings > summary').focus();popup.keyboard.press('Space')
+        expect(popup.locator('#server-form')).to_be_visible()
+        popup.keyboard.press('Space')
         expect(popup.locator('#server-form')).to_be_hidden()
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-compact.png',clip=popup.locator('main').bounding_box())
         assert not bank.locator('[id*=zenimport], [class*=zenimport]').count()
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
         # The content world cannot read backend configuration.
         assert worker.evaluate("async()=>{const [{result}]=await chrome.scripting.executeScript({target:{tabId:(await chrome.tabs.query({url:'https://ipay.vietinbank.vn/*'}))[0].id},func:async()=>{try{return await chrome.storage.local.get('config')}catch{return {denied:true}}}});return !result?.config}")
-        popup.reload();popup.locator('#settings').evaluate('(e)=>e.open=true');bank.bring_to_front();popup.locator('#refresh-accounts').click()
+        popup.reload();bank.bring_to_front();popup.locator('#refresh-accounts').click()
         expect(popup.locator('.account select')).to_have_value('target-vnd')
         popup.locator('.account select').select_option('ignored');popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_disabled()
@@ -84,7 +89,7 @@ def test_native_action_popup_keeps_intrinsic_width():
             return result['result']
         expression="""(() => {
             const fits=id=>{const e=document.getElementById(id);return e.scrollWidth<=e.clientWidth};
-            return {ready:document.getElementById('settings').open,width:innerWidth,
+            return {ready:document.getElementById('connection-settings').open,width:innerWidth,
                 fits:document.documentElement.scrollWidth<=innerWidth&&fits('sync')&&fits('refresh-accounts'),
                 input:document.getElementById('url').getBoundingClientRect().width};
         })()"""
@@ -138,23 +143,27 @@ def test_connection_draft_survives_popup_closure_and_failed_connection(first):
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
 
 
-def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
+def test_independent_sections_default_to_collapsed_after_configuration():
     service=PopupBackend()
     with http_server(service) as url, sync_playwright() as p, installed(p,url) as (context,worker,bank,popup,identifier):
         connect(popup,bank,url)
         expect(popup.locator('.account')).to_have_count(1)
-        expect(popup.locator('#settings')).to_have_attribute('open','')
+        expect(popup.locator('#account-settings')).to_be_visible()
         expect(popup.locator('#server-form')).to_be_hidden()
         popup.locator('.account select').select_option('target-vnd')
         popup.get_by_role('button',name='Save account',exact=True).click()
-        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         popup.reload()
         expect(popup.locator('#sync')).to_be_enabled()
-        expect(popup.locator('#settings')).not_to_have_attribute('open','')
-        popup.locator('#settings > summary').click()
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         expect(popup.locator('#server-form')).to_be_hidden()
         popup.locator('#connection-settings > summary').click()
         expect(popup.locator('#server-form')).to_be_visible()
+        popup.locator('#migration-settings > summary').click()
+        expect(popup.locator('#export-data')).to_be_visible()
+        popup.reload()
+        expect(popup.locator('#migration-settings')).not_to_have_attribute('open','')
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         # A later-discovered account needs a decision; the server connection does not.
         service.accounts['87654321']=dict(next(iter(service.accounts.values())),id=str(uuid4()),source_key='87654321',
             label='Second fixture account',masked_number='••4321',selection='unconfigured',settings_version=0,
@@ -162,11 +171,11 @@ def test_settings_default_to_collapsed_but_reopen_for_new_accounts():
         next(iter(service.connections.values()))['accounts'].append(service.accounts['87654321'])
         popup.reload()
         expect(popup.locator('.account')).to_have_count(2)
-        expect(popup.locator('#settings')).to_have_attribute('open','')
+        expect(popup.locator('#account-settings')).to_be_visible()
         expect(popup.locator('#server-form')).to_be_hidden()
         popup.locator('.account').nth(1).locator('select').select_option('ignored')
         popup.locator('.account').nth(1).get_by_role('button',name='Save account',exact=True).click()
-        expect(popup.locator('#settings')).not_to_have_attribute('open','')
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         service.version=2
         popup.reload()
         expect(popup.locator('#status')).to_contain_text('incompatible')
@@ -205,14 +214,12 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.locator('.account select')).to_have_value('target-vnd')
         service.reject=False
         popup.get_by_role('button',name='Save account',exact=True).click()
-        expect(popup.locator('#settings')).not_to_have_attribute('open','')
-        popup.locator('#settings > summary').click()
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         expect(popup.get_by_role('button',name='Saved',exact=True)).to_be_disabled()
         expect(popup.locator('.account-status')).to_contain_text('Account saved')
         expect(popup.locator('.account-status')).to_have_attribute('data-tone','success')
         popup.reload()
         expect(popup.locator('#sync')).to_be_enabled()
-        popup.locator('#settings > summary').click()
         expect(popup.get_by_role('button',name='Saved',exact=True)).to_be_disabled()
         popup.locator('.account input[type=date]').fill('2026-04-16')
         expect(popup.get_by_role('button',name='Save account',exact=True)).to_be_enabled()

@@ -11,7 +11,6 @@ from test_integration import service, account, TARGET, SECOND, start_sync, pump_
 
 
 def profile_form(popup, name, *, rename=False):
-    popup.locator('#settings').evaluate('(e)=>e.open=true')
     popup.locator('#bank-profile-settings').evaluate('(e)=>e.open=true')
     popup.locator('#rename-profile' if rename else '#add-profile').click()
     popup.locator('#profile-name').fill(name)
@@ -67,7 +66,6 @@ def test_two_bidv_logins_keep_accounts_ignored_choices_targets_and_sync_history_
         start_sync(popup,bank,worker);finish(popup,worker)
         assert sum(map(len,remote.writes))==8
         assert not bank.locator('[id*=zenimport], [class*=zenimport]').count()
-        popup.locator('#settings').evaluate('(e)=>e.open=true')
         popup.locator('#bank-profile-settings').evaluate('(e)=>e.open=true')
         popup.set_viewport_size({'width':390,'height':760})
         assert popup.evaluate('document.documentElement.scrollWidth<=innerWidth')
@@ -90,7 +88,6 @@ def test_shared_physical_account_reuses_delivery_journal_and_unlink_is_local_to_
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM bank_accounts').fetchone()[0]==1
             assert db.execute('SELECT count(*) FROM connections').fetchone()[0]==2
-        popup.locator('#settings').evaluate('(e)=>e.open=true')
         popup.locator('.unlink-account').click()
         expect(popup.locator('#status')).to_contain_text('History and sent transactions were kept')
         # The remaining original membership is detected automatically. Unlinking

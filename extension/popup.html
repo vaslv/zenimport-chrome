@@ -14,13 +14,19 @@
   <p id="status" role="status" aria-live="polite"></p>
   <button id="stop-paused" type="button" hidden>Stop paused capture</button>
   <button id="discrepancies" type="button" disabled>Discrepancies</button>
-  <details id="settings"><summary>Settings</summary>
     <details id="connection-settings" class="settings-section"><summary>Server connection</summary>
     <form id="server-form">
       <label>Server address<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
       <label>Server token<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
       <button id="connect" type="submit">Connect</button>
     </form>
+    </details>
+    <details id="migration-settings" class="settings-section"><summary>Data migration</summary>
+      <p class="muted">Export pauses this server. Connect to the new server, then import before its first synchronization. The ZIP contains private financial data, not server tokens.</p>
+      <div class="shortcuts"><button id="export-data" type="button">Export data</button><button id="import-data" type="button" disabled>Import data</button></div>
+      <input id="migration-file" type="file" accept=".zip,application/zip" hidden>
+      <p id="migration-status" class="migration-status" role="status" aria-live="polite"></p>
+      <button id="migration-resume" type="button" hidden>Resume this server</button>
     </details>
     <details id="bank-profile-settings" class="settings-section" hidden><summary>Bank connections</summary>
       <p class="muted">Sign in on the bank website. Choose a saved connection for that login, or add another one. Bank passwords are never stored here.</p>
@@ -29,13 +35,6 @@
         <label>Connection name<input id="profile-name" maxlength="120" autocomplete="off" required></label>
         <div class="shortcuts"><button id="save-profile" type="submit">Add connection</button><button id="cancel-profile" type="button">Cancel</button></div>
       </form>
-    </details>
-    <details id="migration-settings" class="settings-section" hidden><summary>Data migration</summary>
-      <p class="muted">Export pauses this server. Connect to the new server, then import before its first synchronization. The ZIP contains private financial data, not server tokens.</p>
-      <div class="shortcuts"><button id="export-data" type="button">Export data</button><button id="import-data" type="button" disabled>Import data</button></div>
-      <input id="migration-file" type="file" accept=".zip,application/zip" hidden>
-      <p id="migration-status" class="migration-status" role="status" aria-live="polite"></p>
-      <button id="migration-resume" type="button" hidden>Resume this server</button>
     </details>
     <section id="account-settings" class="settings-section" hidden>
       <h2>Bank accounts</h2>
@@ -46,6 +45,5 @@
       <label>One-time history import start date<input id="reimport" type="date" aria-describedby="reimport-hint"></label>
       <p id="reimport-hint" class="muted">Optional. Applies to the next synchronization.</p>
     </section>
-  </details>
 </main><script type="module" src="popup.js"></script></body>
 </html>

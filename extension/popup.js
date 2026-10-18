@@ -19,17 +19,17 @@ const messages={
   zenmoney_unavailable:'ZenMoney is temporarily unavailable.',history_incomplete:'History capture interrupted: the bank returned incomplete history. Synchronize again.',
   existing_ownership_unknown:'Could not identify the account used by the previous match.',
   capture_context_changed:'The page or account has changed. Synchronize again.',validation_error:'Check the selected accounts and date.',
-  migration_paused:'This server is paused after export. Import the archive on the new server, or resume this server in Settings.',
+  migration_paused:'This server is paused after export. Import the archive on the new server, or resume this server in Data migration.',
   migration_busy:'A server operation is in progress. Try again shortly.',
-  bank_connection_required:'Choose a connection for the open bank session, or add a new one in Settings.',
+  bank_connection_required:'Choose a connection for the open bank session, or add a new one in Bank connections.',
   bank_connection_changed:'The bank session belongs to another connection. Refresh and choose the correct connection before synchronizing.',
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
 const showError=error=>{
   status(messages[error.code] || 'Could not complete the action. Try again later.','error');
   if(['not_configured','unauthorized','invalid_server','unsupported_api_version'].includes(error.code)){
-    $('settings').open=true;$('connection-settings').open=true;
-  }else if(['account_unconfigured','settings_conflict','zenmoney_account_unavailable','bank_connection_required','bank_connection_changed'].includes(error.code))$('settings').open=true;
+    $('connection-settings').open=true;
+  }
 };
 let lastSyncedAt=null;
 function renderLastSync(value=lastSyncedAt) {
@@ -128,7 +128,6 @@ function accountForm(account) {
       view.connection.accounts=view.connection.accounts.map(a=>a.id===account.id?result.account:a);
       form.replaceWith(accountForm(result.account));
       status('Account saved.','success');updateButton();
-      if(!connectionDraftPending && !view.connection.accounts.some(accountNeedsSetup))$('settings').open=false;
     } catch(error){
       showError(error);
       localStatus(error.code==='backend_unavailable'?'Could not confirm that the account was saved. Refresh the account list.':messages[error.code] || 'Could not save the account. Try again later.','error');
@@ -167,7 +166,7 @@ async function refreshData() {
     if(!view.connection){$('accounts').replaceChildren();status(messages.bank_connection_required);return;}
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
-    if(pending){$('settings').open=true;status('Select the accounts to import.');}
+    if(pending){status('Select the accounts to import.');}
     else if(!capture)status(view.connection.accounts.some(a=>a.selection==='enabled' && a.supported)?'Ready to synchronize.':messages.account_disabled);
     else progress(capture);
   } catch(error){await profiles.render(null);showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}
@@ -188,7 +187,7 @@ $('server-form').addEventListener('submit',async event=>{
     if(!await chrome.permissions.request({origins:[permissionOrigin($('url').value)]}))throw Object.assign(Error(),{code:'invalid_server'});
     await rpc({type:'configure',url:$('url').value,token:$('token').value});
     $('token').value='';configured=true;connectionDraftPending=false;capture=null;
-    $('connection-settings').open=false;$('settings').open=false;renderLastSync(null);await migration.refresh();await refresh();
+    $('connection-settings').open=false;renderLastSync(null);await migration.refresh();await refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('discrepancies').addEventListener('click',async()=>{try{await rpc({type:'open-discrepancies'});}catch(error){showError(error);}});
@@ -222,7 +221,7 @@ try {
  reimportSaved=state.reimportFrom;
  connectionDraftPending=connectionEdited || !!connectionDraft;
  $('connection-settings').open=!state.configured || connectionDraftPending;
- $('settings').open=!state.configured || connectionDraftPending;capture=state.capture;
+ capture=state.capture;
  if(state.configured){await migration.refresh();await refresh();}else status(messages.not_configured);
  if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
 } catch(error){showError(error);}

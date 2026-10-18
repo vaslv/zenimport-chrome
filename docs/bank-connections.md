@@ -9,14 +9,14 @@ to 0.2.1 before using this feature. The existing SDK is unchanged.
    payment-account history. Bank credentials remain exclusively on that website;
    ZenImport does not store passwords, authenticate for you, or switch bank logins.
 2. Open ZenImport. The first connection for a bank is created with a default name.
-   In **Settings → Bank connections → Rename**, give it a name such as Personal.
+   In **Bank connections → Rename**, give it a name such as Personal.
 3. Map each discovered physical account to a same-currency ZenMoney account, or
    choose **Do not import**. Choose its initial start date and save. Any number of
    supported accounts can be enabled; unconfigured/ignored accounts are not read.
 4. Click **Synchronize**. Only this connection's enabled accounts are captured.
 5. Sign out of the bank and sign into another login. Reopen ZenImport. Previously
    unknown account numbers are not silently added to the last selected connection.
-   Choose **Settings → Bank connections → Add connection**, enter a name such as
+   Choose **Bank connections → Add connection**, enter a name such as
    Work, then configure its accounts and synchronize separately.
 6. When returning to a known login, ZenImport selects a saved connection only from
    connections containing all currently observed accounts. The last selection is

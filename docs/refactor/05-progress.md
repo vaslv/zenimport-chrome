@@ -326,3 +326,19 @@ and ZIP integrity. Source/tag remains immutable; subsequent docs do not replace 
   accepts verified published schema-6 archives; new archives preserve names and
   memberships. Both components need 0.2.1. SDK unchanged. Local ZIP rebuilt;
   no push, tag, publication, installed-extension update or production deployment.
+
+
+## October 18, 2026 — Independent popup sections
+
+Removed the outer Settings disclosure. Server connection and Data migration now
+have independently visible headings and start collapsed after configuration.
+Connection setup, unfinished drafts and authentication/configuration errors still
+open Server connection. Migration controls stay disabled without a server;
+opening Data migration refreshes its availability. Bank connections and account
+mapping remain accessible without an outer disclosure. No backend or financial
+data changes, push, tag or publication.
+
+Validation: Docker passed 52 unit tests, 12 browser tests (2 integration modules
+skipped in the standalone image), and 3 focused real-backend integration tests
+for ZIP migration and separate/shared bank connections. All data was synthetic.
+The native popup screenshot confirmed the setup layout without overflow.

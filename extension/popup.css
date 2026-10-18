@@ -40,7 +40,7 @@ input, select { display: block; width: 100%; margin-top: 6px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #status[data-tone="loading"]::before, :is(.account-status,.migration-status)[data-tone="loading"]::before { animation: none; } }
-#settings { border-top: 1px solid #e4e4e7; padding-top: 14px; }
+#connection-settings { border-top: 1px solid #e4e4e7; }
 summary { cursor: pointer; color: #52525b; }
 .settings-section { padding-top: 18px; }
 .settings-section + .settings-section { margin-top: 18px; border-top: 1px solid #e4e4e7; }
