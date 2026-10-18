@@ -428,3 +428,18 @@ are rejected, and period controls are locked during an active capture.
 Validation: the targeted Docker popup test passed for the default date, both
 shortcuts, custom date entry, account setup and collapsed state. Inspected the
 screenshot, rebuilt local artifacts, and checked the diff. No live data sent.
+
+## 2026-10-18 — Handle BIDV Reset's populated date range
+
+Read-only production diagnostics showed the two previous captures failed before
+any page was ingested. After restoring the bank account view and reloading the
+installed extension, a user-configured synchronization reached the history
+filter but timed out: Reset retained a populated default date range. The driver
+incorrectly required both date fields to become empty. It now selects the two
+requested calendar dates without assuming empty Reset values, retaining exact
+range and network/DOM completion checks before accepting records.
+
+Updated the synthetic bank to model populated Reset values. Both isolated BIDV
+browser tests passed in Docker and local artifacts were rebuilt. The live attempt
+failed before delivery; a successful live synchronization with this final filter
+fix remains unverified. No push or release.

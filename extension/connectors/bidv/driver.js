@@ -136,7 +136,9 @@
     click(byText(modal,'Reset'));
     const inputs=modal.querySelectorAll('nz-range-picker input');
     if(inputs.length!==2)throw Error('history_incomplete');
-    await wait(()=>!inputs[0].value && !inputs[1].value);
+    // Reset restores the bank's default range; it does not clear both fields.
+    // Explicitly replace each date through the calendar, then verify the range.
+    await wait(()=>!inputs[0].disabled && !inputs[1].disabled);
     click(inputs[0]);await pick(config.interval.period.start);
     await wait(()=>inputs[0].value===display(config.interval.period.start));
     await pick(config.interval.period.end);
