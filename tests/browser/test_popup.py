@@ -375,8 +375,14 @@ def test_current_connection_heading_and_pencil_preserve_identity():
         connect(popup,bank,url)
         expect(popup.locator('#connection-name')).to_have_text('TEST')
         expect(popup.locator('#profile-picker,#bank-profile-settings,#add-profile,#profile-form')).to_have_count(0)
+        button=popup.locator('#rename-profile')
+        before=button.bounding_box()
+        row=popup.locator('#current-connection').bounding_box()
+        assert abs(before['x']+before['width']-row['x']-row['width']) < 1
         first=next(iter(service.connections))
         popup.get_by_role('button',name='Rename connection',exact=True).click()
+        expect(popup.locator('#profile-name')).to_be_visible()
+        assert button.bounding_box()==before
         popup.locator('#profile-name').fill('Unsaved name')
         popup.locator('#profile-name').press('Escape')
         expect(popup.locator('#connection-name')).to_be_visible()

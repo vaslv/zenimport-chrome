@@ -63,8 +63,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 #discrepancies { width: 100%; margin: 0 0 16px; }
 
-#current-connection { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
-#connection-name { min-width: 0; overflow-wrap: anywhere; }
+#current-connection { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-bottom: 16px; }
+#connection-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; }
 
-#current-connection #profile-name { flex: 1; width: 0; margin: 0; }
+#current-connection #profile-name { flex: 1; width: 0; height: 44px; margin: 0; }
+#rename-profile { margin-left: auto; }

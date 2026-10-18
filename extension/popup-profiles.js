@@ -1,6 +1,6 @@
 import {accountSignature} from './bank-profiles.js';
 const $=id=>document.getElementById(id);
-const pencil='m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z';
+const pencil='m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125';
 
 export function setupProfiles({rpc,refresh,lock,feedback,error}) {
   let view=null,editing=false,locked=false,saving=false,serverUrl='',writes=Promise.resolve();
@@ -12,7 +12,7 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
     $('profile-name').hidden=!editing;
     const label=editing?'Save connection name':'Rename connection';
     $('rename-profile').setAttribute('aria-label',label);$('rename-profile').title=label;
-    $('profile-icon').setAttribute('d',editing?'m5 12 4 4L19 6':pencil);
+    $('profile-icon').setAttribute('d',editing?'m4.5 12.75 6 6 9-13.5':pencil);
   }
   function draft() {
     if(!view?.connection || !editing)return writes;

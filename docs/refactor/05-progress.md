@@ -383,3 +383,14 @@ integration-module skips), and all 27 backend/browser integration tests. The
 legacy multi-account fixture now explicitly seeds its prior membership through
 the retained compatibility RPC rather than using the removed manual UI. Native
 heading/edit screenshots were inspected. Only synthetic data was used.
+
+## 2026-10-18 — Stable connection rename button
+
+Aligned the shared rename/save button to the popup's right content edge and
+kept the heading height stable when switching to its input. Long names truncate
+instead of moving the controls. Replaced both icons with Heroicons v2.2.0
+outline SVGs and bundled their MIT notice.
+
+Validation: the targeted Docker browser test passed, including exact button
+bounds before/after editing and right-edge alignment. Inspected both screenshots
+and rebuilt the unpacked extension and ZIP. No real bank data or publication.
