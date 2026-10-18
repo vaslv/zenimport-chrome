@@ -401,3 +401,17 @@ Made Bank accounts a disclosure, initially collapsed unless account setup is
 required. Removed section/account dividers and spaced Unlink account below Save
 account. Rebuilt the extension; the targeted Docker popup test passed and the
 rendered screenshot was checked. No production data or publication changed.
+
+## 2026-10-18 — Preserve BIDV account navigation state
+
+Observed an authenticated but empty Payment route in the live bank. Returning
+to Accounts and using the card's detail action restored the account UI. The
+connector now uses that action instead of direct detail URL navigation, and
+installs the passive observer without reloading an already open bank document.
+A previous completed capture no longer overwrites an inspection error with a
+misleading connection-overview hint. The one-time import date UI is unchanged.
+
+Validation: 54 Docker unit tests and two isolated BIDV browser tests passed.
+The regression fixture rejects direct detail navigation and verifies the card
+transition; preparation preserves the existing document. No live synchronization
+or ZenMoney writes were performed. Extension artifacts rebuilt locally.

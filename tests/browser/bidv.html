@@ -11,7 +11,9 @@ const account=location.pathname.match(/\/thanh-toan\/(\d+)$/)?.[1];
 let period={start:'2025-10-16',end:'2026-10-16'},rows=[],page=0,drawer,modal,chosen=0,month=9,year=2026;
 const main=document.querySelector('main');
 if(!account){main.innerHTML='<h1>Accounts</h1><div class="ant-collapse-header" role="button"><span>Payment</span> <button>Open account</button></div>'+
- (localStorage.getItem('fixtureMulti')?sources:sources.slice(0,1)).map(source=>`<app-card-account-2><p class="card-account-2--no">${source}</p><p class="card-account-2--amount">900,000 VND</p></app-card-account-2>`).join('')+'<div class="ant-collapse-header" role="button"><span>Savings</span> <button>Open account</button></div>';}
+ (localStorage.getItem('fixtureMulti')?sources:sources.slice(0,1)).map(source=>`<app-card-account-2><p class="card-account-2--no">${source}</p><p class="card-account-2--amount">900,000 VND</p><button class="card-account-2--btn-go-detail" data-account="${source}">Account details</button></app-card-account-2>`).join('')+'<div class="ant-collapse-header" role="button"><span>Savings</span> <button>Open account</button></div>';}
+for(const button of main.querySelectorAll('.card-account-2--btn-go-detail'))button.onclick=()=>{sessionStorage.setItem('fixtureSelected',button.dataset.account);location.href='/tai-khoan/thanh-toan/'+button.dataset.account;};
+if(account && localStorage.getItem('fixtureRequireCard') && sessionStorage.getItem('fixtureSelected')!==account){main.innerHTML='<h1>Payment</h1>';throw Error('Fixture requires account card navigation');}
 if(account && !sources.includes(account)){main.innerHTML='<h1>Account unavailable in this bank login</h1>';throw Error('Fixture account belongs to another login');}
 if(account){main.innerHTML=`<h1>Payment</h1><app-card-account><p class="card-account--no">${account}</p><p class="card-account--balance">900,000 VND</p><button class="ant-dropdown-trigger">Transaction history</button></app-card-account>`;
 main.querySelector('button').addEventListener(new URL(location.href).searchParams.has('clickMenu')?'click':'mouseenter',()=>{

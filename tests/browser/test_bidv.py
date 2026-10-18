@@ -65,3 +65,26 @@ def test_bidv_popup_discovery_and_real_dom_driver_empty_and_full():
             assert len(pages)==1 and pages[0]['totalRecords']==(0 if empty else 4)
             assert any(m['type']=='capture-complete' for m in values)
             assert 'fixture-must-not-cross-bridge' not in json.dumps(values)
+
+
+def test_bidv_selects_account_through_card_without_reloading_preparation():
+    service=PopupBackend()
+    with http_server(service) as url,sync_playwright() as p,bidv_install(p,url,BidvBank()) as (_,worker,bank,popup,_):
+        connect(popup,bank,url)
+        bank.evaluate("localStorage.setItem('fixtureRequireCard','true');window.fixtureDocumentMarker='original'")
+        popup.evaluate("""async()=>{
+          const adapter=await import('./connectors/bidv/index.js');
+          const [tab]=await chrome.tabs.query({url:'https://smartbanking.bidv.com.vn/*'});
+          await adapter.prepare(tab.id);
+        }""")
+        assert bank.evaluate('window.fixtureDocumentMarker')=='original'
+        bank.goto(ORIGIN+'/tai-khoan/thanh-toan/12345678')
+        expect(bank.locator('app-card-account')).to_have_count(0)
+        bank.goto(ORIGIN+'/tai-khoan')
+        popup.evaluate("""async()=>{
+          const adapter=await import('./connectors/bidv/index.js');
+          const [tab]=await chrome.tabs.query({url:'https://smartbanking.bidv.com.vn/*'});
+          await adapter.selectAccount(tab.id,'12345678');
+        }""")
+        expect(bank.locator('.card-account--no')).to_have_text('12345678')
+        assert bank.evaluate("sessionStorage.getItem('fixtureSelected')")=='12345678'

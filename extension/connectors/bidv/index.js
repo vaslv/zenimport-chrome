@@ -47,14 +47,32 @@ export async function inspect(tab,profileKey) {
     profile_key:profileKey,profile_identity:'user_selected',capabilities:{...capabilities,earliest_date:monthsAgo(12,today())},
     accounts_complete:false,accounts:result.result.accounts}};
 }
+export function openAccountCard(account) {
+  const card=[...document.querySelectorAll('main app-card-account-2')].find(element=>
+    element.querySelector('.card-account-2--no')?.textContent?.trim()===account);
+  const button=card?.querySelector('button.card-account-2--btn-go-detail');
+  if(!button || button.disabled)return false;
+  button.click();return true;
+}
 export async function selectAccount(tabId,account) {
   const tab=await chrome.tabs.get(tabId);
   if(!supports(tab.url) || !/^\d{6,30}$/.test(account))throw error('bank_login_required');
-  if(accountFromUrl(tab.url)!==account)await chrome.tabs.update(tabId,{url:bankOrigin+'/tai-khoan/thanh-toan/'+account});
+  // BIDV initializes account details through its card action; a direct detail
+  // URL can leave Payment empty even in an authenticated session.
+  if(accountFromUrl(tab.url)!==account && new URL(tab.url).pathname!=='/tai-khoan')
+    await chrome.tabs.update(tabId,{url:bankOrigin+'/tai-khoan'});
+  let selected=false;
   const deadline=Date.now()+30000;
   while(Date.now()<deadline) {
     const current=await chrome.tabs.get(tabId);
     if(!supports(current.url))throw error('bank_login_required');
+    if(!selected && new URL(current.url).pathname==='/tai-khoan') {
+      const found=await inspect(current,'probe').catch(()=>null);
+      if(found?.discovery.accounts.some(a=>a.source_key===account)) {
+        const [result]=await chrome.scripting.executeScript({target:{tabId,documentIds:[found.documentId]},injectImmediately:true,func:openAccountCard,args:[account]});
+        selected=result?.result===true;
+      }
+    }
     if(accountFromUrl(current.url)===account) {
       try {const found=await inspect(current,'probe');if(found.currentAccount===account)return found.documentId;}catch{}
     }
@@ -69,21 +87,8 @@ export async function prepare(tabId) {
   }
   // A persisted registration does not prove injection into a tab that was
   // already open while the extension was disabled or updated.
-  const [old]=await chrome.scripting.executeScript({target:{tabId},world:'MAIN',injectImmediately:true,func:()=>globalThis.__zenImportBidvNetwork===true});
-  if(!old.result) {
-    await chrome.tabs.reload(tabId);
-    const deadline=Date.now()+30000;
-    while(Date.now()<deadline) {
-      try {
-        const current=await chrome.tabs.get(tabId);
-        if(!supports(current.url))throw error('bank_login_required');
-        const [fresh]=await chrome.scripting.executeScript({target:{tabId},injectImmediately:true,func:()=>true});
-        if(fresh.documentId!==old.documentId && (await inspect(current,'probe')).discovery.accounts.length)return;
-      }catch{}
-      await new Promise(resolve=>setTimeout(resolve,300));
-    }
-    throw error('bank_login_required');
-  }
+  const [installed]=await chrome.scripting.executeScript({target:{tabId},world:'MAIN',injectImmediately:true,func:()=>globalThis.__zenImportBidvNetwork===true});
+  if(!installed.result)await chrome.scripting.executeScript({target:{tabId},world:'MAIN',injectImmediately:true,files:['connectors/bidv/observer.js']});
 }
 export async function running(tabId,driver) {
   try {const [r]=await chrome.scripting.executeScript({target:{tabId,documentIds:[driver.documentId]},injectImmediately:true,

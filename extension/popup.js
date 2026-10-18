@@ -61,7 +61,7 @@ function progress(state) {
   if(!state)return;
   if(view?.connection?.id!==state.connection?.id) {
     if(['planned','collecting','paused'].includes(state.phase))status(`Capture belongs to ${state.connection?.label || 'another connection'}. Finish or stop it before switching connections.`,'loading');
-    else status(compatible?'Ready to synchronize.':messages.bank_connection_required);
+    else if(compatible)status('Ready to synchronize.');
     return;
   }
   if(state.error && ['failed','paused'].includes(state.phase)){showError({code:state.error});return;}
