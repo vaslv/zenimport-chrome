@@ -206,7 +206,10 @@ async function captured(data,sender) {
   if (data.type === 'capture-next') { await tick(); return {}; }
   if (data.type === 'capture-error') {
     await engine.guard(data.runId,source);
-    await engine.pause(data.code === 'bank_login_required' ? data.code : 'history_incomplete'); return {};
+    await engine.pause(data.code === 'bank_login_required' ? data.code : 'history_incomplete');
+    const stages=['network_ready','open_history','history_response','open_filter','start_date','end_date','apply_filter','filtered_rows','read_rows','load_more','save_pages'];
+    if(state.bank==='bidv' && stages.includes(data.stage)){const paused=await store.get();paused.errorStage=data.stage;await store.set(paused);}
+    return {};
   }
   throw new SyncError('unsupported_command');
 }

@@ -65,7 +65,12 @@ function progress(state) {
     else if(compatible)status('Ready to synchronize.');
     return;
   }
-  if(state.error && ['failed','paused'].includes(state.phase)){showError({code:state.error});return;}
+  if(state.error && ['failed','paused'].includes(state.phase)){
+    showError({code:state.error});
+    const stages={network_ready:'preparing history reader',open_history:'opening history',history_response:'waiting for history response',open_filter:'opening date filter',start_date:'selecting start date',end_date:'selecting end date',apply_filter:'applying date filter',filtered_rows:'waiting for filtered rows',read_rows:'reading rows',load_more:'loading more rows',save_pages:'saving captured rows'};
+    if(state.error==='history_incomplete' && stages[state.errorStage])status('History capture stopped while '+stages[state.errorStage]+'. Synchronize again.','error');
+    return;
+  }
   if(state.phase==='paused'){status('Capture paused. Click Synchronize to resume.');return;}
   const job=state.job;
   if(['planned','collecting'].includes(state.phase)){

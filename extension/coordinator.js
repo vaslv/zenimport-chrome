@@ -17,7 +17,7 @@ export class Coordinator {
         // A known paused job needs a NEW resume command. Repeating its original
         // request_id only fetches the original idempotent result on the server.
         if (state.job) state.command = {...state.command,request_id:this.uuid()};
-        state.phase='planned';state.error=null;state.lease=null;
+        state.phase='planned';state.error=null;state.errorStage=null;state.lease=null;
         state.connection=connection;state.tabId=tabId;
         await this.store.set(state);
       }
@@ -112,7 +112,7 @@ export class Coordinator {
       }); } catch {} // A lost connection must not erase the local resume point.
     }
     await this.connector(state.bank).abort(state.tabId).catch(()=>{});
-    state.phase=unsafe?'failed':'paused'; state.error=code; state.driver=null; state.lease=null;
+    state.phase=unsafe?'failed':'paused'; state.error=code; state.errorStage=null; state.driver=null; state.lease=null;
     await this.store.set(state);
   }
   async stop() {

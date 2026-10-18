@@ -3,7 +3,7 @@
   const config=globalThis.__zenImportCaptureConfig;delete globalThis.__zenImportCaptureConfig;
   if(!config)return;
   globalThis.__zenImportCaptureAbort?.();globalThis.__zenImportCaptureRun=config.runId;
-  let stopped=false,interrupted=false,ready=false,completed=false,sequence=0,events=[],allRows=[];
+  let stopped=false,interrupted=false,ready=false,completed=false,sequence=0,events=[],allRows=[],stage='network_ready';
   const pending=new Set(),text=e=>e?.textContent?.replace(/\s+/g,' ').trim() || '';
   const visible=e=>!!e && !!(e.getBoundingClientRect().width && e.getBoundingClientRect().height) &&
     !e.closest('[aria-hidden="true"]') && getComputedStyle(e).visibility!=='hidden';
@@ -77,6 +77,7 @@
     events=[];
   }
   async function openHistory() {
+    stage='open_history';
     for(const modal of [...document.querySelectorAll('app-modal-transfer-detail,app-modal-filter-history-transfer')].filter(visible))click(modal.querySelector('.modal-close'));
     if([...document.querySelectorAll('[role="dialog"]')].some(visible))throw Error('history_incomplete');
     if(drawer())click(drawer().querySelector('button[aria-label="close"]'));
@@ -93,7 +94,7 @@
       await new Promise(r=>setTimeout(r,80));
     }
     if(!item){click(trigger);item=await wait(()=>byText(document,'All transactions at BIDV'));}
-    await request(()=>click(item));await wait(drawer);
+    stage='history_response';await request(()=>click(item));await wait(drawer);
   }
   const display=iso=>iso.split('-').reverse().join('/');
   const panels=()=>[...document.querySelectorAll('.ant-picker-panel')].filter(visible);
@@ -131,35 +132,41 @@
     return more || end || empty ? {more,empty,end} : null;
   }
   async function filter() {
+    stage='open_filter';
     click(byText(drawer(),'Filter'));
     const modal=await wait(()=>[...document.querySelectorAll('app-modal-filter-history-transfer')].find(visible));
-    click(byText(modal,'Reset'));
     const inputs=modal.querySelectorAll('nz-range-picker input');
     if(inputs.length!==2)throw Error('history_incomplete');
+    const iso=value=>/^\d{2}\/\d{2}\/\d{4}$/.test(value)?value.split('/').reverse().join('-'):null;
+    const previousStart=iso(inputs[0].value),previousEnd=iso(inputs[1].value);
+    const narrowsLoadedRange=previousStart && previousEnd && previousStart<=config.interval.period.start && previousEnd>=config.interval.period.end;
+    click(byText(modal,'Reset'));
     // Reset restores the bank's default range; it does not clear both fields.
     // Explicitly replace each date through the calendar, then verify the range.
     await wait(()=>!inputs[0].disabled && !inputs[1].disabled);
-    click(inputs[0]);await pick(config.interval.period.start);
+    stage='start_date';click(inputs[0]);await pick(config.interval.period.start);
     await wait(()=>inputs[0].value===display(config.interval.period.start));
-    await pick(config.interval.period.end);
+    stage='end_date';await pick(config.interval.period.end);
     await wait(()=>inputs[0].value===display(config.interval.period.start) && inputs[1].value===display(config.interval.period.end));
-    // A successful HTTP response alone is insufficient: the shared endpoint
-    // could return a business error and leave the previous table unchanged.
+    // Narrowing an already loaded range may leave every rendered row unchanged.
+    // Full pagination and parser date bounds still reject any out-of-range rows.
+    // Widening must change the rendered history: stale rows could omit records.
     let changed=false,last=Date.now();
     const watch=new MutationObserver(list=>{
       if(list.some(m=>m.type==='childList' || m.type==='characterData')){changed=true;last=Date.now();}
     });
-    const body=drawer().querySelector('.drawer-body');watch.observe(body,{childList:true,characterData:true,subtree:true});
+    const root=drawer();watch.observe(root,{childList:true,characterData:true,subtree:true});
     try {
-      await request(()=>click(byText(modal,'Apply')));
-      await wait(()=>!visible(modal) && changed && Date.now()-last>350 && terminal());
+      stage='apply_filter';await request(()=>click(byText(modal,'Apply')));
+      stage='filtered_rows';
+      await wait(()=>!visible(modal) && (changed || narrowsLoadedRange) && Date.now()-last>350 && terminal());
     }finally{watch.disconnect();}
   }
   (async()=>{
     try {
       window.postMessage({source:'zenimport-bidv-probe-v1'},location.origin);
       await wait(()=>ready && pending.size===0);await openHistory();await filter();
-      allRows=readRows();
+      stage='read_rows';allRows=readRows();
       for(let step=0;step<5001;step++) {
         guard();const state=await wait(terminal);
         if(!state.more) {
@@ -168,13 +175,13 @@
         }
         if(step===5000 || allRows.length>=100000)throw Error('history_incomplete');
         const before=JSON.stringify(allRows),count=allRows.length;
-        await request(()=>click(state.more));
+        stage='load_more';await request(()=>click(state.more));
         await wait(()=>readRows().length>count && terminal());
         const next=readRows();
         if(JSON.stringify(next.slice(0,count))!==before || next.length>100000)throw Error('history_incomplete');
         allRows=next;
       }
-      const total=allRows.length;
+      stage='save_pages';const total=allRows.length;
       // Fixed small transport pages also fit the 2 MB limit when both the
       // description and details contain maximum-length four-byte Unicode text.
       for(let index=0;index<Math.max(1,Math.ceil(total/100));index++) {
@@ -183,7 +190,7 @@
       }
       await rpc('capture-complete');completed=true;
     }catch(error) {
-      if(!stopped)await rpc('capture-error',{code:error.message==='bank_login_required'?'bank_login_required':'history_incomplete'}).catch(()=>{});
+      if(!stopped)await rpc('capture-error',{code:error.message==='bank_login_required'?'bank_login_required':'history_incomplete',stage}).catch(()=>{});
     }finally{cleanup();if(completed)await rpc('capture-next').catch(()=>{});}
   })();
 })();

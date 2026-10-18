@@ -372,9 +372,10 @@ def test_bidv_duplicate_posting_fails_without_delivery(tmp_path):
             assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==0
 
 
-def test_bidv_http_success_with_stale_ui_never_marks_coverage_complete(tmp_path):
+def test_bidv_widening_with_stale_ui_never_marks_coverage_complete(tmp_path):
     bank_api=BidvBank(stale=True)
     with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (_,worker,bank,popup,_):
+        bank.evaluate("localStorage.setItem('fixtureInitialStart','2026-10-10')")
         connect(popup,bank,url);account(popup,TARGET);start_sync(popup,bank,worker)
         deadline=time.monotonic()+10
         while len(bank_api.calls)<2 and time.monotonic()<deadline:popup.wait_for_timeout(100)

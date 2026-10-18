@@ -8,7 +8,7 @@ if(params.has('fixtureLogin'))localStorage.setItem('fixtureLogin',params.get('fi
 if(params.has('multi'))localStorage.setItem('fixtureMulti','true');
 const sources=localStorage.getItem('fixtureLogin')==='b'?['87654321','99990000']:['12345678','11112222'];
 const account=location.pathname.match(/\/thanh-toan\/(\d+)$/)?.[1];
-let period={start:'2025-10-16',end:'2026-10-16'},rows=[],page=0,drawer,modal,chosen=0,month=9,year=2026;
+let period={start:localStorage.getItem('fixtureInitialStart') || '2025-10-16',end:'2026-10-16'},rows=[],page=0,drawer,modal,chosen=0,month=9,year=2026;
 const main=document.querySelector('main');
 if(!account){main.innerHTML='<h1>Accounts</h1><div class="ant-collapse-header" role="button"><span>Payment</span> <button>Open account</button></div>'+
  (localStorage.getItem('fixtureMulti')?sources:sources.slice(0,1)).map(source=>`<app-card-account-2><p class="card-account-2--no">${source}</p><p class="card-account-2--amount">900,000 VND</p><button class="card-account-2--btn-go-detail" data-account="${source}">Account details</button></app-card-account-2>`).join('')+'<div class="ant-collapse-header" role="button"><span>Savings</span> <button>Open account</button></div>';}
@@ -24,7 +24,7 @@ function fetchRows(append=false){
  const xhr=new XMLHttpRequest();xhr.open('POST','/w2/process');
  xhr.onload=()=>{
   const value=JSON.parse(xhr.responseText);
-  if(value.stale)return;
+  if(value.stale || (value.unchanged && drawer.querySelector('.drawer-body').children.length))return;
   rows=append?[...rows,...value.rows]:value.rows;
   const body=drawer.querySelector('.drawer-body');body.replaceChildren();
   if(rows.length){const table=document.createElement('table');table.className='transaction-table__table';table.setAttribute('aria-label','transaction table');

@@ -443,3 +443,26 @@ Updated the synthetic bank to model populated Reset values. Both isolated BIDV
 browser tests passed in Docker and local artifacts were rebuilt. The live attempt
 failed before delivery; a successful live synchronization with this final filter
 fix remains unverified. No push or release.
+
+## 2026-10-18 — Accept unchanged BIDV rows when narrowing history
+
+Live diagnostics isolated the remaining capture timeout to filtered_rows. BIDV
+can leave the rendered first page unchanged after successfully applying a
+narrower date range. Capture now records the previous loaded range and permits
+unchanged rows only when narrowing it, after the observed response and filter
+closure. Full pagination and strict parser date bounds remain mandatory; widening
+still requires a rendered update. The synthetic stale-widening regression verifies
+that incomplete coverage is never accepted.
+
+Added a bounded capture-stage diagnostic to distinguish filter, pagination and
+save failures without recording private bank data. Stage metadata is cleared on
+pause/resume and does not replace authentication errors.
+
+Validation: 7 isolated BIDV Docker browser/integration tests and 54 Docker unit
+tests passed. Real capture completed with 22 records across two intervals (22 and
+0). Backend processing completed for 19 records; three dated October 2 remain
+blocked by existing_ownership_unknown. Legacy duplicate_cleanup links lack durable
+proof of the retained transaction's account side; the backend intentionally refuses
+to infer it from a mutable current binding. No ownership protection was bypassed
+or historical linkage rewritten. Full live synchronization is not yet complete.
+Local artifacts rebuilt. No push, tags or publication.

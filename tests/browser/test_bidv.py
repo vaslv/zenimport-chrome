@@ -11,8 +11,8 @@ HTML=Path(__file__).with_name('bidv.html').read_text()
 
 
 class BidvBank:
-    def __init__(self,count=4,empty=False,corrupt=False,stale=False):
-        self.count=count;self.empty=empty;self.corrupt=corrupt;self.stale=stale;self.calls=[]
+    def __init__(self,count=4,empty=False,corrupt=False,stale=False,unchanged=False):
+        self.unchanged=unchanged;self.initial_start='2026-10-10' if stale else '2025-10-16';self.count=count;self.empty=empty;self.corrupt=corrupt;self.stale=stale;self.calls=[]
 
     def __call__(self,route):
         body=json.loads(route.request.post_data);self.calls.append(body)
@@ -23,7 +23,7 @@ class BidvBank:
                     'balance':f'{900000-i*100000:,} VND','reference':'shared-reference'})
         if self.corrupt and rows:rows[1]=rows[0].copy()
         offset=body['page']*20
-        route.fulfill(content_type='application/json',body=json.dumps({'rows':rows[offset:offset+20],'more':offset+20<len(rows),'stale':self.stale and body['period']['start']!='2025-10-16'}))
+        route.fulfill(content_type='application/json',body=json.dumps({'rows':rows[offset:offset+20],'more':offset+20<len(rows),'stale':self.stale and body['period']['start']!=self.initial_start,'unchanged':self.unchanged}))
 
 
 def bidv_install(p,url,bank):
@@ -32,8 +32,8 @@ def bidv_install(p,url,bank):
 
 def test_bidv_popup_discovery_and_real_dom_driver_empty_and_full():
     # Driver RPC replies isolate collection from delivery in this browser check.
-    for empty in (False,True):
-        service=PopupBackend();bank_api=BidvBank(empty=empty)
+    for empty,unchanged in ((False,False),(True,False),(False,True)):
+        service=PopupBackend();bank_api=BidvBank(empty=empty,unchanged=unchanged)
         with http_server(service) as url,sync_playwright() as p,bidv_install(p,url,bank_api) as (context,worker,bank,popup,identifier):
             connect(popup,bank,url);expect(popup.locator('#bank')).to_have_text('BIDV')
             expect(popup.locator('.account')).to_have_count(1)
