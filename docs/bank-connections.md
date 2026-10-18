@@ -8,27 +8,40 @@ to 0.2.1 before using this feature. The existing SDK is unchanged.
 1. Sign in on the bank website using the required bank login. Open Accounts or
    payment-account history. Bank credentials remain exclusively on that website;
    ZenImport does not store passwords, authenticate for you, or switch bank logins.
-2. Open ZenImport. The first connection for a bank is created with a default name.
-   In **Bank connections → Rename**, give it a name such as Personal.
+2. Open ZenImport. The first connection for a bank uses the rendered account-owner name when
+   available, with a bank-name fallback. The current connection appears above
+   Synchronize; click its pencil to rename it. Custom names survive rediscovery.
 3. Map each discovered physical account to a same-currency ZenMoney account, or
    choose **Do not import**. Choose its initial start date and save. Any number of
    supported accounts can be enabled; unconfigured/ignored accounts are not read.
 4. Click **Synchronize**. Only this connection's enabled accounts are captured.
-5. Sign out of the bank and sign into another login. Reopen ZenImport. Previously
-   unknown account numbers are not silently added to the last selected connection.
-   Choose **Bank connections → Add connection**, enter a name such as
-   Work, then configure its accounts and synchronize separately.
-6. When returning to a known login, ZenImport selects a saved connection only from
-   connections containing all currently observed accounts. The last selection is
-   just a hint among those matches. Use **Bank connection** to choose explicitly
-   when account access overlaps.
+5. Sign out of the bank and sign into another login. Open its payment-account
+   overview and reopen ZenImport. An unknown primary account automatically creates
+   a separate connection, initially without any enabled import mappings.
+6. Returning to a known set of accounts resolves the previous connection. Existing
+   connection IDs, names, settings and history are retained. A manual selector is
+   shown only when multiple saved connections make the observed accounts ambiguous.
 
-For a newly opened account belonging to an existing login, select that saved
-connection explicitly and refresh its account list. This confirms the association.
-An account already known only in another connection cannot be silently moved by
-this selection; create another connection if access is intentionally shared.
-Discovery remains partial: open other accounts and associate them with the correct
-connection. The extension cannot infer login identity from an owner's display name.
+The connector supplies the initial anchor: BIDV uses the first rendered VND
+payment account on its Accounts overview. VietinBank currently exposes only the
+selected account, so it retains membership-based matching and explicit association
+for new accounts rather than treating every selected account as a primary one. The server scopes
+that number by bank. A new automatic profile key is `account-v1:<account number>`.
+Returning accounts resolve their existing membership before a new key is used,
+so reordered cards and legacy random profile keys do not reset connections. An
+Accounts overview containing known and newly opened accounts can attach the new
+accounts to its single existing connection. If the same overview spans multiple
+saved connections, explicit selection is required rather than guessing.
+
+BIDV history alone exposes no primary-account overview: for an unseen account,
+open Accounts first. VietinBank still exposes only the selected account; a newly
+seen second account cannot be inferred to belong to the same login from a name.
+Two logins sharing the same primary account cannot be distinguished automatically
+by that account alone. Explicit connections remain available for these cases.
+
+Owner names are display labels, never matching keys. BIDV exposes the name in
+`.sidebar-account--owner-name`; VietinBank exposes it in the selected account label.
+An unverified customer-ID field is not scraped. Custom names survive rediscovery.
 
 ## Scope and safety
 

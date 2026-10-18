@@ -64,4 +64,5 @@ test('DOM probe waits for parsing but accepts interactive before full load',asyn
  await assert.rejects(inspect({id:7,url},'fixture-profile'),e=>e.code==='bank_login_required');
  document.readyState='interactive';
  assert.equal((await inspect({id:7,url},'fixture-profile')).currentAccount,account);
+ assert.equal((await inspect({id:7,url},'fixture-profile')).ownerName,'Fixture');
 });

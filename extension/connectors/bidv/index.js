@@ -34,7 +34,8 @@ export function probePage() {
       currency:'VND',scale:0,supported:true,unsupported_reason:null});
   }
   // Other currencies, loans, savings and hidden tabs have not been verified.
-  return accounts.length ? {account:current || null,accounts_complete:false,accounts} : null;
+  const ownerName=document.querySelector('.sidebar-account--owner-name')?.textContent?.replace(/\s+/g,' ').trim();
+  return accounts.length ? {account:current || null,ownerName,accounts_complete:false,accounts} : null;
 }
 export async function inspect(tab,profileKey) {
   if(!supports(tab.url))throw error('unsupported_bank');
@@ -42,7 +43,7 @@ export async function inspect(tab,profileKey) {
   try{[result]=await chrome.scripting.executeScript({target:{tabId:tab.id},injectImmediately:true,func:probePage});}
   catch{throw error('bank_login_required');}
   if(!result?.result)throw error('bank_login_required');
-  return {documentId:result.documentId,currentAccount:result.result.account,discovery:{bank:id,connector_version:version,
+  return {documentId:result.documentId,currentAccount:result.result.account,primaryAccount:result.result.account ? null : result.result.accounts[0]?.source_key,ownerName:result.result.ownerName,discovery:{bank:id,connector_version:version,
     profile_key:profileKey,profile_identity:'user_selected',capabilities:{...capabilities,earliest_date:monthsAgo(12,today())},
     accounts_complete:false,accounts:result.result.accounts}};
 }

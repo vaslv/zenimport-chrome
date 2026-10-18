@@ -18,7 +18,7 @@ function probePage() {
   const currency = /\b(VND|USD|EUR|RUB)\b/.exec(label)?.[1] || 'VND';
   // Only the selected account source has been observed. Do not pretend this is
   // the complete list of a login or scrape unverified React internal objects.
-  return {account, accounts_complete: false, accounts: [{source_key: account, identity_scope: 'bank', label,
+  return {account, ownerName:label.slice((account+' - ').length,-' - Current account'.length).trim(), accounts_complete: false, accounts: [{source_key: account, identity_scope: 'bank', label,
     masked_number: '••••' + account.slice(-4), currency, scale: currency === 'VND' ? 0 : 2,
     supported: currency === 'VND', unsupported_reason: currency === 'VND' ? null : 'Only VND history has been verified so far.'}]};
 }
@@ -29,7 +29,7 @@ export async function inspect(tab, profileKey) {
   try { [result] = await chrome.scripting.executeScript({target: {tabId: tab.id}, injectImmediately: true, func: probePage}); }
   catch { throw Object.assign(Error(), {code: 'bank_login_required'}); }
   if (!result?.result) throw Object.assign(Error(), {code: 'bank_login_required'});
-  return {documentId: result.documentId, currentAccount: result.result.account,
+  return {documentId: result.documentId, currentAccount: result.result.account, ownerName:result.result.ownerName,
     discovery: {bank: id, connector_version: version, profile_key: profileKey, profile_identity: 'user_selected',
       capabilities, accounts_complete: result.result.accounts_complete, accounts: result.result.accounts}};
 }

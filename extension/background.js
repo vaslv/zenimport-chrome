@@ -1,7 +1,7 @@
 import {Backend, SyncError, serverAddress} from './backend-client.js';
 import {Coordinator} from './coordinator.js';
 import {connectorFor,connectorById} from './connectors/index.js';
-import {bankName,profileStorageKey,resolveProfile,canAttach,accountSignature} from './bank-profiles.js';
+import {bankName,profileStorageKey,resolveProfile,automaticProfile,canAttach,accountSignature} from './bank-profiles.js';
 
 const secureStorage = Promise.all(['local','session'].map(area =>
   chrome.storage[area].setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'})));
@@ -52,9 +52,9 @@ async function inspect({profileKey=null,label=null}={}) {
   let connections;
   try {({connections}=await client.request('/connections?bank='+encodeURIComponent(adapter.id)));}
   catch(error){if(error.code==='not_found')throw new SyncError('unsupported_api_version');throw error;}
-  let selected=profileKey ? connections.find(c=>c.profile_key===profileKey) : resolveProfile(connections,detected.discovery.accounts,selectedProfiles[key] || profiles[key]);
+  let selected=profileKey ? connections.find(c=>c.profile_key===profileKey) : (resolveProfile(connections,detected.discovery.accounts,selectedProfiles[key] || profiles[key]) || automaticProfile(connections,detected.discovery.accounts,detected.primaryAccount));
   if(profileKey && (!selected || !canAttach(connections,selected,detected.discovery.accounts)))throw new SyncError('bank_connection_changed');
-  if(label!==null || connections.length===0) {
+  if(label!==null || (!selected && connections.length===0)) {
     if(label!==null) {
       if(typeof label!=='string' || !label.trim() || label.length>120)throw new SyncError('validation_error');
       // Reuse a persisted creation identity after popup closure or a lost ACK.
@@ -69,7 +69,7 @@ async function inspect({profileKey=null,label=null}={}) {
   let connection=null;
   if(selected) {
     const discovery={...detected.discovery,profile_key:selected.profile_key,profile_identity:selected.profile_identity || 'user_selected'};
-    if(label!==null || connections.length===0)discovery.label=label?.trim() || bankName(adapter.id)+' 1';
+    if(label!==null || !connections.some(c=>c.profile_key===selected.profile_key))discovery.label=label?.trim() || detected.ownerName?.slice(0,120) || bankName(adapter.id)+' 1';
     connection=await client.request('/connections/discover','POST',discovery);
     connections=[...connections.filter(c=>c.id!==connection.id),connection];
     selectedProfiles[key]=connection.profile_key;
@@ -79,7 +79,7 @@ async function inspect({profileKey=null,label=null}={}) {
     await chrome.storage.local.set({selectedProfiles,creatingProfiles});
   }
   const {syncHistory={}}=await chrome.storage.local.get('syncHistory');
-  const view={tabId:tab.id,bank:adapter.id,origin:adapter.origin,connection,connections,
+  const view={tabId:tab.id,bank:adapter.id,origin:adapter.origin,ownerName:detected.ownerName?.slice(0,120) || null,connection,connections,
     selectionRequired:!connection,detectedAccounts:detected.discovery.accounts,
     lastSyncedAt:connection ? syncHistory[config.url+'|'+connection.id] || null : null};
   view.reimportFrom=await savedReimport(config,view);

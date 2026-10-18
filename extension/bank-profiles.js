@@ -14,3 +14,15 @@ export function canAttach(connections,selected,observed) {
   return observed.every(a=>selected.accounts.some(b=>sameAccount(a,b)) ||
     !connections.some(c=>c.accounts.some(b=>sameAccount(a,b))));
 }
+
+// The first payment account observed in an overview anchors a new connection.
+// Existing membership takes precedence so reordered/new cards retain its ID.
+export function automaticProfile(connections,observed,primaryAccount) {
+  const primary=observed.find(a=>a.source_key===primaryAccount);
+  if(!primary)return null;
+  const candidates=connections.filter(c=>c.accounts.some(a=>observed.some(b=>sameAccount(a,b))));
+  if(candidates.length===1)return candidates[0];
+  if(candidates.length>1)return null;
+  return connections.find(c=>c.profile_key==='account-v1:'+primaryAccount) ||
+    {profile_key:'account-v1:'+primaryAccount,profile_identity:'bank'};
+}

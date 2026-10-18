@@ -342,3 +342,26 @@ Validation: Docker passed 52 unit tests, 12 browser tests (2 integration modules
 skipped in the standalone image), and 3 focused real-backend integration tests
 for ZIP migration and separate/shared bank connections. All data was synthetic.
 The native popup screenshot confirmed the setup layout without overflow.
+
+
+## October 18, 2026 — Current connection heading and owner names
+
+The popup shows the resolved connection name with an accessible pencil button.
+The manual selector is hidden when account membership resolves the connection.
+BIDV's rendered sidebar owner-name element was inspected on the live Accounts
+page; VietinBank's existing validated account label supplies its owner name.
+New connection names use these fields when available. Existing labels and IDs
+remain unchanged. Names are not unique login identifiers and never silently
+merge separate connections. The user chose the primary account number as the identifier. New automatic
+connections use a bank-scoped deterministic primary-account key. Existing account
+membership preserves legacy IDs and metadata; mixed known/new overview accounts
+join only a single unambiguous connection. Unknown BIDV detail-only accounts still
+need the Accounts overview, and shared primary accounts remain ambiguous.
+VietinBank only exposes the selected account, so a previously unseen additional
+account cannot be automatically grouped with another account based on name alone.
+
+Validation: final Docker checks passed 54 unit and 13 browser tests (2 expected
+standalone integration-module skips). Four focused Docker integration checks
+passed for two BIDV logins, shared-account delivery preservation, name drafts, and
+heading/rename persistence. Live BIDV inspection verified only the rendered owner
+name and account overview; no real capture, sync, or backend update was performed.

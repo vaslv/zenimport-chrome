@@ -9,7 +9,7 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
   };
   const close=async()=>{mode=null;$('profile-form').hidden=true;await chrome.storage.session.remove('bankProfileDraft');};
   async function edit(next) {
-    mode=next;$('profile-name').value=next==='rename'?view.connection.label:bankName(view.bank)+' '+(view.connections.length+1);
+    mode=next;$('profile-name').value=next==='rename'?view.connection.label:(view.ownerName || bankName(view.bank)+' '+(view.connections.length+1));
     $('save-profile').textContent=next==='rename'?'Save name':'Add connection';
     $('profile-form').hidden=false;$('bank-profile-settings').open=true;
     await draft();$('profile-name').focus();
@@ -40,7 +40,9 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
   }
   async function render(current) {
     view=current;
-    $('profile-picker').hidden=!view;
+    $('current-connection').hidden=!view?.connection;
+    $('connection-name').textContent=view?.connection?.label || '';
+    $('profile-picker').hidden=!view?.selectionRequired;
     $('bank-profile-settings').hidden=!view;
     if(!view)return;
     const select=$('bank-profile');select.replaceChildren();

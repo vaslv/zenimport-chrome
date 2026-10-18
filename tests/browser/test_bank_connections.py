@@ -39,11 +39,12 @@ def test_two_bidv_logins_keep_accounts_ignored_choices_targets_and_sync_history_
         # A different bank login has never-before-seen accounts. No automatic
         # discovery write may append them to the Personal connection.
         bank.goto(ORIGIN+'/tai-khoan?multi&fixtureLogin=b');bank.bring_to_front();popup.reload()
-        expect(popup.locator('#status')).to_contain_text('Choose a connection')
+        expect(popup.locator('.account')).to_have_count(2)
+        expect(popup.locator('#profile-picker')).to_be_hidden()
         expect(popup.locator('#sync')).to_be_disabled();expect(popup.locator('#last-sync')).to_be_hidden()
         with storage.transaction(path,read_only=True) as db:
-            assert db.execute('SELECT count(*) FROM bank_accounts').fetchone()[0]==2
-        profile_form(popup,'Work');second=popup.locator('#bank-profile').input_value()
+            assert db.execute('SELECT count(*) FROM bank_accounts').fetchone()[0]==4
+        profile_form(popup,'Work',rename=True);second=popup.locator('#bank-profile').input_value()
         assert first!=second
         account(popup,SECOND,'87654321');account(popup,'ignored','99990000')
         start_sync(popup,bank,worker);finish(popup,worker)
@@ -55,8 +56,8 @@ def test_two_bidv_logins_keep_accounts_ignored_choices_targets_and_sync_history_
         assert set(worker.evaluate("async()=>Object.keys((await chrome.storage.local.get('syncHistory')).syncHistory)"))==expected_history_keys
         # Selecting the other saved profile while still signed into Work fails
         # without changing either connection's membership or sending anything.
-        popup.locator('#bank-profile').select_option(first)
-        expect(popup.locator('#status')).to_contain_text('another connection')
+        reply=popup.evaluate("async key=>chrome.runtime.sendMessage({type:'select-bank-connection',profileKey:key})",first)
+        assert reply=={'ok':False,'error':'bank_connection_changed'}
         expect(popup.locator('#bank-profile')).to_have_value(second)
 
         bank.goto(ORIGIN+'/tai-khoan?multi&fixtureLogin=a');bank.bring_to_front();popup.reload()

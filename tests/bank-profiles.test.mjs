@@ -1,6 +1,6 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {resolveProfile,canAttach} from '../extension/bank-profiles.js';
+import {resolveProfile,canAttach,automaticProfile} from '../extension/bank-profiles.js';
 const account=source_key=>({source_key,currency:'VND'});
 const profile=(profile_key,...names)=>({profile_key,accounts:names.map(account)});
 
@@ -23,4 +23,15 @@ test('manual association can add unknown accounts but cannot steal known account
   assert.equal(canAttach([a,b],a,[account('new')]),true);
   assert.equal(canAttach([a,b],a,[account('one'),account('new')]),true);
   assert.equal(canAttach([a,b],a,[account('two')]),false);
+});
+
+test('primary account automatically anchors a new connection and preserves existing membership',()=>{
+  const a=profile('legacy-id','one'),b=profile('other-id','two');
+  assert.equal(automaticProfile([a,b],[account('one'),account('new')],'one'),a);
+  assert.equal(automaticProfile([a,b],[account('new'),account('one')],'new'),a);
+  assert.deepEqual(automaticProfile([a],[account('two')],'two'),{profile_key:'account-v1:two',profile_identity:'bank'});
+  assert.equal(automaticProfile([a,b],[account('one'),account('two')],'one'),null);
+  assert.equal(automaticProfile([a],[account('new')],null),null);
+  const unlinked={profile_key:'account-v1:one',profile_identity:'bank',accounts:[]};
+  assert.equal(automaticProfile([unlinked],[account('one')],'one'),unlinked);
 });

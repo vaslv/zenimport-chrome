@@ -8,6 +8,7 @@
 </head>
 <body><main>
   <header><h1>ZenImport</h1><span id="bank"></span></header>
+  <div id="current-connection" hidden><strong id="connection-name"></strong><button id="rename-profile" class="icon-button" type="button" aria-label="Rename bank connection" title="Rename bank connection"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path d="m15 5 4 4M4 20l4-1L20 7a2.8 2.8 0 0 0-4-4L4 15z"/></svg></button></div>
   <label id="profile-picker" hidden>Bank connection<select id="bank-profile" aria-label="Bank connection"></select></label>
   <button id="sync" class="primary" type="button" disabled>Synchronize</button>
   <p id="last-sync" class="muted" hidden></p>
@@ -30,7 +31,7 @@
     </details>
     <details id="bank-profile-settings" class="settings-section" hidden><summary>Bank connections</summary>
       <p class="muted">Sign in on the bank website. Choose a saved connection for that login, or add another one. Bank passwords are never stored here.</p>
-      <div class="shortcuts"><button id="add-profile" type="button">Add connection</button><button id="rename-profile" type="button">Rename</button></div>
+      <div class="shortcuts"><button id="add-profile" type="button">Add connection</button></div>
       <form id="profile-form" hidden>
         <label>Connection name<input id="profile-name" maxlength="120" autocomplete="off" required></label>
         <div class="shortcuts"><button id="save-profile" type="submit">Add connection</button><button id="cancel-profile" type="button">Cancel</button></div>

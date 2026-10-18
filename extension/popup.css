@@ -62,3 +62,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 .account-status, .migration-status { margin: 8px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 
 #discrepancies { width: 100%; margin: 0 0 16px; }
+
+#current-connection { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+#connection-name { min-width: 0; overflow-wrap: anywhere; }
+.icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; }

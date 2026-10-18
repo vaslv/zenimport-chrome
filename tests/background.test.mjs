@@ -94,7 +94,7 @@ test('failure recovery completes before a queued token repair can change configu
 });
 
 async function bankProfiles(t,{lostCreateAck=false}={}) {
-  const records=[{id:'connection-a',bank:'vietinbank',profile_key:'profile-a',profile_identity:'user_selected',label:'Personal',
+  const records=[{id:'connection-a',bank:'bidv',profile_key:'profile-a',profile_identity:'user_selected',label:'Personal',
     accounts_complete:false,accounts:[{id:'account-a',source_key:'12345678',currency:'VND'}]}];
   const live={account:'12345678'};let loses=lostCreateAck;
   const f=await fixture(t,{...pausedCapture(),phase:'complete'},{fetcher:async(url,options)=>{
@@ -111,17 +111,17 @@ async function bankProfiles(t,{lostCreateAck=false}={}) {
     }
     throw Error('Unexpected endpoint '+url);
   }});
-  chrome.tabs.query=async()=>[{id:42,url:'https://ipay.vietinbank.vn/payment-history?accountNo='+live.account}];
-  chrome.scripting={executeScript:async()=>[{documentId:'fixture-document',result:{account:live.account,accounts_complete:false,
+  chrome.tabs.query=async()=>[{id:42,url:'https://smartbanking.bidv.com.vn/tai-khoan'}];
+  chrome.scripting={executeScript:async()=>[{documentId:'fixture-document',result:{account:null,accounts_complete:false,
     accounts:[{source_key:live.account,identity_scope:'bank',currency:'VND',scale:0,supported:true}]}}]};
   return {...f,records,live};
 }
 test('new login never silently appends its accounts to the last connection',async t=>{
   const f=await bankProfiles(t);assert.equal((await f.send({type:'inspect'})).connection.id,'connection-a');
   f.live.account='87654321';const result=await f.send({type:'inspect'});
-  assert.equal(result.selectionRequired,true);assert.equal(result.connection,null);
+  assert.equal(result.selectionRequired,false);assert.equal(result.connection.profile_key,'account-v1:87654321');
   assert.deepEqual(f.records[0].accounts.map(a=>a.source_key),['12345678']);
-  assert.deepEqual(await f.send({type:'start',connectionId:'connection-a'}),{ok:false,error:'bank_connection_required'});
+  assert.deepEqual(await f.send({type:'start',connectionId:'connection-a'}),{ok:false,error:'bank_connection_changed'});
   assert.ok(!f.calls.some(c=>c.url.endsWith('/jobs')));
 });
 test('named creation retries the same profile after a lost ACK, then automatically matches the right login',async t=>{
@@ -135,10 +135,10 @@ test('named creation retries the same profile after a lost ACK, then automatical
   assert.deepEqual(await f.send({type:'start',connectionId:'connection-a'}),{ok:false,error:'bank_connection_changed'});
   assert.ok(!f.calls.some(c=>c.url.endsWith('/jobs')));
 });
-test('unknown account needs an explicit existing-connection association and a running job prevents switching',async t=>{
+test('automatic new connection cannot be attached to another login and a running job prevents switching',async t=>{
   const f=await bankProfiles(t);f.live.account='87654321';
-  assert.equal((await f.send({type:'inspect'})).connection,null);
-  assert.equal((await f.send({type:'select-bank-connection',profileKey:'profile-a'})).connection.accounts.length,2);
+  assert.equal((await f.send({type:'inspect'})).connection.profile_key,'account-v1:87654321');
+  assert.deepEqual(await f.send({type:'select-bank-connection',profileKey:'profile-a'}),{ok:false,error:'bank_connection_changed'});
   f.local.capture.phase='paused';
   assert.deepEqual(await f.send({type:'create-bank-connection',label:'Other'}),{ok:false,error:'account_busy'});
   assert.deepEqual(await f.send({type:'select-bank-connection',profileKey:'profile-a'}),{ok:false,error:'account_busy'});
@@ -164,4 +164,14 @@ test('lost creation ACK cannot merge a later login into its pending connection',
   assert.equal(f.records.length,3);
   assert.deepEqual(f.records.find(c=>c.profile_key===pending).accounts.map(a=>a.source_key),['87654321']);
   assert.deepEqual(other.connection.accounts.map(a=>a.source_key),['11112222']);
+});
+
+test('automatic primary-account creation survives a lost response without creating another connection',async t=>{
+  const f=await bankProfiles(t,{lostCreateAck:true});f.live.account='87654321';
+  assert.equal((await f.send({type:'inspect'})).ok,false);
+  const result=await f.send({type:'inspect'});
+  assert.equal(result.connection.profile_key,'account-v1:87654321');
+  assert.equal(f.records.length,2);
+  f.live.account='12345678';assert.equal((await f.send({type:'inspect'})).connection.id,'connection-a');
+  f.live.account='87654321';assert.equal((await f.send({type:'inspect'})).connection.id,result.connection.id);
 });

@@ -89,7 +89,7 @@ def test_native_action_popup_keeps_intrinsic_width():
             return result['result']
         expression="""(() => {
             const fits=id=>{const e=document.getElementById(id);return e.scrollWidth<=e.clientWidth};
-            return {ready:document.getElementById('connection-settings').open,width:innerWidth,
+            return {ready:document.getElementById('connection-settings').open,width:innerWidth,contentWidth:document.body.getBoundingClientRect().width,
                 fits:document.documentElement.scrollWidth<=innerWidth&&fits('sync')&&fits('refresh-accounts'),
                 input:document.getElementById('url').getBoundingClientRect().width};
         })()"""
@@ -98,7 +98,8 @@ def test_native_action_popup_keeps_intrinsic_width():
             if layout.get('ready'):break
             bank.wait_for_timeout(50)
         assert layout.get('ready'),layout
-        assert layout['width']==390,layout
+        assert layout['contentWidth']==390,layout
+        assert 0<=layout['width']-layout['contentWidth']<=20,layout # Native scrollbar may add width.
         assert layout['fits'],layout
         assert layout['input']>=340,layout
         if Path('/results').is_dir():
@@ -368,3 +369,22 @@ def test_bank_connection_name_draft_survives_popup_closure_and_saves_once():
         expect(popup.locator('#bank-profile option:checked')).to_have_text('Second bank login')
         assert len(service.connections)==2
         assert not [c for c in service.calls if c[:2]==('POST','/api/v1/jobs')]
+
+
+def test_current_connection_heading_and_pencil_preserve_identity():
+    service=PopupBackend()
+    with http_server(service) as url,sync_playwright() as p,installed(p,url) as (_,worker,bank,popup,_):
+        connect(popup,bank,url)
+        expect(popup.locator('#connection-name')).to_have_text('TEST')
+        expect(popup.locator('#profile-picker')).to_be_hidden()
+        first=popup.locator('#bank-profile').input_value()
+        popup.get_by_role('button',name='Rename bank connection',exact=True).click()
+        popup.locator('#profile-name').fill('Personal account')
+        popup.locator('#save-profile').click()
+        expect(popup.locator('#connection-name')).to_have_text('Personal account')
+        popup.reload()
+        expect(popup.locator('#connection-name')).to_have_text('Personal account')
+        assert popup.locator('#bank-profile').input_value()==first
+        assert len(service.connections)==1
+        assert not [c for c in service.calls if c[:2]==('POST','/api/v1/jobs')]
+        if Path('/results').is_dir():popup.screenshot(path='/results/popup-connection-heading.png',full_page=True)
