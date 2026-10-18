@@ -21,8 +21,8 @@ const messages={
   capture_context_changed:'The page or account has changed. Synchronize again.',validation_error:'Check the selected accounts and date.',
   migration_paused:'This server is paused after export. Import the archive on the new server, or resume this server in Data migration.',
   migration_busy:'A server operation is in progress. Try again shortly.',
-  bank_connection_required:'Choose a connection for the open bank session, or add a new one in Bank connections.',
-  bank_connection_changed:'The bank session belongs to another connection. Refresh and choose the correct connection before synchronizing.',
+  bank_connection_required:'Open the bank account overview to detect the current connection.',
+  bank_connection_changed:'The bank session belongs to another connection. Reopen the popup to detect the current connection before synchronizing.',
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
 const showError=error=>{

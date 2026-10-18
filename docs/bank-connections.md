@@ -18,26 +18,27 @@ to 0.2.1 before using this feature. The existing SDK is unchanged.
 5. Sign out of the bank and sign into another login. Open its payment-account
    overview and reopen ZenImport. An unknown primary account automatically creates
    a separate connection, initially without any enabled import mappings.
-6. Returning to a known set of accounts resolves the previous connection. Existing
-   connection IDs, names, settings and history are retained. A manual selector is
-   shown only when multiple saved connections make the observed accounts ambiguous.
+6. Returning to known accounts resolves their previous connection. Existing
+   connection IDs, names, settings and history are retained. There is no connection
+   selector or manual Add connection form. The pencil edits the heading in place;
+   its checkmark or Enter saves the name, and Escape cancels. A private rename
+   draft survives popup closure only for the same server and detected connection.
 
-The connector supplies the initial anchor: BIDV uses the first rendered VND
-payment account on its Accounts overview. VietinBank currently exposes only the
-selected account, so it retains membership-based matching and explicit association
-for new accounts rather than treating every selected account as a primary one. The server scopes
-that number by bank. A new automatic profile key is `account-v1:<account number>`.
-Returning accounts resolve their existing membership before a new key is used,
-so reordered cards and legacy random profile keys do not reset connections. An
-Accounts overview containing known and newly opened accounts can attach the new
-accounts to its single existing connection. If the same overview spans multiple
-saved connections, explicit selection is required rather than guessing.
+BIDV's overview supplies the first rendered VND payment account as an initial
+anchor. If only one payment account is exposed (including VietinBank history or
+BIDV detail pages), that observed account anchors a new connection. The server
+scopes the number by bank: `account-v1:<account number>`. Known memberships take
+precedence so existing settings and delivery receipts survive the UI change.
 
-BIDV history alone exposes no primary-account overview: for an unseen account,
-open Accounts first. VietinBank still exposes only the selected account; a newly
-seen second account cannot be inferred to belong to the same login from a name.
-Two logins sharing the same primary account cannot be distinguished automatically
-by that account alone. Explicit connections remain available for these cases.
+When all observed accounts belong to a saved connection, it is reused. An overview
+with known and new accounts reuses its sole matching connection. If multiple legacy
+connections overlap, an eligible previous selection is preferred; otherwise the
+anchor account's connection is selected deterministically (automatic key first,
+then sorted profile key). A previously unseen account without a shared overview
+creates a separate connection, not an inferred association based on owner name.
+Two bank logins sharing the same primary account cannot be distinguished by this
+method alone. Physical-account settings and delivery history remain canonical,
+so separate connection records never authorize duplicate transaction delivery.
 
 Owner names are display labels, never matching keys. BIDV exposes the name in
 `.sidebar-account--owner-name`; VietinBank exposes it in the selected account label.

@@ -66,3 +66,5 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 #current-connection { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
 #connection-name { min-width: 0; overflow-wrap: anywhere; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; }
+
+#current-connection #profile-name { flex: 1; width: 0; margin: 0; }

@@ -204,7 +204,7 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.locator('.account-status')).to_be_visible()
         expect(popup.locator('.account-status')).to_contain_text('Saving account')
         expect(popup.locator('.account select')).to_be_disabled()
-        expect(popup.locator('#bank-profile')).to_be_disabled()
+        expect(popup.locator('#rename-profile')).to_be_disabled()
         expect(popup.locator('#sync')).to_be_disabled()
         assert service.started.is_set()
         if Path('/results').is_dir():popup.screenshot(path='/results/account-saving.png')
@@ -349,25 +349,23 @@ def test_bank_connection_name_draft_survives_popup_closure_and_saves_once():
     service=PopupBackend()
     with http_server(service) as url,sync_playwright() as p,installed(p,url) as (context,worker,bank,popup,identifier):
         connect(popup,bank,url)
-        expect(popup.locator('.account')).to_have_count(1)
-        first=popup.locator('#bank-profile').input_value()
-        popup.locator('#bank-profile-settings').evaluate('(e)=>e.open=true')
-        popup.locator('#add-profile').click()
-        popup.locator('#profile-name').fill('Second bank login')
+        expect(popup.locator('#connection-name')).to_have_text('TEST')
+        first=next(iter(service.connections))
+        popup.get_by_role('button',name='Rename connection',exact=True).click()
+        expect(popup.locator('#connection-name')).to_be_hidden()
+        popup.locator('#profile-name').fill('Personal login')
         popup.close()
         popup=context.new_page();popup.goto(f'chrome-extension://{identifier}/popup.html');bank.bring_to_front()
-        expect(popup.locator('#profile-form')).to_be_visible()
-        expect(popup.locator('#profile-name')).to_have_value('Second bank login')
-        popup.locator('#save-profile').click()
-        expect(popup.locator('#status')).to_contain_text('Bank connection saved')
-        expect(popup.locator('#bank-profile option:checked')).to_have_text('Second bank login')
-        assert popup.locator('#bank-profile').input_value()!=first
-        assert len(service.connections)==2 and len(service.accounts)==1
+        expect(popup.locator('#profile-name')).to_be_visible()
+        expect(popup.locator('#profile-name')).to_have_value('Personal login')
+        popup.get_by_role('button',name='Save connection name',exact=True).click()
+        expect(popup.locator('#connection-name')).to_have_text('Personal login')
+        expect(popup.locator('#profile-name')).to_be_hidden()
+        assert list(service.connections)==[first] and len(service.accounts)==1
         assert not worker.evaluate("async()=> (await chrome.storage.session.get('bankProfileDraft')).bankProfileDraft")
         popup.reload()
-        expect(popup.locator('#profile-form')).to_be_hidden()
-        expect(popup.locator('#bank-profile option:checked')).to_have_text('Second bank login')
-        assert len(service.connections)==2
+        expect(popup.locator('#connection-name')).to_have_text('Personal login')
+        expect(popup.locator('#profile-name')).to_be_hidden()
         assert not [c for c in service.calls if c[:2]==('POST','/api/v1/jobs')]
 
 
@@ -376,15 +374,20 @@ def test_current_connection_heading_and_pencil_preserve_identity():
     with http_server(service) as url,sync_playwright() as p,installed(p,url) as (_,worker,bank,popup,_):
         connect(popup,bank,url)
         expect(popup.locator('#connection-name')).to_have_text('TEST')
-        expect(popup.locator('#profile-picker')).to_be_hidden()
-        first=popup.locator('#bank-profile').input_value()
-        popup.get_by_role('button',name='Rename bank connection',exact=True).click()
+        expect(popup.locator('#profile-picker,#bank-profile-settings,#add-profile,#profile-form')).to_have_count(0)
+        first=next(iter(service.connections))
+        popup.get_by_role('button',name='Rename connection',exact=True).click()
+        popup.locator('#profile-name').fill('Unsaved name')
+        popup.locator('#profile-name').press('Escape')
+        expect(popup.locator('#connection-name')).to_be_visible()
+        expect(popup.locator('#connection-name')).to_have_text('TEST')
+        popup.get_by_role('button',name='Rename connection',exact=True).click()
         popup.locator('#profile-name').fill('Personal account')
-        popup.locator('#save-profile').click()
+        if Path('/results').is_dir():popup.screenshot(path='/results/popup-inline-name-edit.png',full_page=True)
+        popup.locator('#profile-name').press('Enter')
         expect(popup.locator('#connection-name')).to_have_text('Personal account')
         popup.reload()
         expect(popup.locator('#connection-name')).to_have_text('Personal account')
-        assert popup.locator('#bank-profile').input_value()==first
-        assert len(service.connections)==1
+        assert list(service.connections)==[first]
         assert not [c for c in service.calls if c[:2]==('POST','/api/v1/jobs')]
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-connection-heading.png',full_page=True)

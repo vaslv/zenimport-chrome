@@ -30,8 +30,8 @@ test('primary account automatically anchors a new connection and preserves exist
   assert.equal(automaticProfile([a,b],[account('one'),account('new')],'one'),a);
   assert.equal(automaticProfile([a,b],[account('new'),account('one')],'new'),a);
   assert.deepEqual(automaticProfile([a],[account('two')],'two'),{profile_key:'account-v1:two',profile_identity:'bank'});
-  assert.equal(automaticProfile([a,b],[account('one'),account('two')],'one'),null);
-  assert.equal(automaticProfile([a],[account('new')],null),null);
+  assert.equal(automaticProfile([a,b],[account('one'),account('two')],'one'),a);
+  assert.deepEqual(automaticProfile([a],[account('new')],null),{profile_key:'account-v1:new',profile_identity:'bank'});
   const unlinked={profile_key:'account-v1:one',profile_identity:'bank',accounts:[]};
   assert.equal(automaticProfile([unlinked],[account('one')],'one'),unlinked);
 });

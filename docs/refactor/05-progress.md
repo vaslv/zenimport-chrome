@@ -365,3 +365,21 @@ standalone integration-module skips). Four focused Docker integration checks
 passed for two BIDV logins, shared-account delivery preservation, name drafts, and
 heading/rename persistence. Live BIDV inspection verified only the rendered owner
 name and account overview; no real capture, sync, or backend update was performed.
+
+
+## October 18, 2026 — Inline rename and automatic connections only
+
+Removed the bank connection selector, management disclosure, and create/name
+forms. The current heading becomes an input when its pencil is clicked; the
+same button becomes a checkmark. Enter saves, Escape cancels, failed saves retain
+the draft, and private drafts survive reopening only in the same context.
+All supported discoveries automatically resolve or create a connection, including
+single-account pages. Legacy overlapping memberships resolve deterministically.
+Account mappings, server configuration, and migration remain separate features.
+No production server/data, synchronization, push, tag or release was changed.
+
+Validation: Docker passed 54 unit tests, 13 standalone browser tests (2 expected
+integration-module skips), and all 27 backend/browser integration tests. The
+legacy multi-account fixture now explicitly seeds its prior membership through
+the retained compatibility RPC rather than using the removed manual UI. Native
+heading/edit screenshots were inspected. Only synthetic data was used.

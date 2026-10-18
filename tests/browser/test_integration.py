@@ -87,14 +87,9 @@ def account(popup,target,source="12345678"):
     expect(popup.locator('#status')).to_contain_text('Account saved')
 
 def refresh_accounts(popup):
-    profile=popup.locator('#bank-profile').input_value()
     popup.locator('#refresh-accounts').click()
     expect(popup.locator('#status')).not_to_contain_text('Loading account settings')
-    # These fixture visits intentionally add another account of the SAME login.
-    # A new account must now be explicitly associated, never silently merged.
-    if not popup.locator('#bank-profile').input_value() and profile:
-        popup.locator('#bank-profile').select_option(profile)
-        expect(popup.locator('#status')).to_contain_text('Bank connection saved')
+
 
 def state(worker):return worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
 
@@ -158,14 +153,20 @@ def test_popup_zip_export_switch_import_and_no_duplicate_or_restored_deletion(tm
             storage.check_integrity(db)
 
 
-def test_two_accounts_ignored_prediction_unread_repeat_mobile_delete_and_backfill(tmp_path):
+def test_existing_multi_account_connection_prediction_unread_repeat_mobile_delete_and_backfill(tmp_path):
     bank_api=Bank()
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (context,worker,bank,popup,identifier):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
-        # Add selected accounts on successive visits; accounts_complete stays false.
-        bank.goto(ORIGIN+'/payment-history?accountNo=87654321');bank.bring_to_front();refresh_accounts(popup)
+        # Seed a legacy multi-account connection through the retained RPC, not UI.
+        # New single-account pages now create connections automatically; existing
+        # memberships must still retain multi-account capture and delivery behavior.
+        legacy_profile=popup.evaluate("async()=> (await chrome.storage.local.get('view')).view.connection.profile_key")
+        def seed_membership():
+            result=popup.evaluate("async key=>chrome.runtime.sendMessage({type:'select-bank-connection',profileKey:key})",legacy_profile)
+            assert result['ok']
+        bank.goto(ORIGIN+'/payment-history?accountNo=87654321');bank.bring_to_front();seed_membership();refresh_accounts(popup)
         expect(popup.locator('.account')).to_have_count(2);account(popup,SECOND,"87654321")
-        bank.goto(ORIGIN+'/payment-history?accountNo=11112222');bank.bring_to_front();refresh_accounts(popup)
+        bank.goto(ORIGIN+'/payment-history?accountNo=11112222');bank.bring_to_front();seed_membership();refresh_accounts(popup)
         expect(popup.locator('.account')).to_have_count(3);account(popup,'ignored',"11112222")
         with storage.transaction(path,read_only=True) as db:
             identifier_a=db.execute("SELECT id FROM bank_accounts WHERE source_key='12345678'").fetchone()[0]

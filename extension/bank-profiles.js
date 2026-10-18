@@ -18,11 +18,15 @@ export function canAttach(connections,selected,observed) {
 // The first payment account observed in an overview anchors a new connection.
 // Existing membership takes precedence so reordered/new cards retain its ID.
 export function automaticProfile(connections,observed,primaryAccount) {
-  const primary=observed.find(a=>a.source_key===primaryAccount);
+  const primary=observed.find(a=>a.source_key===primaryAccount) || observed[0];
+  primaryAccount=primary?.source_key;
   if(!primary)return null;
   const candidates=connections.filter(c=>c.accounts.some(a=>observed.some(b=>sameAccount(a,b))));
   if(candidates.length===1)return candidates[0];
-  if(candidates.length>1)return null;
+  if(candidates.length>1) {
+    const anchored=candidates.filter(c=>c.accounts.some(a=>sameAccount(a,primary)));
+    if(anchored.length)return anchored.find(c=>c.profile_key==='account-v1:'+primaryAccount) || [...anchored].sort((a,b)=>a.profile_key.localeCompare(b.profile_key))[0];
+  }
   return connections.find(c=>c.profile_key==='account-v1:'+primaryAccount) ||
     {profile_key:'account-v1:'+primaryAccount,profile_identity:'bank'};
 }
