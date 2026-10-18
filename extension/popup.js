@@ -166,7 +166,7 @@ async function refreshData() {
     if(!view.connection){$('accounts').replaceChildren();status(messages.bank_connection_required);return;}
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
-    if(pending){status('Select the accounts to import.');}
+    if(pending){$('account-settings').open=true;status('Select the accounts to import.');}
     else if(!capture)status(view.connection.accounts.some(a=>a.selection==='enabled' && a.supported)?'Ready to synchronize.':messages.account_disabled);
     else progress(capture);
   } catch(error){await profiles.render(null);showError(error);}finally{$('refresh-accounts').disabled=false;$('accounts').inert=false;updateButton();}

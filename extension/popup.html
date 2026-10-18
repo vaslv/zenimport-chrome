@@ -32,11 +32,11 @@
       <p id="migration-status" class="migration-status" role="status" aria-live="polite"></p>
       <button id="migration-resume" type="button" hidden>Resume this server</button>
     </details>
-    <section id="account-settings" class="settings-section" hidden>
-      <h2>Bank accounts</h2>
+    <details id="account-settings" class="settings-section" hidden>
+      <summary>Bank accounts</summary>
       <section id="accounts" aria-label="Account mapping"></section>
       <button id="refresh-accounts" type="button">Refresh account list</button>
-    </section>
+    </details>
     <section id="history-settings" class="settings-section" hidden>
       <label>One-time history import start date<input id="reimport" type="date" aria-describedby="reimport-hint"></label>
       <p id="reimport-hint" class="muted">Optional. Applies to the next synchronization.</p>

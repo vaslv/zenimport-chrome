@@ -394,3 +394,10 @@ outline SVGs and bundled their MIT notice.
 Validation: the targeted Docker browser test passed, including exact button
 bounds before/after editing and right-edge alignment. Inspected both screenshots
 and rebuilt the unpacked extension and ZIP. No real bank data or publication.
+
+## 2026-10-18 — Simplify popup sections
+
+Made Bank accounts a disclosure, initially collapsed unless account setup is
+required. Removed section/account dividers and spaced Unlink account below Save
+account. Rebuilt the extension; the targeted Docker popup test passed and the
+rendered screenshot was checked. No production data or publication changed.
