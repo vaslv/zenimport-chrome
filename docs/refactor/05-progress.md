@@ -415,3 +415,16 @@ Validation: 54 Docker unit tests and two isolated BIDV browser tests passed.
 The regression fixture rejects direct detail navigation and verifies the card
 transition; preparation preserves the existing document. No live synchronization
 or ZenMoney writes were performed. Extension artifacts rebuilt locally.
+
+## 2026-10-18 — Put synchronization period below its action
+
+Moved the one-time history start date into a collapsed Synchronization period
+section directly below Synchronize. The date defaults to 30 days ago; shared
+30 days / 6 months shortcuts match initial account setup, with custom dates
+available through the same date input. Pending requests retain their date;
+successful completion resets the next date to 30 days ago. Empty/future dates
+are rejected, and period controls are locked during an active capture.
+
+Validation: the targeted Docker popup test passed for the default date, both
+shortcuts, custom date entry, account setup and collapsed state. Inspected the
+screenshot, rebuilt local artifacts, and checked the diff. No live data sent.

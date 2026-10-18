@@ -31,6 +31,18 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         assert popup.locator('.account input[type=date]').input_value()==first_date
         popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
+        period=popup.locator('#history-settings')
+        expect(period).not_to_have_attribute('open','')
+        expect(popup.locator('#reimport')).to_have_value('2026-09-16')
+        period.locator('summary').click()
+        period.get_by_role('button',name='6 months',exact=True).click()
+        expect(popup.locator('#reimport')).to_have_value('2026-04-16')
+        period.get_by_role('button',name='30 days',exact=True).click()
+        expect(popup.locator('#reimport')).to_have_value('2026-09-16')
+        popup.locator('#reimport').fill('2026-08-01')
+        expect(popup.locator('#reimport')).to_have_value('2026-08-01')
+        if Path('/results').is_dir():popup.screenshot(path='/results/popup-sync-period.png',full_page=True)
+        period.locator('summary').click()
         expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         popup.set_viewport_size({'width':390,'height':700})
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-settings.png',full_page=True)
@@ -44,7 +56,7 @@ def test_popup_setup_keyboard_dates_and_no_bank_ui():
         assert not [call for call in service.calls if call[1]=='/api/v1/jobs']
         # The content world cannot read backend configuration.
         assert worker.evaluate("async()=>{const [{result}]=await chrome.scripting.executeScript({target:{tabId:(await chrome.tabs.query({url:'https://ipay.vietinbank.vn/*'}))[0].id},func:async()=>{try{return await chrome.storage.local.get('config')}catch{return {denied:true}}}});return !result?.config}")
-        popup.reload();bank.bring_to_front();popup.locator('#refresh-accounts').click()
+        popup.reload();bank.bring_to_front();popup.locator('#account-settings > summary').click();popup.locator('#refresh-accounts').click()
         expect(popup.locator('.account select')).to_have_value('target-vnd')
         popup.locator('.account select').select_option('ignored');popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_disabled()

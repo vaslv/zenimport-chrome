@@ -54,6 +54,7 @@ function updateButton() {
   $('stop-paused').hidden=capture?.phase!=='paused';$('stop-paused').disabled=working;
   const locked=working || ['planned','collecting','paused'].includes(capture?.phase);
   profiles.update(locked);
+  for(const control of $('history-settings').querySelectorAll('input,button'))control.disabled=locked;
   for(const e of $('accounts').querySelectorAll('.unlink-account'))e.disabled=locked;
 }
 function progress(state) {
@@ -87,6 +88,13 @@ function accountNeedsSetup(account) {
     (!account.supported || !account.import_start || !catalog.some(item=>item.id===account.zenmoney_account_id && item.currency===account.currency));
 }
 function dateInput(value) {return node('input','',{type:'date',value,max:today(),required:true});}
+function addDateShortcuts(container,date) {
+  for(const [text,value] of [['30 days',()=>daysAgo(30)],['6 months',()=>monthsAgo(6)]]) {
+    const button=node('button',text,{type:'button'});
+    button.addEventListener('click',()=>{date.value=value();date.dispatchEvent(new Event('input',{bubbles:true}));});
+    container.append(button);
+  }
+}
 function accountForm(account) {
   const saved=!accountNeedsSetup(account);
   let saving=false;
@@ -102,10 +110,7 @@ function accountForm(account) {
   if(!account.supported){form.append(node('p',account.unsupported_reason));target.value='ignored';}
   const label=node('label','Import into ZenMoney account');label.append(target);form.append(label);
   const date=dateInput(account.import_start || daysAgo(30)), dateLabel=node('label','Initial import start date');dateLabel.append(date);form.append(dateLabel);
-  const shortcuts=node('div','',{className:'shortcuts'});
-  for(const [text,value] of [['30 days',()=>daysAgo(30)],['6 months',()=>monthsAgo(6)]]){
-    const button=node('button',text,{type:'button'});button.addEventListener('click',()=>{date.value=value();date.dispatchEvent(new Event('input',{bubbles:true}));});shortcuts.append(button);
-  }
+  const shortcuts=node('div','',{className:'shortcuts'});addDateShortcuts(shortcuts,date);
   const syncFields=()=>{const enabled=target.value && target.value!=='ignored';date.disabled=!enabled;dateLabel.hidden=!enabled;shortcuts.hidden=!enabled;};
   target.addEventListener('change',syncFields);syncFields();form.append(shortcuts);
   const save=node('button',saved?'Saved':'Save account',{type:'submit',disabled:saved});
@@ -162,7 +167,7 @@ async function refreshData() {
     view=await rpc({type:'inspect'});compatible=!!view.connection;renderLastSync(view.lastSyncedAt);
     $('bank').textContent=({vietinbank:'VietinBank',bidv:'BIDV'})[view.bank] || view.bank;
     await profiles.render(view);
-    $('reimport').value=view.reimportFrom || '';reimportSaved=$('reimport').value;
+    $('reimport').value=view.reimportFrom || daysAgo(30);reimportSaved=view.reimportFrom || '';
     if(!view.connection){$('accounts').replaceChildren();status(messages.bank_connection_required);return;}
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
@@ -197,6 +202,7 @@ $('stop-paused').addEventListener('click',async()=>{
   catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('reimport').max=today();
+addDateShortcuts($('history-shortcuts'),$('reimport'));
 $('sync').addEventListener('click',async()=>{
   busy=true;updateButton();
   try {
@@ -205,7 +211,7 @@ $('sync').addEventListener('click',async()=>{
       // Request only this bank, from the explicit click, not broad HTTPS access.
       if(!view?.origin || !await chrome.permissions.request({origins:[view.origin]}))throw Object.assign(Error(),{code:'unsupported_bank'});
       const date=$('reimport').value;
-      if(date && (!validDate(date) || date>today()))throw Object.assign(Error(),{code:'validation_error'});
+      if(!validDate(date) || date>today())throw Object.assign(Error(),{code:'validation_error'});
       await rpc({type:'reimport',date,connectionId:view.connection.id});
       reimportSaved=date;
       status('Starting synchronization…','loading');await rpc({type:'start',connectionId:view.connection.id});
@@ -217,7 +223,7 @@ try {
  const [state,{connectionDraft}]=await Promise.all([rpc({type:'status'}),chrome.storage.session.get('connectionDraft')]);
  configured=state.configured;
  if(!connectionEdited){$('url').value=connectionDraft?.url ?? state.url;$('token').value=connectionDraft?.token ?? '';}
- $('reimport').value=state.reimportFrom;
+ $('reimport').value=state.reimportFrom || daysAgo(30);
  reimportSaved=state.reimportFrom;
  connectionDraftPending=connectionEdited || !!connectionDraft;
  $('connection-settings').open=!state.configured || connectionDraftPending;
@@ -228,7 +234,7 @@ try {
 setInterval(async()=>{
  try{const state=await rpc({type:'status'});const same=state.view?.connection?.id===view?.connection?.id;renderLastSync(compatible && same?state.lastSyncedAt:null);if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
   if(same){
-    if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value='';
+    if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value=daysAgo(30);
     reimportSaved=state.reimportFrom;
   }
  }catch{}
