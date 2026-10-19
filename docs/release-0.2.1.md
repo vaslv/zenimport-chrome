@@ -1,7 +1,11 @@
 # Chrome 0.2.1 — release preparation
 
-Status: prepared locally, not published. The last published release is 0.2.0.
-No Git tags, GitHub releases, pushes or Chrome Web Store submissions were made.
+Published on October 19, 2026: [GitHub Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.1).
+Tag v0.2.1 points to `3226f9d5bacf9a2a334dd07da6bfd4fb6abf05c7`.
+[Source CI](https://github.com/vaslv/zenimport-chrome/actions/runs/39260275455) and
+[tag CI](https://github.com/vaslv/zenimport-chrome/actions/runs/39260573207) passed.
+The CI artifact and downloaded public ZIP/SHA256SUMS are byte-identical to the
+local verified build. No Chrome Web Store submission was made.
 
 ## Changes and requirements
 

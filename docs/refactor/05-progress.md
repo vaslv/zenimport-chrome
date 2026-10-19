@@ -510,3 +510,12 @@ narrow screenshots; rebuilt local extension artifacts. No push or publication.
   remains PyPI 0.7.0. Private test logs are excluded in .local/release-0.2.1/.
 - Production data/services were unchanged. No push, tags, releases or registry
   publication. Non-fatal upstream Starlette/httpx deprecation remains visible.
+
+## 2026-10-19 — Publish Chrome 0.2.1
+
+Authorized main/tag pushes and GitHub Release completed at source 3226f9d.
+Source CI 39260275455 and tag CI 39260573207 passed. CI archive and downloaded
+public assets are byte-identical to the locally tested ZIP and SHA256SUMS.
+The SHA256 remains df9b4009e41821eed75d0b20c8eda51c9e803c0764e5071d8e60f2333ecf1751.
+Backend GHCR native acceptance passed before final verification. No Chrome Web
+Store submission, production deployment or financial-data changes occurred.

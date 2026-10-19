@@ -1,6 +1,6 @@
 # BIDV payment-account connector
 
-Status: **0.2.1, local/unreleased**. Requires ZenImportBackend 0.2.1 or newer;
+Status: **0.2.1, published**. Requires ZenImportBackend 0.2.1 or newer;
 backend 0.2.0 does not accept BIDV discovery. No new permissions are requested
 until the user clicks Synchronize for BIDV.
 

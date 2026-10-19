@@ -1,9 +1,9 @@
 # Publishing ZenImport Chrome on GitHub
 
 Repository: https://github.com/vaslv/zenimport-chrome. MIT license.
-Version 0.2.0 is published as a GitHub Release with ZIP and SHA256SUMS; no Chrome
-Web Store publication. [Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.0).
-Next prepared release: [0.2.1](release-0.2.1.md), not yet published.
+Version 0.2.1 is published as a GitHub Release with ZIP and SHA256SUMS; no Chrome
+Web Store publication. [Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.1).
+[Verified publication: 0.2.1](release-0.2.1.md).
 Local origin points to the created repository; its original license is preserved.
 
 ```sh

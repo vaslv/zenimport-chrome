@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.1 — prepared, unpublished
+## 0.2.1 — 2026-10-19
 
 - Add BIDV VND payment-account capture, with bounded date windows and strict
   completeness checks, filter verification, and unchanged-row narrowing support.

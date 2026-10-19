@@ -1,8 +1,6 @@
 # Install and update ZenImport Chrome
 
-These instructions describe prepared **0.2.1**, which is not yet published.
-Use them after its release, or with the locally built 0.2.1 ZIP. The latest
-published release remains 0.2.0. See [release status](release-0.2.1.md).
+These instructions describe published **0.2.1**. See [release status](release-0.2.1.md).
 
 ## Requirements
 
@@ -12,8 +10,7 @@ published release remains 0.2.0. See [release status](release-0.2.1.md).
 - An authenticated VietinBank VND current-account history or BIDV English VND
   payment-account page.
 
-The planned backend image is `ghcr.io/vaslv/zenimport-backend:0.2.1`; wait for
-publication before using this registry reference.
+The published backend image is `ghcr.io/vaslv/zenimport-backend:0.2.1`.
 Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.1.md)
 for Docker configuration, HTTPS, persistent data, and backups. A remote backend
 requires HTTPS with a certificate trusted by Chrome. Local HTTP is allowed for
