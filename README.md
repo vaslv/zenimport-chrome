@@ -1,9 +1,9 @@
 # ZenImport Chrome
 
-Local development **0.2.1** adds [BIDV VND payment-account history](docs/bidv.md) and
+Prepared release **0.2.1** adds [BIDV VND payment-account history](docs/bidv.md) and
 [named connections for multiple bank logins](docs/bank-connections.md).
 It requires backend 0.2.1+ and is not yet published; the latest published release
-below remains 0.2.0. Complete live BIDV synchronization acceptance is still pending.
+below remains 0.2.0. See [release notes and preparation checks](docs/release-0.2.1.md).
 
 Version **0.2.0** adds **Data migration**: export one ZIP, connect to a new
 backend, and import before its first sync. Requires backend 0.2.0+; not included
@@ -33,7 +33,7 @@ Open history for the desired bank login/account. The popup shows the detected co
 
 Synchronize authorizes capture and delivery of all missing transactions for configured accounts. The server adds only confidently known categories; every new record has viewed=false. Mobile changes/deletions are final. Pausing/closing the tab preserves pages; to resume, reopen history and click again. Stop capture does not undo sent records or revoke delivery of authorized complete intervals.
 
-For a one-time older import, set its start date before clicking. It clears after complete capture. Ordinary synchronization uses the server's previous complete boundary with a 14-day overlap rather than rereading all history.
+Expand **Synchronization period** below Synchronize to select 30 days, six months, or a custom start date. Repeat synchronization defaults to 30 days. The first import uses the start date saved for each account unless you explicitly change the synchronization period. The backend retains its previous-complete-boundary policy with a 14-day overlap for clients that do not request a period.
 
 Chrome 0.1.8 capture/delivery was verified against actual VietinBank; results are in the [acceptance log](docs/refactor/05-progress.md). Mobile New-tab, edit, and deletion checks remain separately deferred. Automated tests use only synthetic banks, ZenMoney, and databases.
 
@@ -51,7 +51,7 @@ Server connection and Data migration are independent sections with always-visibl
 
 Below Synchronize, the popup shows the last successful synchronization's local date/time and elapsed time. It requires confirmed complete capture and ZenMoney delivery; incomplete/failed attempts do not change the timestamp. Private extension local storage retains it separately for each server/bank connection. It is recorded at the worker's first success confirmation and refreshes in an open popup. Older versions did not store timestamps, so no approximate date is reconstructed: the row appears after the next successful synchronization on 0.1.6. Clearing extension data removes this local marker.
 
-On a bank page, the menu offers **Discrepancies**. It opens a separate extension tab listing potentially extra ZenMoney records grouped by bank date/account. Select period/account; Refresh obtains current ZenMoney data. Only fully captured bank days are checked; the report warns during capture/delivery. Unmatched records are review candidates; edit/delete them in mobile ZenMoney. The page neither sends transactions, stores links, nor injects bank UI. Requires backend GET `/api/v1/connections/{id}/discrepancies` (added October 16). Automatic categories are unchanged.
+On a bank page, the menu offers **Discrepancies**. It opens a separate extension tab listing unmatched bank records and potentially extra ZenMoney records grouped by bank date/account. Select period/account; Refresh obtains current ZenMoney data. Only fully captured bank days are checked; pending or failed delivery does not block reporting on already captured complete days. Unmatched records are review candidates; edit/delete them in mobile ZenMoney. The page neither sends transactions, stores links, nor injects bank UI. Requires backend GET `/api/v1/connections/{id}/discrepancies` (added October 16). Automatic categories are unchanged.
 
 Separate extension server-switch/HTTPS validation:
 [scripts/test-server-migration.sh](scripts/test-server-migration.sh),

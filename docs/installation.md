@@ -1,30 +1,32 @@
 # Install and update ZenImport Chrome
 
-The instructions below describe published 0.2.0. Local development 0.2.1 also
-supports [named connections for multiple bank logins](bank-connections.md) and
-[BIDV](bidv.md); those features require backend 0.2.1.
+These instructions describe prepared **0.2.1**, which is not yet published.
+Use them after its release, or with the locally built 0.2.1 ZIP. The latest
+published release remains 0.2.0. See [release status](release-0.2.1.md).
 
 ## Requirements
 
 - Desktop Google Chrome 120 or newer with permission to load unpacked extensions.
-- ZenImportBackend 0.2.0, API v1, running at an address this computer can reach.
+- ZenImportBackend 0.2.1 or newer, API v1, running at an address this computer can reach.
 - The backend's `API_TOKEN`. The ZenMoney token is configured on the server only.
-- An authenticated VietinBank session with VND current-account transaction history open.
+- An authenticated VietinBank VND current-account history or BIDV English VND
+  payment-account page.
 
-The release backend image is `ghcr.io/vaslv/zenimport-backend:0.2.0`.
-Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.0.md)
+The planned backend image is `ghcr.io/vaslv/zenimport-backend:0.2.1`; wait for
+publication before using this registry reference.
+Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.1.md)
 for Docker configuration, HTTPS, persistent data, and backups. A remote backend
 requires HTTPS with a certificate trusted by Chrome. Local HTTP is allowed for
 `http://localhost:18792` and `http://127.0.0.1:18792`.
 
-Only the VietinBank connector above has live bank acceptance. Other banks and
-currencies are not supported by this release. This is a GitHub ZIP distribution,
+VietinBank and [BIDV](bidv.md) VND are supported within their documented
+verification boundaries. Other banks and currencies are not supported. This is a GitHub ZIP distribution,
 not a Chrome Web Store installation; managed browsers may prohibit Developer mode.
 
 ## Download and install
 
 1. Open [Releases](https://github.com/vaslv/zenimport-chrome/releases) and download
-   `zenimport-chrome-0.2.0.zip` and `SHA256SUMS` from the same release.
+   `zenimport-chrome-0.2.1.zip` and `SHA256SUMS` from the same release.
 2. Verify the ZIP before extraction. On macOS, run the following from the directory
    containing both files:
 
@@ -46,9 +48,9 @@ The steps follow Chrome's [unpacked extension instructions](https://developer.ch
 
 ## Configure and synchronize
 
-1. Sign in to VietinBank yourself and open transaction history for the desired
+1. Sign in to the supported bank yourself and open transaction history for the desired
    account. The extension does not log in or extend an expired bank session.
-2. Open ZenImport's popup. Expand **Settings → Connection** (**Server connection** in 0.2.1) if necessary. Enter the
+2. Open ZenImport's popup. Expand **Server connection** if necessary. Enter the
    backend's root address, such as `https://your-server.example`, and its
    **Server token** (`API_TOKEN`). Do not append `/api/v1` to the address.
 3. Click **Connect** and approve Chrome's request for access to that server.
@@ -66,15 +68,16 @@ The steps follow Chrome's [unpacked extension instructions](https://developer.ch
    with `viewed=false`; only confidently predicted categories are prefilled.
    This release does not provide transaction editing in the bank website.
 
-The popup displays progress and the last successful synchronization time. Ordinary
-synchronization resumes from the previous complete boundary with a 14-day overlap;
-it does not reread the entire initial period every time. For an older one-time
-import, set **One-time history import start date** before synchronizing.
+The popup displays progress and the last successful synchronization time. The first
+import uses the saved account dates. Subsequent runs default to 30 days. Expand
+**Synchronization period** to explicitly select 30 days, six months or a custom
+start date; an explicit selection also overrides initial account dates.
 
 If capture pauses, reopen the bank history and use **Synchronize** to resume.
 **Stop capture** stops further reading; it does not undo records already sent or
 revoke delivery of previously authorized complete intervals. **Discrepancies**
-opens a read-only report of potentially extra ZenMoney records for covered days.
+opens a read-only report of unmatched bank and ZenMoney records for covered days.
+A failed delivery does not block this report.
 Resolve financial edits in ZenMoney.
 
 ## Update without losing settings
@@ -97,7 +100,7 @@ session draft and is cleared by extension reload. Updates from GitHub are manual
 
 ## Switch backends safely
 
-Extension/backend 0.2.0 add a browser-driven move using **Settings → Data migration**:
+Extension/backend 0.2.0 add a browser-driven move using **Data migration**:
 [export/import instructions](data-migration.md). These buttons are not included in
 the earlier 0.1.9 ZIP or 0.1.0 backend image. The snapshot guidance below also applies
 when using the manual backend procedure.
@@ -121,7 +124,8 @@ before choosing a cutover method.
 - Session expired: sign in on the bank website again and reopen history. The
   extension neither handles bank passwords nor prevents automatic logout.
 - Report does not prove equality: only completely captured bank days are checked;
-  coverage and pending delivery warnings must be considered.
+  coverage warnings must be considered. Delivery failures do not block the report
+  for complete bank days in 0.2.1.
 
 Read [PRIVACY.md](../PRIVACY.md) for stored data and deletion behavior. Automated
 release checks use synthetic bank/ZenMoney data, isolated databases, and a separate

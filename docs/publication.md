@@ -3,6 +3,7 @@
 Repository: https://github.com/vaslv/zenimport-chrome. MIT license.
 Version 0.2.0 is published as a GitHub Release with ZIP and SHA256SUMS; no Chrome
 Web Store publication. [Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.0).
+Next prepared release: [0.2.1](release-0.2.1.md), not yet published.
 Local origin points to the created repository; its original license is preserved.
 
 ```sh
@@ -11,7 +12,7 @@ python3 scripts/build.py
 ```
 
 Load `dist/extension/` through chrome://extensions in Developer mode.
-`dist/zenimport-chrome-0.2.0.zip` contains only extension sources, LICENSE, and
+`dist/zenimport-chrome-0.2.1.zip` contains only extension sources, LICENSE, and
 PRIVACY.md; it excludes server settings, .env, test data, logs, SQLite, and local
 browser profiles. Builds are reproducible: ZIP file ordering/timestamps are fixed,
 and the build writes `dist/SHA256SUMS` and prints SHA256. Verify it with

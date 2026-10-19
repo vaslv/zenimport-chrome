@@ -488,3 +488,25 @@ Validation: two Docker browser/integration report tests passed against fixtures
 and the updated backend, including mobile correction refresh, safe text rendering,
 source labels, account filters and no financial writes. Inspected desktop and
 narrow screenshots; rebuilt local extension artifacts. No push or publication.
+
+## 2026-10-19 — Prepare Chrome 0.2.1 for publication
+
+- Retained version 0.2.1 and documented BIDV, automatic connections, compact popup,
+  independent two-sided discrepancies, and backend-first upgrade instructions.
+- Release review found and fixed a default 30-day override truncating initial
+  six-month imports. Explicit periods still override; repeat imports use 30 days.
+- Removed the ineffective popup Unlink action; automatic discovery reattached the
+  account immediately. Do not import persists across discovery/shared connections.
+- Updated browser tests to expand collapsed sections before interacting. An initial
+  parallel run also saw Chromium exit with SIGSEGV before page setup; the final
+  isolated complete run passed without retries or weakened assertions.
+- Docker: 54 unit tests; 14 independent browser tests with two expected backend-only
+  skips; all 30 joint real-backend/fake-ZenMoney browser tests passed. Checks include
+  server ZIP migration, repeated delivery, mobile deletion, BIDV navigation and
+  filtering, interrupted capture, initial dates, explicit override and repeat dates.
+- Workflow lint and tracked-source secret scan passed. ZIP rebuilt twice with
+  identical SHA256 df9b4009e41821eed75d0b20c8eda51c9e803c0764e5071d8e60f2333ecf1751;
+  28 packaged files, no settings/data/test files. Backend 463f12c was used; SDK
+  remains PyPI 0.7.0. Private test logs are excluded in .local/release-0.2.1/.
+- Production data/services were unchanged. No push, tags, releases or registry
+  publication. Non-fatal upstream Starlette/httpx deprecation remains visible.

@@ -9,7 +9,7 @@ until the user clicks Synchronize for BIDV.
 1. Sign in to `https://smartbanking.bidv.com.vn` yourself and select English.
 2. Open Accounts (`/tai-khoan`) or a VND payment account
    (`/tai-khoan/thanh-toan/<account-number>`).
-3. Open ZenImport, select or [add a named bank connection](bank-connections.md),
+3. Open ZenImport, check the [automatically detected connection](bank-connections.md),
    map each discovered account to its ZenMoney account, and choose
    the first import date. The default is 30 days; six months/custom dates are
    available within the bank's rolling one-calendar-year limit.
@@ -53,12 +53,13 @@ start/end request numbers and HTTP status. It never reads request/response bodie
 headers, passwords, cookies, OTPs, browser storage, or authentication objects. It
 does not issue bank requests. The isolated driver uses ordinary DOM controls only.
 
-Capture requires a fresh completed request, a changed table after applying filters,
+Capture requires a fresh completed request and confirmed filters. Narrowing an already
+loaded range may keep identical rows; widening requires a table update. It also requires
 an unchanged account/document, the All tab, empty search, and the bank's explicit
 terminal/empty marker outside transaction text. Appended pages must preserve their
 existing prefix. Concurrent shared-endpoint activity, malformed/duplicate postings,
 missing terminal markers, login expiry, or user input aborts capture without claiming
-complete coverage. A business error with HTTP 200 and stale rows cannot complete it.
+complete coverage. HTTP status alone is not proof of complete history.
 There is no injected product UI and no session keepalive.
 
 ## Verification boundary
@@ -72,7 +73,9 @@ the user. No real bank data was uploaded to a backend or ZenMoney during develop
 Docker checks use a sanitized synthetic BIDV UI, installed production extension
 scripts, real backend HTTP/SQLite, and fake ZenMoney. They cover empty/full periods,
 large pagination, transport boundaries, malformed duplicate identities, stale UI,
-repeated sync, and mobile deletion. A complete live run of the new connector and
-actual ZenMoney delivery remain separate acceptance steps; fixture tests do not
-establish those results. English UI labels or bank markup may change in the future;
+repeated sync, and mobile deletion. Subsequent live capture and transfer recovery are recorded separately in the
+backend progress log (October 19): completed BIDV jobs and zero discrepancies over
+185 covered days after recovery, with no new remote records from recovery. This
+does not certify every bank UI path or both real logins; fixture tests do not
+establish those live results. English UI labels or bank markup may change in the future;
 the connector then fails capture rather than guessing.

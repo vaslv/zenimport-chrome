@@ -57,10 +57,10 @@ that capture without authorizing a new synchronization.
 Two logins can expose the same physical bank account. Its canonical identity,
 ZenMoney mapping, import choice/start date, coverage, and delivery/deletion journal
 are shared. It cannot be imported twice by merely creating another connection.
-Changes to that account's import settings apply to all its connections. To remove
-access from one connection only, use **Unlink account** there; keep the account
-available on another connection. Unlinking preserves bank history, sent UUIDs,
-deletions, and mappings. Rediscovery can attach it again without resetting history.
+Changes to that account's import settings apply to all its connections. Select
+**Do not import** and save to stop importing a physical account; rediscovery keeps
+that choice. The popup has no Unlink button because the open bank page would
+immediately rediscover the account. History and delivery/deletion receipts remain.
 
 Names and unfinished name drafts stay in private extension contexts. Drafts are
 scoped to the server, bank, and observed physical accounts, so changing bank logins
@@ -79,7 +79,7 @@ new schema-7 archives require the new backend and cannot be imported by 0.2.0.
 
 Docker tests cover two synthetic BIDV logins with two accounts each, separate
 ZenMoney targets/ignored accounts and sync timestamps, returning to the first login,
-repeated capture, shared physical-account delivery, mobile deletion, unlinking,
+repeated capture, shared physical-account delivery, mobile deletion, persisted exclusion,
 popup name drafts, lost responses, stale start commands, and migration. These are
 not a live acceptance of both real BIDV logins; no production records or credentials
 were used. No product controls or keepalive are injected into the bank page.
