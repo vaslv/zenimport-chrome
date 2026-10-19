@@ -38,7 +38,7 @@ function renderLastSync(value=lastSyncedAt) {
   element.hidden=!time;
   element.textContent=time ? `Last synchronized: ${time.date} · ${time.ago}.` : '';
 }
-let connectionDraftPending=false;
+let connectionDraftPending=false,periodEdited=false;
 let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='',migrationPaused=false;
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
 function updateButton() {
@@ -55,7 +55,6 @@ function updateButton() {
   const locked=working || ['planned','collecting','paused'].includes(capture?.phase);
   profiles.update(locked);
   for(const control of $('history-settings').querySelectorAll('input,button'))control.disabled=locked;
-  for(const e of $('accounts').querySelectorAll('.unlink-account'))e.disabled=locked;
 }
 function progress(state) {
   capture=state;updateButton();
@@ -145,14 +144,7 @@ function accountForm(account) {
       saving=false;busy=false;for(const control of controls)control.disabled=false;syncFields();save.textContent='Save account';updateButton();
     }
   });
-  const unlink=node('button','Unlink account',{type:'button',className:'unlink-account'});
-  unlink.addEventListener('click',async()=>{
-    busy=true;updateButton();status('Unlinking account…','loading');
-    try {await rpc({type:'unlink-bank-account',connectionId:view.connection.id,accountId:account.id});await refresh();status('Account unlinked. History and sent transactions were kept.','success');}
-    catch(error){showError(error);}finally{busy=false;updateButton();}
-  });
-  form.append(unlink);
-  if(view.connections.some(c=>c.id!==view.connection.id && c.accounts.some(a=>a.id===account.id)))form.append(node('p','Shared account: the ZenMoney mapping and import choice apply to all connections. Unlink it here to keep importing through another connection.',{className:'muted'}));
+  if(view.connections.some(c=>c.id!==view.connection.id && c.accounts.some(a=>a.id===account.id)))form.append(node('p','Shared account: the ZenMoney mapping and import choice apply to all connections.',{className:'muted'}));
   return form;
 }
 function renderAccounts() {
@@ -172,7 +164,7 @@ async function refreshData() {
     view=await rpc({type:'inspect'});compatible=!!view.connection;renderLastSync(view.lastSyncedAt);
     $('bank').textContent=({vietinbank:'VietinBank',bidv:'BIDV'})[view.bank] || view.bank;
     await profiles.render(view);
-    $('reimport').value=view.reimportFrom || daysAgo(30);reimportSaved=view.reimportFrom || '';
+    $('reimport').value=view.reimportFrom || daysAgo(30);reimportSaved=view.reimportFrom || '';periodEdited=false;
     if(!view.connection){$('accounts').replaceChildren();status(messages.bank_connection_required);return;}
     const result=await rpc({type:'catalog'});catalog=result.accounts;renderAccounts();
     const pending=view.connection.accounts.some(accountNeedsSetup);
@@ -207,6 +199,7 @@ $('stop-paused').addEventListener('click',async()=>{
   catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('reimport').max=today();
+$('reimport').addEventListener('input',()=>{periodEdited=true;});
 addDateShortcuts($('history-shortcuts'),$('reimport'));
 $('sync').addEventListener('click',async()=>{
   busy=true;updateButton();
@@ -217,8 +210,11 @@ $('sync').addEventListener('click',async()=>{
       if(!view?.origin || !await chrome.permissions.request({origins:[view.origin]}))throw Object.assign(Error(),{code:'unsupported_bank'});
       const date=$('reimport').value;
       if(!validDate(date) || date>today())throw Object.assign(Error(),{code:'validation_error'});
-      await rpc({type:'reimport',date,connectionId:view.connection.id});
-      reimportSaved=date;
+      // An untouched 30-day display must not truncate a configured initial import.
+      const initial=view.connection.accounts.some(a=>a.selection==='enabled' && a.supported && !a.last_complete_end);
+      const requested=initial && !periodEdited && !reimportSaved ? '' : date;
+      await rpc({type:'reimport',date:requested,connectionId:view.connection.id});
+      reimportSaved=requested;
       status('Starting synchronization…','loading');await rpc({type:'start',connectionId:view.connection.id});
     }
     const state=await rpc({type:'status'});progress(state.capture);await migration.refresh();

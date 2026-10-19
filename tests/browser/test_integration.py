@@ -200,6 +200,7 @@ def test_existing_multi_account_connection_prediction_unread_repeat_mobile_delet
         edited=created[0]['id'];deleted=created[1]['id']
         remote.transactions[edited].update(viewed=True,tag=['category-b'],comment='Mobile edit')
         del remote.transactions[deleted];remote.deletions.append({'object':'transaction','id':deleted})
+        popup.locator('#history-settings > summary').click()
         popup.locator('#reimport').fill('2026-09-01')
         start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
@@ -388,3 +389,40 @@ def test_bidv_widening_with_stale_ui_never_marks_coverage_complete(tmp_path):
         expect(popup.locator('#sync')).to_have_text('Stop capture')
         popup.locator('#sync').click()
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='cancelled')
+
+
+@pytest.mark.parametrize('override', [None, '2026-09-01'])
+def test_initial_import_period_and_repeated_thirty_day_default(tmp_path, override):
+    bank_api=Bank()
+    with service(tmp_path) as (url,path,remote,_), sync_playwright() as p, installed(p,url,bank_api) as (_,worker,bank,popup,_):
+        connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1)
+        form=popup.locator('.account')
+        form.locator('select').select_option(TARGET)
+        form.get_by_role('button',name='6 months',exact=True).click()
+        expect(form.locator('input[type=date]')).to_have_value('2026-04-16')
+        form.get_by_role('button',name='Save account',exact=True).click()
+        expect(popup.locator('#sync')).to_be_enabled()
+        # Reopening must preserve the configured initial import, although the
+        # optional repeat-period selector displays its usual 30-day default.
+        popup.reload();bank.bring_to_front();expect(popup.locator('#sync')).to_be_enabled()
+        expect(popup.locator('#reimport')).to_have_value('2026-09-16')
+        if override:
+            popup.locator('#history-settings > summary').click()
+            popup.locator('#reimport').fill(override)
+        start_sync(popup,bank,worker)
+        current=state(worker)
+        assert current['command']['reimport_from']==override
+        intervals=current['job']['accounts'][0]['intervals']
+        assert min(i['period']['start'] for i in intervals)==(override or '2026-04-16')
+        pump_until(popup,worker,lambda:state(worker).get('job',{}).get('delivery_state')=='complete',timeout=60)
+        assert sum(map(len,remote.writes))==3
+        if override is None:
+            # Once initial coverage is complete, repeated synchronization keeps
+            # the agreed 30-day default rather than repeating six months.
+            popup.reload();bank.bring_to_front();expect(popup.locator('#sync')).to_be_enabled()
+            start_sync(popup,bank,worker)
+            current=state(worker)
+            assert current['command']['reimport_from']=='2026-09-16'
+            assert min(i['period']['start'] for i in current['job']['accounts'][0]['intervals'])=='2026-09-16'
+            pump_until(popup,worker,lambda:state(worker).get('job',{}).get('delivery_state')=='complete')
+            assert sum(map(len,remote.writes))==3

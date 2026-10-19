@@ -233,6 +233,7 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.locator('.account-status')).to_have_attribute('data-tone','success')
         popup.reload()
         expect(popup.locator('#sync')).to_be_enabled()
+        popup.locator('#account-settings > summary').click()
         expect(popup.get_by_role('button',name='Saved',exact=True)).to_be_disabled()
         popup.locator('.account input[type=date]').fill('2026-04-16')
         expect(popup.get_by_role('button',name='Save account',exact=True)).to_be_enabled()
