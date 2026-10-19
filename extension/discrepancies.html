@@ -4,7 +4,7 @@
 <title>Discrepancies · ZenImport</title><link rel="stylesheet" href="discrepancies.css"></head>
 <body><main>
 <header><span>ZenImport</span><h1>Discrepancies <span id="bank"></span></h1>
-<p>Potential extra ZenMoney transactions on days with complete bank history. Edit or delete transactions in the ZenMoney app.</p></header>
+<p>Unmatched bank and ZenMoney transactions on days with complete bank history. Comparison uses account, date and signed amount, including transfer legs. Correct transactions in the ZenMoney app, then refresh. Delivery status does not block this report.</p></header>
 <form id="filters"><label>Account<select id="account"><option value="">All bank accounts</option></select></label>
 <label>From<input id="from" type="date" required></label><label>To<input id="to" type="date" required></label>
 <button id="refresh" type="submit">Refresh</button></form>

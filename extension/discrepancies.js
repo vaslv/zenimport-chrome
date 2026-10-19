@@ -16,7 +16,7 @@ function render(data){
  $('from').value=data.from_date;$('to').value=data.to_date;
  $('freshness').textContent='ZenMoney: '+new Intl.DateTimeFormat('en-GB',{dateStyle:'long',timeStyle:'short'}).format(new Date(data.refreshed_at))+'. Bank history is from the latest extension capture.';
  const warnings={shared_target:'This ZenMoney account is linked to multiple bank accounts; verification is unavailable.',
-  sync_in_progress:'Synchronization is still running. Refresh the report when it finishes.',account_unavailable:'The mapped ZenMoney account is unavailable or its currency has changed.',
+  sync_in_progress:'This server version blocks comparison during synchronization. Update the backend to compare saved history independently of delivery.',account_unavailable:'The mapped ZenMoney account is unavailable or its currency has changed.',
   unsupported_movement:'Some transactions use another currency and are excluded from comparison.'};
  $('coverage').replaceChildren();
  for(const account of data.accounts){
@@ -25,21 +25,27 @@ function render(data){
   const line=node('p',account.title+' · '+account.zenmoney_title+' — '+text,{className:'coverage'});
   line.dataset.warning=String(!!warning || account.unchecked_days>0);$('coverage').append(line);
  }
- const count=data.days.reduce((total,day)=>total+day.operations.length,0), checked=data.accounts.some(a=>a.checked_days>0);
- $('summary').textContent=count?`Potential extra transactions: ${count} · days: ${new Set(data.days.map(day=>day.date)).size}`:
-  checked?'No extra transactions were found on the checked days.':data.accounts.some(a=>a.status==='ready')?
+ const bankCount=data.days.reduce((total,day)=>total+(day.bank_operations || []).length,0);
+ const zenCount=data.days.reduce((total,day)=>total+day.operations.length,0), checked=data.accounts.some(a=>a.checked_days>0);
+ $('summary').textContent=bankCount+zenCount?`Without a matching counterpart — Bank: ${bankCount} · ZenMoney: ${zenCount} · days: ${new Set(data.days.map(day=>day.date)).size}`:
+  checked?'No discrepancies were found on the checked days.':data.accounts.some(a=>a.status==='ready')?
   'No days have complete bank history. Synchronize the bank and refresh the report.':'Verification is not yet available. See the reasons above.';
  for(const day of data.days){
   const account=data.accounts.find(a=>a.id===day.account_id), details=node('details','',{open:true}), summary=node('summary');
   summary.append(node('span',dateText(day.date)+' · '+account.title,{className:'day-title'}),
    node('span',`Bank: ${money(day.bank_total,account.currency)} · ZenMoney: ${money(day.zenmoney_total,account.currency)} · Difference: ${money(day.difference,account.currency)}`,{className:'totals'}));
   details.append(summary);
-  for(const operation of day.operations){
-   const row=node('article','',{className:'operation'}), description=node('div','',{className:'description'});
-   description.append(node('strong',operation.payee || operation.comment || 'No description'));
-   if(operation.payee && operation.comment)description.append(node('div',operation.comment));
-   description.append(node('div',operation.categories.filter(Boolean).join(', ') || 'Uncategorized',{className:'categories'}));
-   row.append(description,node('div',money(operation.amount,account.currency),{className:'amount'}));details.append(row);
+  for(const [source,operations] of [['bank',day.bank_operations || []],['zenmoney',day.operations]]){
+   if(!operations.length)continue;
+   details.append(node('h3',source==='bank'?'Bank — no matching ZenMoney transaction':'ZenMoney — no matching bank transaction',{className:'side-title'}));
+   for(const operation of operations){
+    const row=node('article','',{className:'operation'}), description=node('div','',{className:'description'});
+    description.append(node('strong',operation.payee || operation.comment || 'No description'));
+    if(operation.payee && operation.comment)description.append(node('div',operation.comment));
+    if(source==='zenmoney')description.append(node('div',operation.categories.filter(Boolean).join(', ') || 'Uncategorized',{className:'categories'}));
+    row.dataset.source=source;
+    row.append(description,node('div',money(operation.amount,account.currency),{className:'amount'}));details.append(row);
+   }
   }
   $('days').append(details);
  }

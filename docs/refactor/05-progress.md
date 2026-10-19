@@ -476,3 +476,15 @@ around the connection header and status. Disclosure behavior is unchanged.
 
 Validation: verified section order and shared heading styling, rebuilt the
 extension ZIP, and checked the diff. No synchronization or data changes.
+
+## 2026-10-19 — Show both sides of discrepancies
+
+The read-only report now labels and counts unmatched bank and ZenMoney records
+separately within each day. It explains account/date/signed-amount comparison and
+that delivery does not block reporting. An older server's sync_in_progress state
+now requests a backend update instead of suggesting an endless refresh loop.
+
+Validation: two Docker browser/integration report tests passed against fixtures
+and the updated backend, including mobile correction refresh, safe text rendering,
+source labels, account filters and no financial writes. Inspected desktop and
+narrow screenshots; rebuilt local extension artifacts. No push or publication.

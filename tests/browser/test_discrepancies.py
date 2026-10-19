@@ -16,6 +16,7 @@ class ReportBackend(PopupBackend):
             'accounts':[{'id':account['id'],'title':'Fixture VietinBank','currency':'VND','zenmoney_title':'Fixture VND',
                 'status':'ready','checked_days':15,'unchecked_days':1}],
             'days':[{'date':'2026-10-15','account_id':account['id'],'bank_total':'-100','zenmoney_total':'-200','difference':'-100',
+                'bank_operations':[{'id':'missing','amount':'-75','payee':'','comment':'Bank-only fixture','categories':[],'created':None}],
                 'operations':[{'id':'extra','amount':'-100','payee':'<img src=x onerror="window.pwned=1">',
                     'comment':'Additional transaction','categories':['Groceries'],'created':1792040000}]}]}
 
@@ -30,10 +31,12 @@ def test_popup_opens_read_only_bank_scoped_report_and_safe_responsive_page():
         expect(popup.locator('#discrepancies')).to_be_enabled()
         with context.expect_page() as opened:popup.locator('#discrepancies').click()
         page=opened.value
-        expect(page.locator('#summary')).to_contain_text('Potential extra transactions: 1')
+        expect(page.locator('#summary')).to_contain_text('Bank: 1 · ZenMoney: 1')
         assert urlsplit(page.url).query=='connection='+service.connection_id
         expect(page.locator('.day-title')).to_contain_text('15 October 2026')
-        expect(page.locator('.operation')).to_have_count(1)
+        expect(page.locator('.operation')).to_have_count(2)
+        expect(page.locator('[data-source=bank]')).to_contain_text('Bank-only fixture')
+        expect(page.locator('[data-source=zenmoney]')).to_contain_text('Additional transaction')
         expect(page.locator('.totals')).to_contain_text('Difference: −100 VND')
         expect(page.locator('.coverage')).to_contain_text('Days without complete bank history: 1')
         assert page.locator('img').count()==0 and page.evaluate('window.pwned') is None
@@ -58,4 +61,4 @@ def test_popup_opens_read_only_bank_scoped_report_and_safe_responsive_page():
         expect(page.locator('#status')).to_have_attribute('data-tone','error')
         expect(page.locator('.operation')).to_have_count(0)
         service.fail=False;page.reload()
-        expect(page.locator('.operation')).to_have_count(1)
+        expect(page.locator('.operation')).to_have_count(2)

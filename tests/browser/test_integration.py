@@ -327,7 +327,7 @@ def test_discrepancy_page_reads_actual_backend_and_refreshes_mobile_deletion(tmp
         del remote.transactions['unlinked-extra']
         remote.deletions.append({'object':'transaction','id':'unlinked-extra'})
         page.locator('#refresh').click()
-        expect(page.locator('#summary')).to_contain_text('extra transactions were found')
+        expect(page.locator('#summary')).to_contain_text('No discrepancies were found')
         assert len(remote.writes)==writes
 
 
