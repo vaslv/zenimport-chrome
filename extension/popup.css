@@ -8,7 +8,7 @@
 * { box-sizing: border-box; }
 body { margin: 0; width: 390px; min-width: 390px; background: #fff; }
 main { padding: 20px; }
-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
+header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
 h1 { margin: 0; font-size: 22px; line-height: 1.2; letter-spacing: -.5px; }
 #bank { min-width: 0; overflow-wrap: anywhere; color: #71717a; font-size: 12px; }
 h2 { margin: 0 0 12px; font-size: 14px; font-weight: 600; }
@@ -29,7 +29,7 @@ button:disabled { opacity: .5; cursor: default; }
 .primary:hover:not(:disabled) { background: #d9564e; }
 label { display: block; margin: 12px 0; overflow-wrap: anywhere; }
 input, select { display: block; width: 100%; margin-top: 6px; }
-#status { margin: 12px 0 18px; font-size: 13px; color: #52525b; overflow-wrap: anywhere; }
+#status { margin: 10px 0 12px; font-size: 13px; color: #52525b; overflow-wrap: anywhere; }
 #status:empty { display: none; }
 #status[data-tone="error"], :is(.account-status,.migration-status)[data-tone="error"] { color: #b42318; }
 #status[data-tone="success"], :is(.account-status,.migration-status)[data-tone="success"] { color: #167347; }
@@ -41,8 +41,8 @@ input, select { display: block; width: 100%; margin-top: 6px; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #status[data-tone="loading"]::before, :is(.account-status,.migration-status)[data-tone="loading"]::before { animation: none; } }
 summary { cursor: pointer; color: #52525b; }
-.settings-section { padding-top: 18px; }
-.settings-section + .settings-section { margin-top: 18px; }
+.settings-section { padding-top: 12px; }
+.settings-section + .settings-section { margin-top: 4px; }
 form, section { min-width: 0; }
 #connect, #refresh-accounts, .account > button { width: 100%; }
 .account { padding: 16px 0; }
@@ -57,13 +57,12 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 }
 [hidden] { display: none !important; }
 
-#connection-settings > summary { font-weight: 600; color: #24252b; }
 
 .account-status, .migration-status { margin: 8px 0 0; font-size: 13px; overflow-wrap: anywhere; }
 
-#discrepancies { width: 100%; margin: 0 0 16px; }
+#discrepancies { width: 100%; margin: 0 0 4px; }
 
-#current-connection { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-bottom: 16px; }
+#current-connection { display: flex; min-height: 44px; align-items: center; gap: 8px; margin-bottom: 10px; }
 #connection-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .icon-button { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 32px; width: 32px; height: 32px; padding: 6px; border: 0; background: transparent; }
 

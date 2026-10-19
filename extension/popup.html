@@ -24,6 +24,11 @@
   <p id="status" role="status" aria-live="polite"></p>
   <button id="stop-paused" type="button" hidden>Stop paused capture</button>
   <button id="discrepancies" type="button" disabled>Discrepancies</button>
+    <details id="account-settings" class="settings-section" hidden>
+      <summary>Bank accounts</summary>
+      <section id="accounts" aria-label="Account mapping"></section>
+      <button id="refresh-accounts" type="button">Refresh account list</button>
+    </details>
     <details id="connection-settings" class="settings-section"><summary>Server connection</summary>
     <form id="server-form">
       <label>Server address<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
@@ -37,11 +42,6 @@
       <input id="migration-file" type="file" accept=".zip,application/zip" hidden>
       <p id="migration-status" class="migration-status" role="status" aria-live="polite"></p>
       <button id="migration-resume" type="button" hidden>Resume this server</button>
-    </details>
-    <details id="account-settings" class="settings-section" hidden>
-      <summary>Bank accounts</summary>
-      <section id="accounts" aria-label="Account mapping"></section>
-      <button id="refresh-accounts" type="button">Refresh account list</button>
     </details>
 
 </main><script type="module" src="popup.js"></script></body>

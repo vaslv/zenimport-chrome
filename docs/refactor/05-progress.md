@@ -466,3 +466,13 @@ proof of the retained transaction's account side; the backend intentionally refu
 to infer it from a mutable current binding. No ownership protection was bypassed
 or historical linkage rewritten. Full live synchronization is not yet complete.
 Local artifacts rebuilt. No push, tags or publication.
+
+## 2026-10-19 — Compact popup settings layout
+
+Moved Bank accounts above Server connection and Data migration. Removed the
+server heading's special bold/dark styling so all disclosure headings share
+one appearance. Reduced spacing between sections, below Discrepancies, and
+around the connection header and status. Disclosure behavior is unchanged.
+
+Validation: verified section order and shared heading styling, rebuilt the
+extension ZIP, and checked the diff. No synchronization or data changes.
