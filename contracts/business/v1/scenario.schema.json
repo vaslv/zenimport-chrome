@@ -34,7 +34,20 @@
               "prediction.prepare",
               "report.build",
               "delivery.advance",
-              "migration.import"
+              "migration.import",
+              "money.subtract",
+              "money.sign",
+              "money.bank",
+              "money.wire",
+              "movement.signed",
+              "identity.normalize",
+              "identity.recipient",
+              "dates.calendar",
+              "dates.localDay",
+              "dates.months",
+              "wire.canonical",
+              "wire.digest",
+              "wire.roundtrip"
             ]
           }
         },

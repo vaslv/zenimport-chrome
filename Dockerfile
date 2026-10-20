@@ -7,6 +7,9 @@ FROM dependencies AS unit-tests
 COPY extension ./extension
 COPY contracts ./contracts
 COPY tests ./tests
+COPY src ./src
+COPY scripts/bundle-contracts.mjs scripts/run-business-contracts.mjs ./scripts/
+RUN node scripts/bundle-contracts.mjs
 USER node
 CMD ["node", "--test", "tests/*.test.mjs"]
 
@@ -30,10 +33,11 @@ RUN curl -fsSL https://storage.googleapis.com/chrome-for-testing-public/140.0.73
 
 FROM browser-base AS browser-tests
 COPY extension ./extension
+COPY contracts ./contracts
 COPY scripts/build.py ./scripts/build.py
 COPY --from=compiled /app/.local/bundle ./.local/bundle
 COPY --from=compiled /app/.local/probes ./.local/probes
-COPY LICENSE PRIVACY.md ./
+COPY LICENSE PRIVACY.md THIRD_PARTY_NOTICES.md ./
 RUN python scripts/build.py --compiled .local/bundle
 COPY tests/browser ./tests/browser
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1

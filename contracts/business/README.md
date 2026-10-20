@@ -42,3 +42,8 @@ Full/incremental fixture raw JSON is UTF-8 text. Plain fixture JSON carries exac
 IDs/amounts/timestamps as strings. Both runners use the fixture clock and UUID
 sequence. This contract describes application semantics; it does not duplicate
 the independent SDK API parity fixture suite.
+
+L2 implements eight pure scenarios, 500 arithmetic vectors and 6,354 normalization
+vectors in both runtimes. Stateful scenarios remain explicit unsupported cases
+until their designated stages. See docs/local-mode/behavior-contracts.md for range
+limits, exact encoding, the corrected Python precision defect and Docker commands.

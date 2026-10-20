@@ -8,6 +8,7 @@ for(const [entry,outfile] of [
   ['extension/popup.js','.local/bundle/popup.js'],
   ['extension/discrepancies.js','.local/bundle/discrepancies.js'],
   ['src/local/feasibility.ts','.local/probes/feasibility.mjs'],
+  ['src/contracts/runner.ts','.local/probes/domain.mjs'],
 ]) {
   const result=await build({entryPoints:[entry],outfile,bundle:true,platform:'browser',
     format:'esm',target:'chrome120',metafile:true,legalComments:'inline'});

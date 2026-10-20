@@ -96,8 +96,45 @@ Status: complete for the Chrome 140 candidate. Code review and Docker gates pass
 - Docker artifact build/checksum comparison and native browser checks are recorded
   under ignored `test-results/local-mode/L1/`. No production data/services changed.
 
+## L2 — common behavior and exact arithmetic
+
+Status: complete. Cross-language, native-browser and source-code review gates passed.
+
+- Added BigInt finite-decimal arithmetic, bounded bank/SDK projections, exact
+  signed transfer movements, raw/DTO codecs and structured domain failures.
+- Pinned Unicode 15 full casefold with native NFKC parity, Python whitespace and
+  code-point semantics; added calendar/offset/timezone/month-clamping helpers.
+- Both runners execute eight pure scenarios, 500 arithmetic vectors and 6,354
+  normalization vectors with identical observed results/digests. Four future
+  stateful specifications explicitly reject unsupported execution; no fake pass
+  or ignored state assertions/faults. Deterministic clock/UUID contexts are ready
+  for later stateful adapters. Shared hashes/fixture version policy are enforced.
+- The desired high-precision movement fixture failed against the old backend.
+  Fixed source arithmetic separately in backend 4f30c02; retained the independent
+  expectation. Matching, reports and reviewed cleanup now preserve exact sums.
+- Recorded limits, intentional formatter whitespace handling, prediction handling
+  for newer Unicode and future coverage in behavior-contracts.md.
+
+### Validation
+
+- `sh scripts/test-business-contracts.sh ../ZenImportBackend`: exact parity for
+  eight scenarios and all 6,854 generated vectors. Network disabled.
+- Chrome `scripts/test-docker.sh`: 69 unit tests passed; 14 standalone browser
+  tests passed, two backend-only modules skipped by design.
+- `sh scripts/test-local-runtime.sh`: eight installed-worker/native cases passed
+  per browser: Chromium 145 in 17.02s; Chrome 140 in 57.19s, zero skipped.
+- Backend `scripts/test-docker.sh`: 553 tests plus HTTP/auth, SIGKILL, graceful
+  shutdown and restored snapshot delivery passed. The final sign-only refinement
+  also passed all 553 tests in the read-only Docker test container.
+- TypeScript strict type checking, SDK browser bundling, contract copy/integrity
+  check and source baseline check passed. Review checked scale before monetary
+  normalization, exact transfer direction, astral key ordering, codec budgets,
+  unsupported stateful fixtures and the financial rounding regression.
+- Ignored evidence is under test-results/local-mode/L2/. No live API requests,
+  production data/service changes, push, tags or publication in this stage.
+
 ## Next stages
 
-L2 shared behavior harness/exact arithmetic is next.
-L2–L12 remain not started. Local financial synchronization remains inaccessible
-in the product UI until the later safety gates pass.
+L3 portable server migration and durable operations is next. L3–L12 remain not
+started. Local financial synchronization remains inaccessible in the product UI
+until the later safety gates pass.

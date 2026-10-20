@@ -538,3 +538,14 @@ the upcoming candidate selects Chrome 140 (local-mode ADR 002). One separately
 approved read from the verified test account passed; no financial writes occurred.
 Reproducible artifact evidence and remaining stages are in local-mode/progress.md.
 No production-data changes, push, tags or publication.
+
+## 2026-10-20 — Standalone extension L2
+
+Shared Python/TypeScript behavior runners agree on eight pure scenarios, 500 exact
+arithmetic vectors and 6,354 Unicode normalization vectors. Eight installed-worker
+checks pass in each supported browser. Chrome: 69 unit and 14 standalone browser
+tests; backend: 553 tests and full service/restart checks. A source precision bug
+was corrected separately in backend 4f30c02; expectations were retained. Stateful
+engine scenarios remain explicitly unimplemented until their later stages.
+See local-mode/behavior-contracts.md and progress.md. No production changes or
+publication occurred.

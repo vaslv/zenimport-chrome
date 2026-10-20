@@ -28,7 +28,7 @@ if unpacked.exists():
 shutil.copytree(source, unpacked)
 for name in entries:
     shutil.copyfile(compiled / name, unpacked / name)
-extra = [(root / name, name) for name in ('LICENSE', 'PRIVACY.md') if (root / name).is_file()]
+extra = [(root / name, name) for name in ('LICENSE', 'PRIVACY.md', 'THIRD_PARTY_NOTICES.md') if (root / name).is_file()]
 for path, name in extra:
     shutil.copyfile(path, unpacked / name)
 archive = dist / f'zenimport-chrome-{version}.zip'

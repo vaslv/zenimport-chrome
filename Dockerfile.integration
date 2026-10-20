@@ -22,7 +22,7 @@ COPY --from=backend tests/capture_factory.py tests/mirror_factory.py tests/deliv
 COPY extension ./extension
 COPY scripts/build.py ./scripts/build.py
 COPY --from=compiled /app/.local/bundle ./.local/bundle
-COPY LICENSE PRIVACY.md ./
+COPY LICENSE PRIVACY.md THIRD_PARTY_NOTICES.md ./
 RUN python scripts/build.py --compiled .local/bundle
 COPY tests/browser ./tests/browser
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app:/app/fixture_helpers
