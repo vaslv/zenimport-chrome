@@ -1,7 +1,9 @@
 FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS unit-tests
 WORKDIR /app
-COPY package.json ./
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY extension ./extension
+COPY contracts ./contracts
 COPY tests ./tests
 USER node
 CMD ["node", "--test", "tests/*.test.mjs"]

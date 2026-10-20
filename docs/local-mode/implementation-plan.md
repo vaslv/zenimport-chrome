@@ -1,6 +1,7 @@
 # Sequential implementation plan: L0–L12
 
-Status: not started. All paths below are relative to the named repository unless
+Status: authorized; see progress.md for per-stage completion and evidence.
+All paths below are relative to the named repository unless
 stated otherwise. New filenames are proposed locations, not existing code.
 
 ## Working rules for every stage

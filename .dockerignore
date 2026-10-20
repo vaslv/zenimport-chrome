@@ -1,6 +1,8 @@
 *
 !Dockerfile
 !package.json
+!package-lock.json
+!contracts/**
 !extension/**
 !scripts/build.py
 !tests/**

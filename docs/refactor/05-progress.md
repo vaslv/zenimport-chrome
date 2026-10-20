@@ -519,3 +519,11 @@ public assets are byte-identical to the locally tested ZIP and SHA256SUMS.
 The SHA256 remains df9b4009e41821eed75d0b20c8eda51c9e803c0764e5071d8e60f2333ecf1751.
 Backend GHCR native acceptance passed before final verification. No Chrome Web
 Store submission, production deployment or financial-data changes occurred.
+
+## 2026-10-20 — Standalone extension L0
+
+Frozen source-only financial contracts, all 49 tables and 21 HTTP routes.
+Backend Docker: 543 passed; Chrome: 60 unit, 14 standalone browser, 30 full
+integration tests passed. Fixed the fixture ACK race separately in 32f8628.
+See docs/local-mode/progress.md for evidence and remaining gates. No live
+financial API calls, push, tags or publication.

@@ -1,9 +1,10 @@
 # Phase 2: standalone ZenImport with an optional backend
 
-Date: 2026-10-20. Status: **REVIEWED DRAFT — ready for implementation approval**.
+Date: 2026-10-20. Status: **APPROVED — staged implementation in progress**.
 Prepared using the office-hours design workflow, building on previously approved
-product decisions. This directory contains planning only; no runtime implementation
-or live financial operation is authorized by this document.
+product decisions. The user authorized sequential implementation with checks and
+local commits on 2026-10-20. See [progress](progress.md) for completed work and gates.
+Live financial scenarios and publication still require their own authorization.
 
 ## Outcome and confirmed decisions
 
@@ -42,8 +43,8 @@ the same physical file. SQLite triggers and foreign keys must be represented by
 explicit repository operations, indexes, validation and adversarial tests in
 IndexedDB. Merely copying table names does not reproduce their protection.
 
-This is an engineering recommendation in this draft, not a previously approved
-storage-engine choice. L1 is a feasibility gate; a failed gate leads to a reviewed
+The user approved implementing this recommendation. L1 remains a feasibility gate;
+a failed gate leads to a reviewed
 ADR, not a silent reduction of guarantees.
 
 ### Alternatives considered
@@ -157,5 +158,5 @@ Push, tags, GitHub Releases, npm publication and GHCR publication require fresh
 explicit authorization for those projects/releases. The prior SDK release
 permission does not authorize publishing this phase.
 
-Next concrete step after approval: L0, pin the backend reference and enumerate
-business contracts before modifying any financial runtime.
+Execution starts at L0: pin the backend reference and enumerate business contracts
+before modifying any financial runtime. Current evidence is in progress.md.
