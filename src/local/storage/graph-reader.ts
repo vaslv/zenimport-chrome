@@ -58,20 +58,23 @@ export class StageGraphReader implements GraphReader{
       Object.keys(expected).every(key=>key==='row'||value[key]===expected[key]),'storage_corrupt');
     return unpackRow(table,value.row);
   }
-  async *rows<K extends TableName>(table:K):AsyncIterable<RowByTable[K]>{
+  async *rows<K extends TableName>(table:K,primaryPrefix:readonly Scalar[]=[]):AsyncIterable<RowByTable[K]>{
     const expected=this.#manifest.tables.find(item=>item.name===table);requireStorage(expected!==undefined,'schema_unsupported');
-    const scanner=new TableScanner(table,async()=>{});let after:string|null=null;
+    requireStorage(primaryPrefix.length<=SCHEMA[table].primary.length&&primaryPrefix.every(value=>value[0]!=='null'),'schema_unsupported');
+    const prefix=primaryPrefix.length?encodeKey(primaryPrefix):null,whole=primaryPrefix.length===SCHEMA[table].primary.length;
+    const lower=prefix===null?Dexie.minKey:prefix+(whole?'':'/'),upper=prefix===null?Dexie.maxKey:prefix+(whole?'':'/\uffff');
+    const scanner=prefix===null?new TableScanner(table,async()=>{}):null;let after:string|null=null;
     while(true){
       await this.#marker();
       const values=await this.#db.transaction('r',this.#db.runtime,this.#db.datasets,this.#db.stages,this.#db.financial(table),async()=>{
         await this.#routing();
-        return this.#db.financial(table).where('[generation+key]').between([this.#id,after??Dexie.minKey],[this.#id,Dexie.maxKey],after===null,true).limit(500).toArray();
+        return this.#db.financial(table).where('[generation+key]').between([this.#id,after??lower],[this.#id,upper],after===null,true).limit(500).toArray();
       });
       if(!values.length)break;
-      for(const value of values){const row=this.#row(table,value);await scanner.push(rowBytes(table,value.row).bytes);yield row;}
+      for(const value of values){const row=this.#row(table,value);if(scanner)await scanner.push(rowBytes(table,value.row).bytes);yield row;}
       after=values[values.length-1].key;
     }
-    scanner.finish(expected);
+    scanner?.finish(expected);
   }
   async find<K extends TableName>(table:K,columns:readonly string[],values:readonly Scalar[]):Promise<RowByTable[K]|null>{
     requireStorage(columns.length===values.length&&values.every(value=>value[0]!=='null'),'schema_unsupported');

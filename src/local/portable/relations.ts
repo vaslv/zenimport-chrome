@@ -7,7 +7,7 @@ import {envelope,field} from '../storage/envelope.js';
 import {requirePortable} from './format.js';
 
 export interface GraphReader{
-  rows<K extends TableName>(table:K):AsyncIterable<RowByTable[K]>;
+  rows<K extends TableName>(table:K,primaryPrefix?:readonly Scalar[]):AsyncIterable<RowByTable[K]>;
   /** Packaged primary/unique columns only. No query language or SQL input. */
   find<K extends TableName>(table:K,columns:readonly string[],values:readonly Scalar[]):Promise<RowByTable[K]|null>;
 }

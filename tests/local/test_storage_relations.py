@@ -59,3 +59,24 @@ def test_native_relational_reader_does_not_trust_tampered_derived_indexes(tmp_pa
         stage=call(page,'stage',fence=fence,golden=FIXTURE)['value']
         assert call(page,'relations',fence=fence,stageId=stage['id'],mode='poison-index')==dict(ok=False,code='storage_corrupt')
         assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+
+
+@pytest.mark.parametrize('name',['portable-financial-v2','portable-legacy-v2'])
+def test_native_classified_audit_preserves_original_legacy_fingerprint_without_activation(tmp_path,name):
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
+        assert call(page,'audit',fence=fence,stageId=stage['value']['id'])==dict(ok=True,value=True)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+        assert call(page,'stages')['value'][0]['state']=='format_valid'
+
+
+def test_native_rehashed_archive_cannot_rewrite_legacy_audit_bytes(tmp_path):
+    fixture=json.loads(Path('/app/contracts/business/v1/portable-legacy-v2.json').read_text())
+    fixture['rows']['legacy_rows'][0][column('legacy_rows','values_json')][1]+=' '
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
+        assert call(page,'audit',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code='invalid_legacy_audit')
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']

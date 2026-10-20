@@ -55,3 +55,13 @@ golden exchange in both directions. The test additionally compares producer
 contract SHA256 with Python's reproducibly packaged contract. Native MV3 tests
 execute the same bundle under extension CSP, with extra Worker creation denied.
 Full staged-data/activation/large-dataset gates are separate L4 requirements.
+
+The subsequent private graph checks include a relational pass over all stores and
+a classified audit pass. Both operate on an immutable inactive generation through
+bounded IDB reads; primary-prefix scans never export raw database handles. The
+relational pass rehashes stored table bytes, verifies derived index fields and
+checks packaged insert proofs even when children were loaded before parents.
+The audit pass screens JSON columns and metadata, compares legacy schema objects
+with the explicit allowlist and reconstructs the original legacy fingerprint from
+unchanged row text. Archived SQL is never executed. Complete raw bank/capture and
+mirror projection validation and protected activation remain separate requirements.

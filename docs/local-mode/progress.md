@@ -410,3 +410,20 @@ No archive validity is presented as financial graph or activation authority.
   poisoned derived index, stale epoch and active-generation protection.
 - This is intentionally not a complete financial graph validator: raw record,
   capture, legacy and mirror semantics follow next. L4 and local mode stay incomplete.
+
+### L4.8 — classified legacy/audit proof (L4 in progress)
+
+- Added the actual stock legacy conversion fixture, independently accepted by
+  Python's complete graph validator. The browser checks all packaged JSON columns,
+  classified metadata, normalized schema audit and the exact known legacy objects.
+- Reconstructs the original legacy SHA256 from ASCII-packed object headers and
+  unchanged ordered row text, including empty-table counts. Primary-prefix reads
+  remain bounded and generation/epoch fenced. Archived SQL is compared as data;
+  no SQL execution or new migration authority is introduced.
+- Docker: 130 unit/contract cases passed. Eight native relational/audit cases
+  passed per browser (145: 9.58s; 140: 46.05s), including the genuine converted
+  fingerprint and rejection of a rewritten row despite valid outer archive hashes.
+  Python fixture/graph checks passed 55 tests in 3.62s. The final integer-tag length
+  guard avoids unnecessary long-string allocation and passed the same unit cases.
+- Raw bank/capture/mirror semantics, protected activation, cleanup, format-1
+  conversion and independent L4 review remain. No local financial sends enabled.

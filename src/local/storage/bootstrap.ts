@@ -10,6 +10,7 @@ import {stageArchive,stageSummaries} from './staging.js';
 import type {StageSummary} from './stage-types.js';
 import {StageGraphReader} from './graph-reader.js';
 import {validateRelations} from '../portable/relations.js';
+import {validateAudit} from '../portable/audit.js';
 
 const opening=new Map<string,Promise<void>>();
 
@@ -85,6 +86,11 @@ export class LocalDatabase{
   /** Partial read-only proof; no lifecycle change or installation authority. */
   async checkStageRelations(id:string,fence:ContextFence):Promise<Readonly<Record<TableName,string>>>{
     return validateRelations(await StageGraphReader.open(this.#db,this.#sentinel,fence,id));
+  }
+
+  async checkStageAudit(id:string,fence:ContextFence):Promise<void>{
+    const reader=await StageGraphReader.open(this.#db,this.#sentinel,fence,id);
+    await validateRelations(reader);await validateAudit(reader,reader.manifest);
   }
 
   /** Persist outside IDB before the first financial mutation/dispatch claim. */
