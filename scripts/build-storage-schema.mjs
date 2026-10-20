@@ -9,6 +9,7 @@ async function input(name){
   return JSON.parse(raw);
 }
 const source=await input('sqlite-v7.json'),policy=await input('portable-policy.json');
+const format=await input('portable-format-v2.json'),manifestSchema=await input('portable-v2.schema.json'),validation=await input('portable-validation-v2.json');
 const aliases=Object.fromEntries(Object.entries(policy.logical_tables).map(([logical,table])=>[table.source,logical]));
 const tables={};
 for(const [name,mapping]of Object.entries(policy.logical_tables)){
@@ -33,9 +34,15 @@ const output='/** Generated from the pinned logical contract. Do not edit by han
   'export const SCHEMA = '+JSON.stringify(tables,null,2)+' as const;\n'+
   'export type TableName = keyof typeof SCHEMA;\nexport interface RowByTable {\n'+types+';\n}\n';
 const path=new URL('../src/local/storage/schema.generated.ts',import.meta.url);
+const portablePath=new URL('../src/local/portable/contract.generated.ts',import.meta.url);
+const revision=createHash('sha256').update(JSON.stringify({schema:source,policy,manifest:manifestSchema,format,validation})+'\n').digest('hex');
+const portable='/** Generated from the pinned portable contract. Do not edit by hand. */\n'+
+  'export const PORTABLE = '+JSON.stringify({limits:policy.limits,features:format.required_features,manifestKeys:manifestSchema.required,revision})+' as const;\n';
 if(process.argv.includes('--check')){
   if(await readFile(path,'utf8')!==output)throw Error('Regenerate the pinned storage schema');
+  if(await readFile(portablePath,'utf8')!==portable)throw Error('Regenerate the pinned portable contract');
 }else{
   await mkdir(new URL('../src/local/storage/',import.meta.url),{recursive:true});await writeFile(path,output);
+  await mkdir(new URL('../src/local/portable/',import.meta.url),{recursive:true});await writeFile(portablePath,portable);
 }
 console.log('PASS: 49 logical storage tables and typed rows');

@@ -10,7 +10,9 @@
     "build:contracts": "node scripts/bundle-contracts.mjs"
   },
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "dexie": "4.4.6",
+    "fflate": "0.8.3",
     "zenmoney-typescript": "0.1.0"
   },
   "devDependencies": {

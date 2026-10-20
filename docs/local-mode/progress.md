@@ -231,8 +231,8 @@ financial mode remains inaccessible in the product UI until L4–L11 pass.
 
 ## Next stages
 
-L4 is next: native IndexedDB financial repositories and archive interop, with its
-required independent review. L4–L12 are not yet implemented. Product synchronization
+L4 is in progress: native IndexedDB financial repositories and archive interop,
+with its required independent review. L5–L12 are not yet implemented. Product synchronization
 continues to use the remote backend; do not present standalone mode as ready.
 
 ### L4.1 — typed scalar/key foundation (L4 in progress)
@@ -313,3 +313,25 @@ fractional/boolean/string/unsafe-counter rejection and Python boundary checks.
 This does not change financial tagged INTEGER strings or HTTP protocol counters.
 Docker: 96 Chrome unit checks and 91 backend codec/graph/reference checks passed.
 No archive validity is presented as financial graph or activation authority.
+
+### L4.4 — browser portable ZIP format (L4 in progress)
+
+- Added bounded streaming row/ZIP codecs with exact typed scalars, canonical
+  ordering, duplicate JSON/member rejection, CRC/size/hash/digest checks and
+  strict inert ZIP metadata. Source SQL is never executed. All stage/activation
+  authority remains outside this format-only module.
+- Pinned fflate 0.8.3 and @noble/hashes 2.4.0 with npm integrity and MIT notices.
+  Bundles use only synchronous compression/incremental hashing, without Node
+  dependencies or additional Workers. Portable runtime constants are generated
+  reproducibly from the same five contract resources packaged by Python.
+- Docker interop exported TypeScript's golden ZIP, verified every raw row/table
+  and digest in Python, then verified Python's ZIP in TypeScript. Producer contract
+  SHA256 agrees. The fixture explicitly cannot pass financial graph validation.
+- Docker: 111 unit/contract cases passed; 25 native cases passed per browser
+  (Chromium 145 in 31.03s, Chrome 140 in 133.32s). Native MV3 exercised the bundled
+  SDK/ZIP/hash codec under CSP with worker creation forbidden. Format tests cover
+  malformed metadata, BOM names/JSON, duplicate keys/members, source ordering,
+  exact integers, untrusted lengths/CRC and redacted/quota sink failures.
+- L4 is not complete: inactive durable staging, full graph validation, bounded
+  large-dataset storage, generation lifecycle/cleanup and independent review
+  remain. No live financial API calls or user-facing local sends were enabled.

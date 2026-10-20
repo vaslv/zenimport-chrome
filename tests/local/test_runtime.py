@@ -17,6 +17,7 @@ RESULTS = Path('/results')
 WORKER = """import * as probe from './feasibility.mjs';
 import * as domain from './domain.mjs';globalThis.domain=domain;
 import * as storageProbe from './storage.mjs';globalThis.storageProbe=storageProbe;
+import * as portableProbe from './portable.mjs';globalThis.portableProbe=portableProbe;
 globalThis.probe=probe;globalThis.boot=crypto.randomUUID();
 chrome.runtime.onMessage.addListener((data,sender,reply)=>{
   if(data.type==='storage-probe'){storageProbe.run(data.action,data.args).then(reply);return true;}
@@ -47,6 +48,7 @@ def prepare_extension(path, *, hosts=()):
     shutil.copyfile('/app/.local/probes/feasibility.mjs',path/'feasibility.mjs')
     shutil.copyfile('/app/.local/probes/domain.mjs',path/'domain.mjs')
     shutil.copyfile('/app/.local/probes/storage.mjs',path/'storage.mjs')
+    shutil.copyfile('/app/.local/probes/portable.mjs',path/'portable.mjs')
 
 
 @contextmanager

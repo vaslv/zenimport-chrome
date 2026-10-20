@@ -10,6 +10,7 @@ for(const [entry,outfile] of [
   ['src/local/feasibility.ts','.local/probes/feasibility.mjs'],
   ['src/contracts/runner.ts','.local/probes/domain.mjs'],
   ['src/local/storage/probe.ts','.local/probes/storage.mjs'],
+  ['src/local/portable/probe.ts','.local/probes/portable.mjs'],
 ]) {
   const result=await build({entryPoints:[entry],outfile,bundle:true,platform:'browser',
     format:'esm',target:'chrome120',metafile:true,legalComments:'inline'});

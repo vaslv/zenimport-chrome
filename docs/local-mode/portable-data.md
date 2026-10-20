@@ -1,7 +1,8 @@
 # Portable financial dataset, version 2
 
-Status: proposed contract. Freeze the executable schema in L0–L3 before implementing
-the second importer. This document does not describe an already supported format.
+Status: logical contract frozen; L3 implements the server protocol and format 2.
+L4 implements the browser format/storage. See progress.md for completed gates;
+user-facing browser migration remains unavailable until L10–L11 are complete.
 
 ## 1. Compatibility goal
 
@@ -16,8 +17,9 @@ Keep three versions independent:
 - `financial_schema_version`: logical entities, columns, keys and invariants.
 - Runtime schema: SQLite migration number or IndexedDB version.
 
-The current server schema is 7. Do not assign that number to IndexedDB or assume an
-archive version implies a database version. Publish an explicit compatibility
+The financial contract is frozen against SQLite 7; server runtime schema 8 adds
+nonportable migration authority. Do not assign either number to IndexedDB or assume
+an archive version implies a database version. Publish an explicit compatibility
 matrix and pure, versioned logical transformations. A reader rejects unsupported
 newer versions without changing active state.
 
