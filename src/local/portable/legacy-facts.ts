@@ -23,7 +23,7 @@ export class LegacyFacts{
   static async read(reader:GraphReader):Promise<LegacyFacts>{
     const facts=new LegacyFacts(),tagKeys=new Set<string>();
     for await(const row of reader.rows('legacy_rows')){
-      const source=row.table_name.replace(/_tags$/,''),kind=Object.hasOwn(kinds,source)?kinds[source]:undefined;
+      const source=row.table_name.replace(/_tags$/,''),kind=Object.hasOwn(kinds,source)?kinds[source]:'';
       if(row.table_name!=='bank_transactions'&&!kind)continue;
       const names=tables.get(row.table_name);
       requirePortable(names!==undefined,'unclassified_legacy_object');
