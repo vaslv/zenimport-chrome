@@ -5,6 +5,9 @@ import type {DatasetControl,RuntimeControl} from '../../control/types.js';
 import {SCHEMA} from './schema.generated.js';
 import type {TableName} from './schema.generated.js';
 import type {TaggedRow} from './types.js';
+import {envelope} from './envelope.js';
+import {requireStorage} from './types.js';
+import {runtimeControl,datasetControl} from '../../control/validation.js';
 
 export interface FinancialEnvelope{
   readonly generation:string;
@@ -15,10 +18,11 @@ export interface FinancialEnvelope{
 
 export function financialStoreName(table:TableName):string{return 'f_'+table;}
 
-function stores():Record<string,string>{
+export function storeDefinitions(foreignIndexes=false):Record<string,string>{
   const values:Record<string,string>={runtime:'id',datasets:'generation,datasetId,lifecycle'};
   for(const [name,table]of Object.entries(SCHEMA)){
     const indexes=table.indexes.map(index=>(index.unique?'&':'')+'[generation+'+index.key+']');
+    if(foreignIndexes)table.foreignKeys.forEach((_,i)=>indexes.push('[generation+fk'+i+']'));
     values[financialStoreName(name as TableName)]=['[generation+key]','generation',...indexes].join(',');
   }
   return values;
@@ -29,7 +33,22 @@ export class FinancialDatabase extends Dexie{
   readonly datasets:Table<DatasetControl,string>;
   constructor(name:string,allowCreate:boolean){
     super(name,{autoOpen:false,chromeTransactionDurability:'strict',cache:'disabled'});
-    this.version(1).stores(stores());
+    this.version(1).stores(storeDefinitions());
+    this.version(2).stores(storeDefinitions(true)).upgrade(async transaction=>{
+      const runtime=runtimeControl(await transaction.table('runtime').get('runtime'));
+      const generations=new Set<string>();
+      await transaction.table('datasets').each(value=>{generations.add(datasetControl(value).generation);});
+      requireStorage(runtime.installationId.length===36,'storage_corrupt');
+      for(const name of Object.keys(SCHEMA) as TableName[]){
+        await transaction.table(financialStoreName(name)).toCollection().modify((value:FinancialEnvelope)=>{
+          requireStorage(generations.has(value.generation),'storage_corrupt');
+          const updated=envelope(value.generation,name,value.row);
+          requireStorage(updated.key===value.key,'storage_corrupt');
+          for(const key of Object.keys(value))delete (value as Record<string,unknown>)[key];
+          for(const [key,item]of Object.entries(updated))(value as Record<string,unknown>)[key]=item;
+        });
+      }
+    });
     this.runtime=this.table('runtime');this.datasets=this.table('datasets');
     this.on('versionchange',()=>{this.close();return false;});
     this.on('populate',()=>{if(!allowCreate)throw Error('storage_missing');});

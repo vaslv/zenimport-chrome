@@ -5,6 +5,8 @@ import {LocalDatabase} from './bootstrap.js';
 import {FinancialDatabase} from './database.js';
 import {storageFailure} from './types.js';
 import type {ContextFence} from '../../control/types.js';
+import {kernelProbe,kernelCheckpoint} from './kernel-probe.js';
+import type {KernelArguments} from './kernel-probe.js';
 
 type Area=Parameters<typeof trustedSentinel>[0];
 const area=()=> (globalThis as unknown as {chrome:{storage:{local:Area}}}).chrome.storage.local;
@@ -39,6 +41,8 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
   try{
     let value:unknown;
     if(action==='open')value=await open(args.name,args.mode);
+    else if(action==='kernel')value=await kernelProbe(args as KernelArguments,trustedSentinel(area()));
+    else if(action==='kernel-checkpoint')value=kernelCheckpoint();
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);
     else if(action==='concurrent')value=await Promise.all([open(args.name),open(args.name)]);

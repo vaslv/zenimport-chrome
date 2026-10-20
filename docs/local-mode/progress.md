@@ -275,3 +275,30 @@ continues to use the remote backend; do not present standalone mode as ready.
 - L4 is not complete. Relational/financial mutation repositories, staged archive
   interoperability, generation activation/cleanup tests and the independent
   storage review remain. Local mode remains inaccessible in product handlers.
+
+### L4.3 — relational constraints and fenced native writes (L4 in progress)
+
+- Added a storage-private transaction owner with same-generation foreign keys,
+  native unique/partial indexes, projection cascades, immutable acknowledged facts,
+  terminal processing and stable attempted UUID/payload/authorization guards.
+  Any rejected mutation aborts the whole transaction even if its caller catches
+  the error. Escaped handles cannot open an implicit later transaction.
+- Interpreted only checksum-pinned packaged CHECK predicates, with no arbitrary
+  SQL/eval. 2,332 independent cases execute the actual SQLite 3.40.1 reference,
+  including three-valued NULL logic, UTF-8 text, exact money and JSON depth limits.
+  The reference caught the newer JSON1 nesting limit assumption: the pinned
+  backend accepts 2,000, not 1,000 levels. Raw JSON is not rewritten.
+- IndexedDB version 2 adds generation-scoped FK indexes. Upgrade rebuilds derived
+  envelopes atomically, preserves exact raw payloads and rolls back to version 1
+  on invalid old rows. Financial logical schema remains 1.
+- Review corrected attempted-authorization lookup to use the delivery's unique
+  bank-ID index rather than its ZenMoney-ID primary key. Application handlers
+  cannot import generic financial handles or the callback-based internal writer.
+- Docker: 96 unit/contract checks passed; 24 native cases passed per browser
+  (Chromium 145 in 27.55s; Chrome 140 in 128.79s), including real worker death inside
+  a financial transaction, synthetic quota failure, caught-error rollback,
+  immutable attempt/proof history, cross-generation FK rejection and upgrades.
+  Backend reference/portable-codec checks: 46 passed. Evidence is under ignored
+  test-results/local-mode/L4/. No live calls or production data changes.
+- L4 remains incomplete: staged archive interoperability, complete financial
+  graph validation, generation activation/cleanup and independent review follow.
