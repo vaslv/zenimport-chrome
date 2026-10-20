@@ -16,8 +16,10 @@ from playwright.sync_api import sync_playwright
 RESULTS = Path('/results')
 WORKER = """import * as probe from './feasibility.mjs';
 import * as domain from './domain.mjs';globalThis.domain=domain;
+import * as storageProbe from './storage.mjs';globalThis.storageProbe=storageProbe;
 globalThis.probe=probe;globalThis.boot=crypto.randomUUID();
 chrome.runtime.onMessage.addListener((data,sender,reply)=>{
+  if(data.type==='storage-probe'){storageProbe.run(data.action,data.args).then(reply);return true;}
   if(data.type==='probe-wake'){reply({boot:globalThis.boot});return;}
   if(data.type==='probe-wire'){probe.exactRoundtrip('message-exact',data.raw).then(reply);return true;}
   if(data.type!=='probe-state')return;
@@ -44,6 +46,7 @@ def prepare_extension(path, *, hosts=()):
     (path/'probe.html').write_text('<!doctype html><html lang="en"><title>Isolated runtime probe</title><body>Probe</body></html>')
     shutil.copyfile('/app/.local/probes/feasibility.mjs',path/'feasibility.mjs')
     shutil.copyfile('/app/.local/probes/domain.mjs',path/'domain.mjs')
+    shutil.copyfile('/app/.local/probes/storage.mjs',path/'storage.mjs')
 
 
 @contextmanager

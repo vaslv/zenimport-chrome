@@ -20,3 +20,10 @@ export function int64(value:unknown):Int64Text{
   requireStorage(result>=-(1n<<63n) && result<(1n<<63n));
   return value as Int64Text;
 }
+
+export function storageFailure(error:unknown):StorageError{
+  if(error instanceof StorageError)return error;
+  const name=error instanceof Error?error.name:'';
+  return new StorageError(name==='QuotaExceededError'?'quota_exceeded':name==='VersionError'?'schema_unsupported':
+    name==='ConstraintError'?'constraint_violation':'storage_corrupt');
+}

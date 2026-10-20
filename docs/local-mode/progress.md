@@ -249,3 +249,29 @@ continues to use the remote backend; do not present standalone mode as ready.
   passed. No new runtime behavior, browser storage or local financial sends are
   exposed. Native financial database, archive interop and independent L4 review
   remain required. Generator checking is part of the Docker unit build.
+
+### L4.2 — native control owner and loss sentinel (L4 in progress)
+
+- Added a storage-private Dexie database with strict transaction durability, all
+  49 generation-scoped financial stores/indexes and typed runtime/dataset control.
+  Initial seeds, active pointer and profile identity commit together. Application
+  handlers receive no database handles or generic financial mutation method.
+- A trusted chrome.storage.local sentinel is acknowledged before IDB creation.
+  It is ready only after initialization. A separate monotonic activity key cannot
+  be erased by a stale base update or unrelated credential-key deletion. Missing
+  IDB, incomplete initialization or mismatched metadata requires recovery; it
+  never silently initializes another financial journal.
+- Native tests cover concurrent opening, full profile restart, marker write/ready
+  ACK failure, stale activity fence and worker termination after acknowledged
+  sentinel creation but before IDB initialization. The crash fixture originally
+  killed before the write ACK; its explicit checkpoint now tests the intended
+  boundary. No financial-history reset path was added to satisfy it.
+- Added ADR 003: stable profile installation identity is distinct from the fresh
+  financial participant identity for each generation. Returning from a server
+  cannot reactivate a previously handed-off generation.
+- Docker: 91 unit/contract tests passed; strict typing/bundling passed; 14 native
+  cases passed per browser (Chromium 145 and Chrome 140). The 3 GiB offline
+  containers and isolated profiles never used a real API or bank session.
+- L4 is not complete. Relational/financial mutation repositories, staged archive
+  interoperability, generation activation/cleanup tests and the independent
+  storage review remain. Local mode remains inaccessible in product handlers.
