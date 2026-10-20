@@ -159,3 +159,28 @@ synchronization remains inaccessible in the product UI until later safety gates.
 - L3 remains incomplete: durable participant/epoch/CAS, transfer endpoints, staged
   installation, old-client hold guards and crash/race acceptance are next. No
   format-2 HTTP route or user-facing local financial mode is enabled yet.
+
+### L3.3 — durable server participant primitives
+
+- Backend schema 8 separates physical installation UUID/epoch from financial
+  lineage; adds immutable switch bindings, receipts and bounded durable chunks.
+  The canonical contract explicitly excludes these runtime authority tables.
+- Source cancellation and handoff share one transactional CAS. Cancellation needs
+  a bound destination discard before resumption, including a permanent tombstone
+  when upload never started. Activation requires source handoff, rechecks target
+  eligibility and commits installation/receipt together; sending awaits Sync.
+- Persistent holds also guard old jobs/resume/export paths and mirror startup.
+  Old Mirror instances cannot reclaim changed credentials. Format-1 SQLite6/7/8
+  restores preserve destination physical identity; original financial lineage
+  and source schema audit remain distinct from new runtime migration markers.
+- This is an internal primitive layer, not exposed format-2 HTTP or completed L3.
+  Background staging, authenticated capabilities/commands and full interop/crash
+  acceptance remain next. Runtime product behavior is still remote-only.
+- Validation: 669 backend Docker tests passed after review, including CAS races,
+  immutable evidence, repeated chunk ACK, rollback during installer invocation,
+  eligibility recheck, legacy hold guards and physical-identity restore. Full
+  isolated container lifecycle suite also passed (667-test revision plus HTTP,
+  SIGKILL, graceful stop and restored delivery). Chrome unit/contract suite: 70
+  passed. No live API calls or production changes.
+- User reports Chrome 155.0.8059.85 installed; minimum 140 remains the candidate
+  decision. Native Docker evidence still covers 140/145, not an unrun 155 build.
