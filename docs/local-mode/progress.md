@@ -133,13 +133,12 @@ Status: complete. Cross-language, native-browser and source-code review gates pa
 - Ignored evidence is under test-results/local-mode/L2/. No live API requests,
   production data/service changes, push, tags or publication in this stage.
 
-## Next stages
+## L3 — portable server migration
 
-L3 is in progress: format-only codec primitives and golden bytes are being tested.
-The new format is not exposed by HTTP or offered to users. Financial graph,
-identity, durable participant/handoff, chunk transfer and compatibility gates
-remain required before L3 can be complete. L4–L12 have not started. Local financial
-synchronization remains inaccessible in the product UI until later safety gates.
+Status: complete after the L3.4 verification below. L3.1 added the bounded format
+codec and independently checked golden bytes. The checkpoint notes below record
+how graph, authority and HTTP gates were subsequently completed. Standalone
+financial mode remains inaccessible in the product UI until L4–L11 pass.
 
 ### L3.2 — private financial graph validation
 
@@ -206,3 +205,32 @@ synchronization remains inaccessible in the product UI until later safety gates.
   30 browser/backend cases passed. Chrome unit/contract checks: 70 passed.
 - Final verification/contract pin update remains before declaring L3 complete.
   L4–L12 have not started; product UI still uses the remote backend exclusively.
+
+### L3 final gate
+
+- 702 backend tests passed in the read-only network-disabled Docker container.
+  Both linux/arm64 and linux/amd64 full Docker suites passed the 701-test revision,
+  including HTTP/auth, SIGKILL, graceful stop and restored delivery. The final
+  provenance-chain addition passed the complete 702-test native suite.
+- The built current extension passed all 30 browser/backend integration cases;
+  70 Chrome unit/contract cases passed. Cross-language results remain identical
+  for eight scenarios, 500 arithmetic and 6,354 Unicode vectors. Contract copies,
+  declared source revision and reproducible runtime bytes are checked.
+- Native process SIGKILL covers private staging, committed source sealing and
+  committed activation before its task acknowledgment. Recovery cleans only own
+  scratch and recognizes permanent results without another API read or write.
+- Import provenance is portable audit, separate from activation authority. A
+  second migration/re-export preserves the exact earlier provenance and all
+  attempted-send rows. Old archives, wrong owner, receipt substitution, source
+  cancellation/handoff race, legacy hold bypass and late mirror commits are covered.
+- Review findings were fixed before closing the stage: receipt null serialization,
+  stale task display after coordinator advancement, source attempt recovery,
+  explicit legacy projection/revision/tag proofs and import provenance retention.
+- No live API requests, production data/container changes, push, tags or publication.
+  Evidence logs are stored in ignored test-results/local-mode/L3/.
+
+## Next stages
+
+L4 is next: native IndexedDB financial repositories and archive interop, with its
+required independent review. L4–L12 are not yet implemented. Product synchronization
+continues to use the remote backend; do not present standalone mode as ready.

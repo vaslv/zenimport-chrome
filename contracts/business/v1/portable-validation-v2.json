@@ -11,7 +11,8 @@
     "legacy:mode": "mode_audit",
     "legacy:category_fresh_ids": "id_list_audit",
     "legacy:operation_fresh_ids": "id_list_audit",
-    "legacy:creation_fresh": "catalog_ids_audit"
+    "legacy:creation_fresh": "catalog_ids_audit",
+    "portable_imports": "portable_import_history"
   },
   "unknown_metadata": "reject",
   "legacy_objects": [
