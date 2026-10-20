@@ -6,6 +6,8 @@ import {FinancialDatabase} from './database.js';
 import {packRow,rowKey} from './cells.js';
 import {int64,requireStorage,storageFailure} from './types.js';
 import type {TableName,RowByTable} from './schema.generated.js';
+import {stageArchive,stageSummaries} from './staging.js';
+import type {StageSummary} from './stage-types.js';
 
 const opening=new Map<string,Promise<void>>();
 
@@ -67,9 +69,16 @@ export class LocalDatabase{
   async inspect():Promise<{runtime:RuntimeControl;tables:number;rows:Record<string,number>}>{
     const runtime=runtimeControl(await this.#db.runtime.get('runtime'));
     const rows:Record<string,number>={};
-    for(const table of this.#db.tables)if(table.name.startsWith('f_'))rows[table.name.slice(2)]=await table.count();
+    for(const table of this.#db.tables)if(table.name.startsWith('f_'))rows[table.name.slice(2)]=runtime.activeGeneration===null?0:
+      await table.where('generation').equals(runtime.activeGeneration).count();
     return {runtime,tables:Object.keys(rows).length,rows};
   }
+
+  async stageArchive(blob:Blob,fence:ContextFence,now:string):Promise<StageSummary>{
+    return stageArchive(this.#db,this.#sentinel,fence,blob,now);
+  }
+
+  async stages():Promise<StageSummary[]>{return stageSummaries(this.#db);}
 
   /** Persist outside IDB before the first financial mutation/dispatch claim. */
   async markFinancialActivity(fence:ContextFence):Promise<void>{

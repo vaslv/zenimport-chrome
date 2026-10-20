@@ -173,7 +173,8 @@ export async function writeTransaction<T>(db:FinancialDatabase,sentinel:Sentinel
     await sentinel.markFinancialActivity(scope.installationId);
     const marker=await sentinel.read();
     requireStorage(marker!==null && marker.state==='ready' && marker.financialMayHaveStarted &&
-      marker.installationId===scope.installationId && marker.generation===scope.generation,'recovery_required');
+      marker.installationId===scope.installationId,'recovery_required');
+    requireStorage(marker.generation===scope.generation,'stale_epoch');
     return await db.transaction('rw',db.tables,async()=>{
       const runtime=runtimeControl(await db.runtime.get('runtime'));
       const dataset=datasetControl(await db.datasets.get(scope.generation));

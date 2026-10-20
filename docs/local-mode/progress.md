@@ -335,3 +335,34 @@ No archive validity is presented as financial graph or activation authority.
 - L4 is not complete: inactive durable staging, full graph validation, bounded
   large-dataset storage, generation lifecycle/cleanup and independent review
   remain. No live financial API calls or user-facing local sends were enabled.
+
+### L4.5 — durable inactive import generations (L4 in progress)
+
+- IDB version 3 adds a private stage journal. Imports use a fresh generation and
+  writer identity, bounded native batches, trusted-sentinel checks before every
+  batch and routing/lifecycle checks within each transaction. They re-read and
+  verify the committed financial bytes before recording format completion.
+  No code in this importer changes the active generation or grants API writes.
+- Interrupted imports remain loading/inactive; malformed or quota-failed imports
+  remain failed/inactive. Retry does not reopen an incomplete stage as a writer.
+  Existing active counts/views are scoped to the active generation. A stale
+  generation now reports stale_epoch rather than misclassifying a valid current
+  marker as lost storage. Missing/malformed markers still require recovery.
+- Hardened nested quota/bulk error redaction; verified rollback and subsequent
+  retry without leaving the fixture's injected hook installed. ZIP wall clocks
+  are deterministic across timezones; descriptor span disambiguates its signature
+  from a possible CRC value. Codec CPU yields stay outside IDB transactions.
+- Docker: 116 unit/contract cases passed. Complete native suites passed 33 cases
+  per browser (145: 94.68s; 140: 278.17s). Two focused cases passed on each current
+  build (4.21s/14.58s), adding a 34th unique case for marker removal during import
+  and rechecking quota/retry. The 140 run's 60s faulthandler diagnostic during its
+  long benchmark was not a failed test or execution timeout; all cases completed.
+- Native 100k staging stored 206,600,234 logical bytes. Both browsers stayed below
+  1.3 GB cgroup peak and 150ms per native transaction, within the 3 GiB/10s gates.
+  This is envelope/format throughput, not a fabricated financial-graph pass.
+  Actual worker death preserves inactive partial data and the original active
+  pointer. Evidence is copied to ignored test-results/local-mode/L4/.
+- L4 remains incomplete: full financial graph validation, protected generation
+  activation/retirement, backup-aware cleanup, legacy conversion and independent
+  review remain. L5–L12 have not started. No live calls, production changes,
+  push, tags or publication were performed.

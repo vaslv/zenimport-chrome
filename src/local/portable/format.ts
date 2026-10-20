@@ -6,7 +6,7 @@ import {SCHEMA} from '../storage/schema.generated.js';
 import type {TableName} from '../storage/schema.generated.js';
 import {validateCells,rowKey} from '../storage/cells.js';
 import type {TaggedRow} from '../storage/types.js';
-import {StorageError} from '../storage/types.js';
+import {StorageError,storageFailure} from '../storage/types.js';
 import {PORTABLE} from './contract.generated.js';
 
 export const LIMITS=PORTABLE.limits;
@@ -18,7 +18,7 @@ export function requirePortable(value:unknown,code='invalid_archive'):asserts va
 export function portableFailure(error:unknown,fallback:string):PortableError{
   if(error instanceof PortableError)return error;
   if(error instanceof StorageError)return new PortableError(error.code);
-  if(error instanceof Error&&error.name==='QuotaExceededError')return new PortableError('quota_exceeded');
+  if(error instanceof Error&&['QuotaExceededError','BulkError','AbortError','ConstraintError','VersionError'].includes(error.name))return new PortableError(storageFailure(error).code);
   return new PortableError(fallback);
 }
 export const utf8=new TextEncoder();
@@ -118,7 +118,7 @@ export function rowBytes(table:TableName,input:unknown):{row:TaggedRow;key:strin
 export class TableScanner{
   #parts:Uint8Array[]=[];#pending=0;#previous:string|null=null;
   #count=0;#size=0;#hash=sha256.create();#closed=false;
-  constructor(readonly table:TableName,readonly accept:(row:TaggedRow)=>Promise<void>){}
+  constructor(readonly table:TableName,readonly accept:(row:TaggedRow,bytes:number)=>Promise<void>){}
   async push(chunk:Uint8Array):Promise<void>{
     requirePortable(!this.#closed);
     this.#hash.update(chunk);this.#size+=chunk.length;
@@ -133,7 +133,7 @@ export class TableScanner{
       requirePortable(this.#previous===null||this.#previous<key,'duplicate_or_unordered_key');
       requirePortable(bytes.length===raw.length&&bytes.every((byte,index)=>byte===raw[index]),'noncanonical_row');
       this.#previous=key;this.#count++;this.#parts=[];this.#pending=0;
-      await this.accept(row);start=i+1;
+      await this.accept(row,raw.length);start=i+1;
     }
     if(start<chunk.length){const part=chunk.slice(start);this.#parts.push(part);this.#pending+=part.length;requirePortable(this.#pending<LIMITS.row_bytes,'row_too_large');}
   }

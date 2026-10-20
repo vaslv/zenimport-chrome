@@ -23,7 +23,15 @@ export function int64(value:unknown):Int64Text{
 
 export function storageFailure(error:unknown):StorageError{
   if(error instanceof StorageError)return error;
-  const name=error instanceof Error?error.name:'';
-  return new StorageError(name==='QuotaExceededError'?'quota_exceeded':name==='VersionError'?'schema_unsupported':
-    name==='ConstraintError'?'constraint_violation':'storage_corrupt');
+  const pending:unknown[]=[error],seen=new Set<object>(),names=new Set<string>();let budget=1024;
+  while(pending.length&&budget-->0){
+    const value=pending.shift();if(!(value instanceof Error)||seen.has(value))continue;seen.add(value);
+    if(value instanceof StorageError)return value;
+    names.add(value.name);
+    const nested=value as Error & {inner?:unknown;failures?:unknown[]};
+    if(nested.inner!==undefined)pending.push(nested.inner);
+    if(value.name==='BulkError'&&Array.isArray(nested.failures))pending.push(...nested.failures.slice(0,500));
+  }
+  return new StorageError(names.has('QuotaExceededError')?'quota_exceeded':names.has('VersionError')?'schema_unsupported':
+    names.has('ConstraintError')?'constraint_violation':'storage_corrupt');
 }

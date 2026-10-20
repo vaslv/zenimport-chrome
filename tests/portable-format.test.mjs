@@ -1,6 +1,10 @@
 import assert from 'node:assert/strict';
 import {readFileSync} from 'node:fs';
 import test from 'node:test';
+import {spawnSync} from 'node:child_process';
+import {mkdtempSync,rmSync} from 'node:fs';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
 import {Zip,ZipPassThrough} from 'fflate';
 import {TABLES,LIMITS,TableScanner,canonical,createArchive,readArchive,rowBytes,validateManifest,datasetDigest} from '../.local/contracts/portable-format.mjs';
 
@@ -29,6 +33,19 @@ test('browser-format ZIP preserves all golden bytes, exact values and dataset di
   assert.equal(output.result.archiveSha256,first.result.archiveSha256);assert.equal(first.result.bytes,first.blob.size);
   assert.equal(output.rows.source_schema_migrations[0][1][1],'9007199254740993');
   const second=await archive();assert.deepEqual(await first.blob.arrayBuffer(),await second.blob.arrayBuffer());
+});
+
+test('a held snapshot produces identical ZIP metadata across timezones',()=>{
+  const directory=mkdtempSync(join(tmpdir(),'zenimport-format-timezone-'));
+  try{
+    for(const [index,timezone]of ['UTC','Asia/Ho_Chi_Minh','Pacific/Honolulu'].entries()){
+      const result=spawnSync(process.execPath,['scripts/portable-format-interop.mjs','write',join(directory,String(index)+'.zip')],
+        {env:{...process.env,TZ:timezone},encoding:'utf8',timeout:20000});
+      assert.equal(result.status,0,result.stderr);
+    }
+    assert.deepEqual(readFileSync(join(directory,'0.zip')),readFileSync(join(directory,'1.zip')));
+    assert.deepEqual(readFileSync(join(directory,'0.zip')),readFileSync(join(directory,'2.zip')));
+  }finally{rmSync(directory,{recursive:true,force:true});}
 });
 
 test('manifest counters, exact keys, real UTC dates, identities and required features are strict',()=>{
@@ -80,6 +97,21 @@ test('headers, CRC, trailing bytes, hidden data and inflated bounds cannot bypas
   await assert.rejects(()=>read(new Blob([new Uint8Array([0]),original])));
   await assert.rejects(()=>read(new Blob([original,new Uint8Array([0])])));
   await assert.rejects(()=>read(new Blob([new Uint8Array(LIMITS.compressed_bytes+1)])),/archive_too_large/);
+});
+
+test('unsigned ZIP descriptors are parsed by their span rather than a possible CRC signature',async()=>{
+  const raw=new Uint8Array(await storeZip(rawEntries()).arrayBuffer()),view=new DataView(raw.buffer);
+  const central=view.getUint32(raw.length-6,true),compressed=view.getUint32(central+20,true);
+  const descriptor=30+view.getUint16(26,true)+view.getUint16(28,true)+compressed;
+  assert.equal(view.getUint32(descriptor,true),0x08074b50);
+  const changed=new Uint8Array(raw.length-4);changed.set(raw.subarray(0,descriptor));changed.set(raw.subarray(descriptor+4),descriptor);
+  const current=new DataView(changed.buffer),end=changed.length-22;let cursor=central-4;
+  for(let i=0;i<TABLES.length+1;i++){
+    const local=current.getUint32(cursor+42,true);if(local>descriptor)current.setUint32(cursor+42,local-4,true);
+    cursor+=46+current.getUint16(cursor+28,true)+current.getUint16(cursor+30,true)+current.getUint16(cursor+32,true);
+  }
+  assert.equal(cursor,end);current.setUint32(end+16,central-4,true);
+  assert.deepEqual((await read(new Blob([changed]))).rows,golden.rows);
 });
 
 test('a failing sink exposes no completed archive or leaked private error',async()=>{

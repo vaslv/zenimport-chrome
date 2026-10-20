@@ -52,7 +52,9 @@ function members(raw:Uint8Array):Map<string,Member>{
   // Every byte before the central directory belongs to exactly one local file.
   // No prefixes, hidden/overlapping members, contradictory headers or trailing data.
   let cursor=0;
-  for(const item of [...entries.values()].sort((a,b)=>a.offset-b.offset)){
+  const ordered=[...entries.values()].sort((a,b)=>a.offset-b.offset);
+  for(let i=0;i<ordered.length;i++){
+    const item=ordered[i],next=ordered[i+1]?.offset??central;
     const local=item.offset;requirePortable(local===cursor&&local+30<=central&&u32(local)===0x04034b50,'invalid_zip_member');
     const length=u16(local+26),extra=u16(local+28);
     requirePortable(u16(local+4)<=20&&u16(local+6)===item.flags&&u16(local+8)===item.method&&
@@ -62,8 +64,9 @@ function members(raw:Uint8Array):Map<string,Member>{
     const localValues=[u32(local+14),u32(local+18),u32(local+22)],values=[item.crc,item.compressed,item.size];
     if(item.flags&8){
       requirePortable(localValues.every((value,i)=>value===0||value===values[i]),'invalid_zip_member');
-      requirePortable(cursor+12<=central,'invalid_zip_member');
-      if(u32(cursor)===0x08074b50)cursor+=4;
+      const descriptorSize=next-cursor;
+      requirePortable([12,16].includes(descriptorSize)&&cursor+descriptorSize<=central,'invalid_zip_member');
+      if(descriptorSize===16){requirePortable(u32(cursor)===0x08074b50,'invalid_zip_member');cursor+=4;}
       requirePortable(cursor+12<=central&&values.every((value,i)=>u32(cursor+i*4)===value),'invalid_zip_member');cursor+=12;
     }else requirePortable(values.every((value,i)=>value===localValues[i]),'invalid_zip_member');
   }
@@ -71,10 +74,10 @@ function members(raw:Uint8Array):Map<string,Member>{
 }
 
 async function readMember(raw:Uint8Array,item:Member,accept:(chunk:Uint8Array)=>Promise<void>):Promise<void>{
-  let size=0,crc=0,final=false,pending:Uint8Array[]=[];
+  let size=0,crc=0,final=false,pending:Uint8Array[]=[],yieldBytes=0;
   function output(chunk:Uint8Array,last:boolean){
     size+=chunk.length;requirePortable(size<=item.size,'zip_member_too_large');
-    crc=crc32(chunk,crc);pending.push(chunk);final=last;
+    crc=crc32(chunk,crc);pending.push(chunk);final=last;yieldBytes+=chunk.length;
   }
   const inflate=item.method===8?new Inflate(output):null;
   if(item.compressed===0){
@@ -84,6 +87,7 @@ async function readMember(raw:Uint8Array,item:Member,accept:(chunk:Uint8Array)=>
     const last=Math.min(start+4096,item.compressed),part=raw.subarray(item.data+start,item.data+last);
     if(inflate)inflate.push(part,last===item.compressed);else output(part,last===item.compressed);
     for(const chunk of pending)await accept(chunk);pending=[];
+    if(yieldBytes>=1048576){await new Promise<void>(resolve=>setTimeout(resolve,0));yieldBytes=0;}
   }
   requirePortable(final&&size===item.size&&crc===item.crc,'zip_integrity_mismatch');
 }
@@ -91,7 +95,7 @@ async function readMember(raw:Uint8Array,item:Member,accept:(chunk:Uint8Array)=>
 export interface ArchiveReader{
   /** Must create an inactive private stage; these callbacks do not grant authority. */
   manifest(value:PortableManifest):Promise<void>;
-  row(table:TableName,value:TaggedRow):Promise<void>;
+  row(table:TableName,value:TaggedRow,bytes:number):Promise<void>;
 }
 export async function readArchive(blob:Blob,sink:ArchiveReader):Promise<{manifest:PortableManifest;archiveSha256:string}>{
   try{
@@ -106,7 +110,7 @@ export async function readArchive(blob:Blob,sink:ArchiveReader):Promise<{manifes
     for(const entry of manifest.tables){
       const member=entries.get(entry.filename)!;
       requirePortable(member.size===entry.bytes,'table_integrity_mismatch');
-      const scanner=new TableScanner(entry.name,row=>sink.row(entry.name,row));
+      const scanner=new TableScanner(entry.name,(row,bytes)=>sink.row(entry.name,row,bytes));
       await readMember(raw,member,chunk=>scanner.push(chunk));scanner.finish(entry);
     }
     return {manifest,archiveSha256:digest(raw)};
@@ -118,7 +122,7 @@ export interface ArchiveWriter{write(bytes:Uint8Array):Promise<void>}
 export async function createArchive(options:ArchiveOptions,tables:(name:TableName)=>AsyncIterable<TaggedRow>,sink:ArchiveWriter):Promise<{manifest:PortableManifest;archiveSha256:string;bytes:number}>{
   try{
     const config={...options,ownerIds:[...options.ownerIds]};
-    let size=0,uncompressed=0,done=false,pending:Uint8Array[]=[];
+    let size=0,uncompressed=0,done=false,pending:Uint8Array[]=[],yieldBytes=0;
     const hash=sha256.create(),entries:TableDescriptor[]=[];
     const zip=new Zip((error,chunk,final)=>{
       if(error)throw new PortableError('invalid_archive');size+=chunk.length;
@@ -126,7 +130,9 @@ export async function createArchive(options:ArchiveOptions,tables:(name:TableNam
       hash.update(chunk);pending.push(chunk);done=final;
     });
     async function flush(){for(const chunk of pending)await sink.write(chunk);pending=[];}
-    function file(name:string){const entry=new ZipDeflate(name,{level:6});entry.mtime=new Date('2026-01-01T00:00:00Z');zip.add(entry);return entry;}
+    // ZIP stores a wall clock without a timezone; keep its fields identical
+    // when a held snapshot is rebuilt in a different browser timezone.
+    function file(name:string){const entry=new ZipDeflate(name,{level:6});entry.mtime=new Date(2026,0,1,0,0,0);zip.add(entry);return entry;}
     for(const table of TABLES){
       const entry=file('tables/'+table+'.ndjson'),hash=sha256.create();let previous:string|null=null,count=0,bytes=0;
       for await(const row of tables(table)){
@@ -134,7 +140,10 @@ export async function createArchive(options:ArchiveOptions,tables:(name:TableNam
         requirePortable(previous===null||previous<value.key,'duplicate_or_unordered_key');previous=value.key;
         uncompressed+=value.bytes.length;requirePortable(uncompressed<=LIMITS.uncompressed_bytes,'dataset_too_large');
         count++;bytes+=value.bytes.length;hash.update(value.bytes);
-        for(let offset=0;offset<value.bytes.length;offset+=65536){entry.push(value.bytes.subarray(offset,offset+65536));await flush();}
+        for(let offset=0;offset<value.bytes.length;offset+=65536){
+          const part=value.bytes.subarray(offset,offset+65536);entry.push(part);await flush();yieldBytes+=part.length;
+          if(yieldBytes>=1048576){await new Promise<void>(resolve=>setTimeout(resolve,0));yieldBytes=0;}
+        }
       }
       entry.push(new Uint8Array(),true);await flush();
       entries.push({name:table,filename:'tables/'+table+'.ndjson',columns:SCHEMA[table].columns.map(column=>column.name),rows:count,bytes,sha256:bytesToHex(hash.digest())});

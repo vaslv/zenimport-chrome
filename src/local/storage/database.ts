@@ -8,6 +8,7 @@ import type {TaggedRow} from './types.js';
 import {envelope} from './envelope.js';
 import {requireStorage} from './types.js';
 import {runtimeControl,datasetControl} from '../../control/validation.js';
+import type {StageRecord} from './stage-types.js';
 
 export interface FinancialEnvelope{
   readonly generation:string;
@@ -31,6 +32,7 @@ export function storeDefinitions(foreignIndexes=false):Record<string,string>{
 export class FinancialDatabase extends Dexie{
   readonly runtime:Table<RuntimeControl,string>;
   readonly datasets:Table<DatasetControl,string>;
+  readonly stages:Table<StageRecord,string>;
   constructor(name:string,allowCreate:boolean){
     super(name,{autoOpen:false,chromeTransactionDurability:'strict',cache:'disabled'});
     this.version(1).stores(storeDefinitions());
@@ -49,7 +51,9 @@ export class FinancialDatabase extends Dexie{
         });
       }
     });
+    this.version(3).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'});
     this.runtime=this.table('runtime');this.datasets=this.table('datasets');
+    this.stages=this.table('portable_stages');
     this.on('versionchange',()=>{this.close();return false;});
     this.on('populate',()=>{if(!allowCreate)throw Error('storage_missing');});
   }

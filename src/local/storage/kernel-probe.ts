@@ -45,6 +45,7 @@ export async function kernelProbe(args:KernelArguments,sentinel:SentinelPort):Pr
       try{
         await old.transaction('rw',old.tables,async()=>{
           for(const table of db.tables){
+            if(!old.tables.some(value=>value.name===table.name))continue;
             const values=await Dexie.waitFor(table.toArray());
             for(const value of values){
               for(const key of Object.keys(value))if(key.startsWith('fk'))delete value[key];

@@ -149,7 +149,7 @@ def test_native_transaction_handle_and_routing_epoch_cannot_escape(kernel):
 def test_native_upgrade_preserves_exact_payload_and_failure_retains_old_version(kernel):
     run,_,_=kernel;base(run)
     result=run(mode='upgrade',table='bank_transactions');assert result['ok'],result
-    value=result['value'];assert value['code'] is None and value['version']==2
+    value=result['value'];assert value['code'] is None and value['version']==3
     columns=[c['name'] for c in SCHEMA['bank_transactions']['columns']]
     assert value['rows'][0]['row'][columns.index('raw_json')]==['text',BANK['raw_json']]
     assert value['rows'][0]['fk0']
