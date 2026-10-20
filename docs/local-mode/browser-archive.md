@@ -22,6 +22,13 @@ surrogates are rejected. This is exercised on actual Chrome 140 and Chromium 145
 The native path avoids per-character string accumulation observed in the SDK's
 underlying JSON parser for large archive fields; the public API SDK is unchanged.
 
+JSON traversal uses root depth zero, a maximum depth of 128 and 5,000,000 nodes.
+The SDK-backed numeric token bound is 4,096 characters; unsupported numeric forms
+fail validation without rewriting the original TEXT. A nested candidate is treated
+as an ordinary note only on a syntax/duplicate-key failure. Unicode, resource and
+unsupported-decoder failures are fatal, so a nested structure cannot evade secret
+screening merely because its parser rejected a supported-resource boundary.
+
 Financial JSON credential screening, classified metadata and mirror decimal/flag
 projections are checked against independently generated actual Python outcomes.
 The frozen Unicode-15 word boundary and Python case-insensitive ASCII matches

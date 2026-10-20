@@ -2,6 +2,9 @@
 import {ExactDecimal,MAX_NUMBER_LENGTH} from 'zenmoney-typescript';
 
 const MAX_NODES=5000000,MAX_DEPTH=128;
+export class ArchiveJsonBudgetError extends TypeError{
+  constructor(){super('json_budget_exceeded');this.name='ArchiveJsonBudgetError';}
+}
 function unicode(text:string):void{
   for(let i=0;i<text.length;i++){
     const code=text.charCodeAt(i);
@@ -14,7 +17,7 @@ function unicode(text:string):void{
 // duplicate decoded keys, and checks nesting before the recursive reviver runs.
 function preflight(text:string):void{
   const stack:{object:boolean;key:boolean;seen:Set<string>}[]=[];let nodes=0;
-  function node():void{if(++nodes>MAX_NODES)throw new TypeError('json_budget_exceeded');}
+  function node():void{if(++nodes>MAX_NODES||stack.length>MAX_DEPTH)throw new ArchiveJsonBudgetError();}
   for(let i=0;i<text.length;i++){
     const ch=text[i];
     if(ch==='"'){
@@ -23,11 +26,11 @@ function preflight(text:string):void{
       const context=stack.at(-1);
       if(context?.object&&context.key){
         const key:unknown=JSON.parse(text.slice(start,i+1));
-        if(typeof key!=='string'||context.seen.has(key))throw new TypeError('duplicate_key');
+        if(typeof key!=='string'||context.seen.has(key))throw new SyntaxError('duplicate_key');
         unicode(key);context.seen.add(key);context.key=false;
       }else node();
     }else if(ch==='{'||ch==='['){
-      node();if(stack.length>=MAX_DEPTH)throw new TypeError('json_budget_exceeded');
+      node();
       stack.push({object:ch==='{',key:ch==='{',seen:new Set()});
     }else if(ch==='}'||ch===']')stack.pop();
     else if(ch===','&&stack.at(-1)?.object)stack.at(-1)!.key=true;

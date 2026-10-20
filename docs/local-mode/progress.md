@@ -499,3 +499,19 @@ No archive validity is presented as financial graph or activation authority.
 - Capture/page completeness proof and a combined graph validator remain next;
   lifecycle/cleanup, full interop, legacy conversion and independent L4 review
   are still required. No activation authority, live calls or product sends added.
+
+### L4 nested JSON/resource correction
+
+- A failing-before-fix browser regression found that rejecting a deeply nested
+  JSON candidate could incorrectly downgrade it to an ordinary unchecked note.
+  Only syntax/duplicate-key failures now use that fallback. Resource, Unicode
+  and unsupported-decoder failures remain fatal; root-depth counting matches the
+  Python graph convention, including a deepest empty container at depth 128.
+- Extended actual-Python screening observations with eight boundary/nested cases.
+  All 1,052 value observations pass in the native worker. A 5,000,001-element
+  candidate also fails before parsed allocation in a 128 MiB Node child heap.
+- Docker: strict typing and 147 unit/contract cases passed. Native screening
+  passed on 145 (1.92s) and 140 (5.39s), with three other format cases deselected.
+  Focused Python screening/resource/graph suite: 56 passed in 5.24s. Python's two
+  allocation defects were fixed/tested in separate backend commits.
+- No graph activation, local delivery, live API access or production change.

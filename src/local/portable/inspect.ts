@@ -1,6 +1,6 @@
 /** Credential screening and classified audit values, with no owner adoption. */
 import {ExactDecimal} from 'zenmoney-typescript';
-import {archiveJson} from './json.js';
+import {archiveJson,ArchiveJsonBudgetError} from './json.js';
 import type {JsonValue} from 'zenmoney-typescript';
 import {int64} from '../storage/types.js';
 import {PortableError,requirePortable,object,uuidValue} from './format.js';
@@ -28,7 +28,7 @@ export function credentialText(text:string):boolean{
 
 export function financialJson(raw:string):JsonValue{
   let value:JsonValue;
-  try{value=archiveJson(raw) as JsonValue;}catch{throw new PortableError('invalid_financial_json');}
+  try{value=archiveJson(raw) as JsonValue;}catch(error){throw new PortableError(error instanceof ArchiveJsonBudgetError?'json_budget_exceeded':'invalid_financial_json');}
   const stack:{value:JsonValue;depth:number}[]=[{value,depth:0}];let visited=0;
   while(stack.length){
     const item=stack.pop()!;requirePortable(++visited<=5000000&&item.depth<=128,'json_budget_exceeded');
@@ -45,7 +45,12 @@ export function financialJson(raw:string):JsonValue{
       requirePortable(!credentialText(item.value),'credential_material');
       const candidate=item.value.replace(NESTED_JSON_PREFIX,'');
       if(/^[{\[]/.test(candidate)){
-        let nested:JsonValue;try{nested=archiveJson(candidate) as JsonValue;}catch{continue;}
+        let nested:JsonValue;
+        try{nested=archiveJson(candidate) as JsonValue;}
+        catch(error){
+          if(error instanceof SyntaxError)continue; // Ordinary malformed note, not a decoded structure.
+          throw new PortableError(error instanceof ArchiveJsonBudgetError?'json_budget_exceeded':'invalid_financial_json');
+        }
         stack.push({value:nested,depth:item.depth+1});
       }
     }

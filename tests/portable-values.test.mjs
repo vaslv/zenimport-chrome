@@ -22,8 +22,22 @@ test('every classified metadata field matches the independent Python expectation
   for(const [i,vector]of vectors.metadata.entries())compare(observe(()=>metadataValue(vector.key,vector.value,vectors.dataset_id)),vector.expected,'metadata '+i);
 });
 
+test('nested JSON cannot turn Unicode or resource rejection into an unchecked ordinary note',()=>{
+  const secret='['.repeat(129)+'{"token":"synthetic"}'+']'.repeat(129);
+  assert.throws(()=>financialJson(JSON.stringify({nested:secret})),{code:'json_budget_exceeded'});
+  assert.throws(()=>financialJson(JSON.stringify({nested:'{"text":"\\ud800"}'})),{code:'invalid_financial_json'});
+  assert.throws(()=>financialJson(JSON.stringify({nested:'{"n":'+'1'.repeat(4097)+',"token":"synthetic"}'})),{code:'invalid_financial_json'});
+  assert.doesNotThrow(()=>financialJson('['.repeat(129)+']'.repeat(129)));
+  assert.throws(()=>financialJson('['.repeat(129)+'0'+']'.repeat(129)),{code:'json_budget_exceeded'});
+});
+
 test('a 16 MiB invalid identifier is rejected within a 128 MiB JavaScript heap',()=>{
   const result=spawnSync(process.execPath,['--max-old-space-size=128','scripts/portable-values-budget.mjs'],{encoding:'utf8',timeout:30000});
+  assert.equal(result.status,0,result.stderr);
+});
+
+test('oversized JSON fanout fails before allocation within a 128 MiB JavaScript heap',()=>{
+  const result=spawnSync(process.execPath,['--max-old-space-size=128','scripts/portable-values-budget.mjs','fanout'],{encoding:'utf8',timeout:30000});
   assert.equal(result.status,0,result.stderr);
 });
 
@@ -39,7 +53,7 @@ test('native archive JSON recovers every exact numeric token without trusting Nu
 
 test('archive JSON rejects duplicates, malformed Unicode, excessive nesting and noncanonical numeric cells',()=>{
   for(const raw of ['{"a":1,"\\u0061":1}','{"__proto__":1,"__proto__":1}','"\\ud800"','{"\\udfff":0}',
-    '[1,]','01','NaN','Infinity','true false','{"x" 1}','['.repeat(129)+']'.repeat(129),'1'.repeat(4097),'\ufeff{}']){
+    '[1,]','01','NaN','Infinity','true false','{"x" 1}','['.repeat(130)+']'.repeat(130),'1'.repeat(4097),'\ufeff{}']){
     assert.throws(()=>archiveJson(raw),undefined,raw.slice(0,30));
   }
   for(const raw of ['1.0','1e0'])assert.throws(()=>archiveJson(raw,true));
