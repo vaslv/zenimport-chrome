@@ -481,3 +481,21 @@ No archive validity is presented as financial graph or activation authority.
   checks as well; no claim of a passing earlier failing build is made.
 - This prerequisite does not yet validate all raw-bank/capture graph relations.
   Full L4 lifecycle/interop/review and L5–L12 remain outstanding.
+
+### L4.11 — bank raw/revision/frontier proof (L4 in progress)
+
+- Added read-only current-record and complete revision-chain validation, canonical
+  and historical aliases, exact currency/scale projections and contiguous coverage
+  frontiers. Old bank projections must match classified original source rows,
+  including their amount scale, beneficiary fields and historical timestamps.
+- Equivalent aware timestamps compare by integer microseconds without rewriting
+  either raw audit. A one-microsecond difference still fails. Missing revisions,
+  processing state, aliases and changed current/legacy fields are rejected even
+  when outer archive hashes are recomputed.
+- Docker: strict typing and 145 unit/contract cases passed. Six focused native
+  bank cases passed per browser (145: 8.43s; 140: 36.29s; 19 prior cases deselected).
+  Python fixture/graph tests: 67 passed in 3.78s, including independent equivalent-
+  offset acceptance and microsecond-mismatch rejection.
+- Capture/page completeness proof and a combined graph validator remain next;
+  lifecycle/cleanup, full interop, legacy conversion and independent L4 review
+  are still required. No activation authority, live calls or product sends added.

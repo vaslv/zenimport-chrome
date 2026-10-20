@@ -21,6 +21,13 @@ export function scalarText(value:unknown,code:string):string{
 
 export const tupleText=(...values:string[])=>values.map(value=>value.length+':'+value).join('');
 
+export function jsonTruthy(value:unknown):boolean{
+  if(value instanceof ExactDecimal)return !value.equals(new ExactDecimal('0'));
+  if(Array.isArray(value))return value.length>0;
+  if(value!==null&&typeof value==='object')return Object.keys(value).length>0;
+  return Boolean(value);
+}
+
 /** Python JSON-value equality for archived facts, independent of dict key order. */
 export function jsonEqual(left:unknown,right:unknown,depth=0):boolean{
   if(depth>128)return false;

@@ -70,6 +70,9 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
     }else if(action==='mirror-proof'){
       const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
       await db.checkStageMirror(args.stageId,args.fence);value=true;
+    }else if(action==='record-proof'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
+      await db.checkStageRecords(args.stageId,args.fence);value=true;
     }
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);

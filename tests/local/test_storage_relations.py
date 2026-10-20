@@ -132,3 +132,32 @@ def test_native_rehashed_archive_cannot_replace_mirror_or_legacy_owner_evidence(
         stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
         assert call(page,'mirror-proof',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code=code)
         assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+
+
+@pytest.mark.parametrize('name',['portable-financial-v2','portable-legacy-v2'])
+def test_native_bank_record_proof_retains_raw_revisions_and_frontiers(tmp_path,name):
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture)['value']
+        assert call(page,'record-proof',fence=fence,stageId=stage['id'])==dict(ok=True,value=True)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+
+
+@pytest.mark.parametrize('problem,code',[('amount','bank_raw_mismatch'),('microsecond','bank_raw_mismatch'),
+    ('frontier','invalid_coverage_frontier'),('legacy_description','invalid_legacy_bank_projection')])
+def test_native_bank_record_proof_rejects_changed_values_despite_new_archive_hashes(tmp_path,problem,code):
+    import re
+    name='portable-legacy-v2' if problem.startswith('legacy_') else 'portable-financial-v2'
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    if problem=='amount':fixture['rows']['bank_transactions'][0][column('bank_transactions','amount')]=['text','999']
+    if problem=='microsecond':
+        index=column('bank_transactions','occurred_at')
+        fixture['rows']['bank_transactions'][0][index][1]=re.sub(r'(Z|[+-][0-9]{2}:[0-9]{2})$',r'.000001\1',fixture['rows']['bank_transactions'][0][index][1])
+    if problem=='frontier':fixture['rows']['bank_accounts'][0][column('bank_accounts','last_complete_end')]=['text','2026-01-01']
+    if problem=='legacy_description':fixture['rows']['bank_transactions'][0][column('bank_transactions','description')]=['text','changed']
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
+        assert call(page,'record-proof',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code=code)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
