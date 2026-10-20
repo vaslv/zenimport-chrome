@@ -7,6 +7,7 @@
 !scripts/build.py
 !scripts/bundle.mjs
 !scripts/bundle-contracts.mjs
+!scripts/build-storage-schema.mjs
 !scripts/run-business-contracts.mjs
 !THIRD_PARTY_NOTICES.md
 !scripts/local-runtime-live.py

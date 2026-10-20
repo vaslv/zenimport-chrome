@@ -234,3 +234,18 @@ financial mode remains inaccessible in the product UI until L4–L11 pass.
 L4 is next: native IndexedDB financial repositories and archive interop, with its
 required independent review. L4–L12 are not yet implemented. Product synchronization
 continues to use the remote backend; do not present standalone mode as ready.
+
+### L4.1 — typed scalar/key foundation (L4 in progress)
+
+- Reproducibly generated all 49 logical row interfaces and column, primary,
+  secondary/partial-unique, foreign-key, CHECK and trigger descriptors from the
+  checksum-pinned contract. Unknown expression/partial indexes fail generation.
+- Added typed scalar validation and exact signed-64-bit text. IndexedDB keys use
+  ASCII UTF-8 hex and offset fixed-width integer hex, preserving SQLite ordering
+  including astral text, embedded NUL, negative values and integers above 2^53.
+- Raw JSON is opaque exact text at this layer. These shape/key checks explicitly
+  do not claim financial-graph or relational validity; repositories add that gate.
+- Docker: 84 unit/contract tests passed; strict TypeScript and browser ESM bundling
+  passed. No new runtime behavior, browser storage or local financial sends are
+  exposed. Native financial database, archive interop and independent L4 review
+  remain required. Generator checking is part of the Docker unit build.
