@@ -96,7 +96,11 @@ def state(worker):return worker.evaluate("async()=> (await chrome.storage.local.
 def start_sync(popup,bank,worker):
     previous=(state(worker) or {}).get('command',{}).get('request_id')
     bank.bring_to_front();popup.locator('#sync').click()
-    pump_until(popup,worker,lambda:(state(worker) or {}).get('command',{}).get('request_id') not in (None,previous))
+    def acknowledged():
+        current=state(worker) or {}
+        # The durable command precedes HTTP; only the stored job proves its ACK.
+        return current.get('command',{}).get('request_id') not in (None,previous) and bool(current.get('job'))
+    pump_until(popup,worker,acknowledged)
 
 
 def test_popup_zip_export_switch_import_and_no_duplicate_or_restored_deletion(tmp_path):
