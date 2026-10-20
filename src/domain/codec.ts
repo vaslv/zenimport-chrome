@@ -42,15 +42,15 @@ function compareKeys(a: string, b: string): number {
 /** Frozen capture-policy canonical DTO: sorted keys and Python ASCII escaping.
  * Portable-v2 canonical encoding is a separate contract and does not use this.
  */
-export function canonicalDto(value: unknown): string {
+function canonicalBounded(value: unknown, maxBytes:number): string {
   const seen = new Set<object>(); let nodes = 0, bytes = 0;
   const piece = (value: string) => {
     bytes += value.length; // Canonical output is ASCII, so bytes equal code units.
-    if (bytes > 2_000_000) throw new DomainError('invalid_dto');
+    if (bytes > maxBytes) throw new DomainError('invalid_dto');
     return value;
   };
   const quote = (text: string) => {
-    if (text.length > 2_000_000) throw new DomainError('invalid_dto');
+    if (text.length > maxBytes) throw new DomainError('invalid_dto');
     // Reject lone surrogates rather than creating nonportable identity strings.
     for (const char of text) { const code = char.codePointAt(0)!; if (code >= 0xd800 && code <= 0xdfff) throw new DomainError('invalid_dto'); }
     return piece(JSON.stringify(text).replace(/[\u007f-\uffff]/g, char => '\\u' + char.charCodeAt(0).toString(16).padStart(4, '0')));
@@ -87,9 +87,14 @@ export function canonicalDto(value: unknown): string {
     seen.delete(item); return result;
   }
   const result = encode(value, 0);
-  if (new TextEncoder().encode(result).length > 2_000_000) throw new DomainError('invalid_dto');
+  if (new TextEncoder().encode(result).length > maxBytes) throw new DomainError('invalid_dto');
   return result;
 }
+
+export function canonicalDto(value:unknown):string{return canonicalBounded(value,2_000_000);}
+
+/** Stored capture expands Unicode to ASCII; its row budget is not HTTP's cap. */
+export function canonicalStoredDto(value:unknown):string{return canonicalBounded(value,128*1024*1024);}
 
 export async function dtoDigest(value: unknown): Promise<string> {
   const bytes = new TextEncoder().encode(canonicalDto(value));

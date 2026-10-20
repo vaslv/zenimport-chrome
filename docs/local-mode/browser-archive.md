@@ -63,12 +63,21 @@ contract SHA256 with Python's reproducibly packaged contract. Native MV3 tests
 execute the same bundle under extension CSP, with extra Worker creation denied.
 Full staged-data/activation/large-dataset gates are separate L4 requirements.
 
-The subsequent private graph checks include a relational pass over all stores and
-a classified audit pass. Both operate on an immutable inactive generation through
+The subsequent private graph checks include relational, classified audit, raw
+bank/revision, capture, permanent-history and mirror passes. They operate on an immutable inactive generation through
 bounded IDB reads; primary-prefix scans never export raw database handles. The
 relational pass rehashes stored table bytes, verifies derived index fields and
 checks packaged insert proofs even when children were loaded before parents.
 The audit pass screens JSON columns and metadata, compares legacy schema objects
 with the explicit allowlist and reconstructs the original legacy fingerprint from
-unchanged row text. Archived SQL is never executed. Complete raw bank/capture and
-mirror projection validation and protected activation remain separate requirements.
+unchanged row text. Archived SQL is never executed. The complete graph proof also
+checks every descriptor with alternative read adapters. A proof summary grants no
+activation authority; fresh owner verification, protected handoff, atomic routing,
+generation retirement and safe cleanup remain separate requirements.
+
+Stored capture canonicalization uses the same sorted ASCII representation as the
+server, under the portable row budget. It does not raise the ordinary 2 MB DTO or
+HTTP request limit. A reference case has an 828,022-byte UTF-8 request and a
+2,434,555-byte stored ASCII projection; those are both valid under their respective
+budgets. Page identity/total/count/proof, dictionary-value and microsecond comparisons
+are checked independently of this representation difference.

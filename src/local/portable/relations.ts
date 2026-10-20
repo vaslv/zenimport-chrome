@@ -5,6 +5,10 @@ import type {Scalar} from '../storage/types.js';
 import {packRow,rowKey} from '../storage/cells.js';
 import {envelope,field} from '../storage/envelope.js';
 import {requirePortable} from './format.js';
+import {rowBytes} from './format.js';
+import type {PortableManifest} from './format.js';
+import {sha256} from '@noble/hashes/sha2.js';
+import {bytesToHex} from '@noble/hashes/utils.js';
 
 export interface GraphReader{
   rows<K extends TableName>(table:K,primaryPrefix?:readonly Scalar[]):AsyncIterable<RowByTable[K]>;
@@ -35,16 +39,22 @@ async function insertProof(reader:GraphReader,table:TableName,data:RowByTable[Ta
   }
 }
 
-export async function validateRelations(reader:GraphReader):Promise<Readonly<Record<TableName,string>>>{
+export async function validateRelations(reader:GraphReader,manifest?:PortableManifest):Promise<Readonly<Record<TableName,string>>>{
   const insertNames=Object.values(SCHEMA).flatMap(table=>table.triggers.filter(trigger=>/BEFORE\s+INSERT\s+ON/i.test(trigger.sql)).map(trigger=>trigger.name)).sort();
   requirePortable(insertNames.join(',')==='captured_record_scope,delivery_authorization_proof,interval_scope','unsupported_invariant');
   const counts={} as Record<TableName,string>;
   for(const table of Object.keys(SCHEMA).sort() as TableName[]){
     const definition=SCHEMA[table],seen=definition.indexes.filter(index=>index.unique).map(index=>({index,keys:new Set<string>()}));
+    const expected=manifest?.tables.find(value=>value.name===table),hash=manifest?sha256.create():null;let bytes=0;
+    requirePortable(manifest===undefined||expected!==undefined,'invalid_tables');
     let previous:string|null=null,count=0n;
     for await(const data of reader.rows(table)){
       const packed=packRow(table,data),value=envelope('relational-proof-only',table,packed),key=rowKey(table,packed);
       requirePortable(previous===null||previous<key,'duplicate_or_unordered_key');previous=key;count++;
+      if(hash&&expected){
+        const raw=rowBytes(table,packed).bytes;bytes+=raw.length;
+        requirePortable(count<=BigInt(expected.rows)&&bytes<=expected.bytes,'table_integrity_mismatch');hash.update(raw);
+      }
       for(const {index,keys}of seen){
         const candidate=value[index.key];if(candidate===undefined)continue;
         requirePortable(typeof candidate==='string'&&!keys.has(candidate),'invalid_relationship');keys.add(candidate);
@@ -57,6 +67,7 @@ export async function validateRelations(reader:GraphReader):Promise<Readonly<Rec
       await insertProof(reader,table,data);
     }
     counts[table]=count.toString();
+    if(hash&&expected)requirePortable(count===BigInt(expected.rows)&&bytes===expected.bytes&&bytesToHex(hash.digest())===expected.sha256,'table_integrity_mismatch');
   }
   return counts;
 }

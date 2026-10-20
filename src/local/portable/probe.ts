@@ -11,5 +11,8 @@ export * from './legacy-facts.js';
 export * from './mirror-proof.js';
 export * from '../../domain/bank-record.js';
 export * from './record-proof.js';
+export * from './capture-proof.js';
+export * from './graph.js';
+export {canonicalDto,canonicalStoredDto} from '../../domain/codec.js';
 export * from '../../domain/python-decimal.js';
 export {decodeJson as decodeGraphJson,ExactDecimal as GraphDecimal} from 'zenmoney-typescript';

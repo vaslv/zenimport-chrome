@@ -85,3 +85,17 @@ def test_native_bank_model_and_legacy_clock_follow_actual_python_observations(tm
           return count;
         }''',vectors)
         assert count==sum(len(vectors[key]) for key in ('records','timestamp_pairs','legacy_timestamps'))
+
+
+def test_native_stored_capture_keeps_unicode_ascii_expansion_separate_from_wire_limit(tmp_path):
+    vector=json.loads(Path('/app/contracts/business/v1/bank-record-vectors.json').read_text())['wide_capture']
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        result=worker.evaluate('''vector=>{
+          const raw={worker_id:'00000000-0000-4000-8000-000000000000',lease_epoch:1,page_number:1,total_pages:1,total_records:vector.count,
+            records:Array.from({length:vector.count},(_,i)=>({...vector.record_base,external_id:'wide-'+i,description:vector.description.repeat(vector.repeat)}))};
+          const value={page_number:1,total_pages:1,total_records:vector.count,records:raw.records.map(portableProbe.bankRecord)};
+          let wireGuard=false;try{portableProbe.canonicalDto(value);}catch{wireGuard=true;}
+          const bytes=portableProbe.utf8.encode(portableProbe.canonicalStoredDto(value));
+          return {wire:portableProbe.utf8.encode(JSON.stringify(raw)).length,stored:bytes.length,hash:portableProbe.digest(bytes),wireGuard};
+        }''',vector)
+        assert result==dict(wire=vector['wire_bytes'],stored=vector['stored_bytes'],hash=vector['stored_sha256'],wireGuard=True)

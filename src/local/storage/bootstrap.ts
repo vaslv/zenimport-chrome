@@ -15,6 +15,8 @@ import {validateHistory} from '../portable/history.js';
 import {LegacyFacts} from '../portable/legacy-facts.js';
 import {validateMirror} from '../portable/mirror-proof.js';
 import {validateRecords} from '../portable/record-proof.js';
+import {validateFinancialGraph} from '../portable/graph.js';
+import type {GraphSummary} from '../portable/graph.js';
 
 const opening=new Map<string,Promise<void>>();
 
@@ -112,6 +114,11 @@ export class LocalDatabase{
     const reader=await StageGraphReader.open(this.#db,this.#sentinel,fence,id);
     await validateRelations(reader);await validateAudit(reader,reader.manifest);
     await validateRecords(reader,await LegacyFacts.read(reader));
+  }
+
+  async checkStageGraph(id:string,fence:ContextFence,expectedOwners?:readonly string[]):Promise<GraphSummary>{
+    const reader=await StageGraphReader.open(this.#db,this.#sentinel,fence,id);
+    return validateFinancialGraph(reader,reader.manifest,expectedOwners);
   }
 
   /** Persist outside IDB before the first financial mutation/dispatch claim. */

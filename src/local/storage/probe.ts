@@ -40,7 +40,7 @@ async function state(name:string){
   finally{db.close();}
 }
 
-export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string}){
+export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string;owners?:string[]}){
   try{
     let value:unknown;
     if(action==='open')value=await open(args.name,args.mode);
@@ -73,6 +73,9 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
     }else if(action==='record-proof'){
       const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
       await db.checkStageRecords(args.stageId,args.fence);value=true;
+    }else if(action==='graph-proof'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
+      value=await db.checkStageGraph(args.stageId,args.fence,args.owners);
     }
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);

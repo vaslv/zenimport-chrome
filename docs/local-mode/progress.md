@@ -525,3 +525,30 @@ No archive validity is presented as financial graph or activation authority.
 - Docker: strict typing and 153 unit/contract cases passed; all 2,642 actual SQLite
   CHECK outcomes and 1,132 Python value observations agree. Two focused Python
   vector-regeneration checks passed in 0.21s. No new product behavior or authority.
+
+### L4.12 — complete archived financial facts proof (L4 in progress)
+
+- Combined all 49 logical-table integrity/relationship checks with classified
+  audit, raw bank revisions, capture/page/coverage, immutable send history and
+  current/legacy mirror projections. Alternative read adapters also rehash every
+  table against the manifest. Archived owner equality remains distinct from a
+  separately expected owner; no graph result authorizes activation or API writes.
+- Capture proof verifies request identity, stable job snapshots, terminal source
+  states, canonical stored page bytes, complete page evidence, account/date/scale/
+  detail scope and the exact captured revision. Recomputed outer archive hashes
+  cannot substitute a missing proof. Complete intervals require actual empty-page
+  evidence, not a zero-page claim; the corresponding source fix is separate.
+- Reference Unicode data demonstrated that a valid 828,022-byte wire request has
+  a 2,434,555-byte stored ASCII projection. Added a separate bounded persistence
+  encoder; ordinary 2 MB DTO limits remain unchanged. The compact reference recipe
+  recomputes its exact Python SHA256 without checking in the expanded payload.
+- Docker: strict typing and 159 unit/contract cases passed. Eight complete-graph/
+  persistence cases passed per browser (145: 10.70s; 140: 44.72s; 29 prior cases
+  intentionally deselected). Python graph/resource/model/fixture checks: 74 passed
+  in 5.28s. Equivalent dictionary ordering/offset spellings pass while changed
+  captured values fail; an initial negative fixture was corrected to remove its
+  dependent authorization so it tests capture evidence after FK consistency.
+- L4 remains incomplete: persistent validated-stage lifecycle, protected generation
+  activation/retirement, backup-aware cleanup, full financial interop/format-1
+  conversion, 100k graph/boundary gates and independent review remain. Product
+  continues to use the remote backend; no live calls or production changes.

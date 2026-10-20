@@ -161,3 +161,39 @@ def test_native_bank_record_proof_rejects_changed_values_despite_new_archive_has
         stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
         assert call(page,'record-proof',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code=code)
         assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+
+
+@pytest.mark.parametrize('name',['portable-financial-v2','portable-legacy-v2'])
+def test_native_complete_financial_graph_has_no_activation_side_effect(tmp_path,name):
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture)['value']
+        result=call(page,'graph-proof',fence=fence,stageId=stage['id'],owners=fixture['owner_ids']);assert result['ok'],result
+        assert result['value']['datasetDigest']==fixture['expected_digest']
+        assert result['value']['counts']=={name:str(len(rows)) for name,rows in fixture['rows'].items()}
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+        assert call(page,'stages')['value'][0]['state']=='format_valid'
+
+
+@pytest.mark.parametrize('problem,code',[('page_digest','invalid_page_digest'),('captured','invalid_captured_revision'),
+    ('zero_pages','incomplete_coverage'),('huge_pages','incomplete_coverage'),('expected_owner','destination_owner_mismatch')])
+def test_native_complete_graph_rejects_rehashed_capture_and_owner_substitution(tmp_path,problem,code):
+    fixture=deepcopy(FIXTURE)
+    if problem=='page_digest':fixture['rows']['capture_pages'][0][column('capture_pages','digest')]=['text','0'*64]
+    if problem=='captured':
+        removed=fixture['rows']['captured_records'].pop()[column('captured_records','bank_id')][1]
+        # Remove its dependent authorization too: this case targets missing page
+        # evidence after ordinary foreign-key consistency has already passed.
+        fixture['rows']['delivery_authorizations']=[row for row in fixture['rows']['delivery_authorizations'] if row[column('delivery_authorizations','bank_id')][1]!=removed]
+    if problem in ('zero_pages','huge_pages'):
+        row=deepcopy(next(row for row in fixture['rows']['capture_intervals'] if row[column('capture_intervals','state')][1]=='complete'))
+        row[column('capture_intervals','id')]=['text','ffffffff-ffff-4fff-8fff-ffffffffffff']
+        row[column('capture_intervals','total_pages')]=['integer','0' if problem=='zero_pages' else '9223372036854775807']
+        row[column('capture_intervals','total_records')]=['integer','0'];fixture['rows']['capture_intervals'].append(row)
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
+        result=call(page,'graph-proof',fence=fence,stageId=stage['value']['id'],owners=['another'] if problem=='expected_owner' else fixture['owner_ids'])
+        assert result==dict(ok=False,code=code)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
