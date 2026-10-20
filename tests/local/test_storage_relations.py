@@ -80,3 +80,29 @@ def test_native_rehashed_archive_cannot_rewrite_legacy_audit_bytes(tmp_path):
         stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
         assert call(page,'audit',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code='invalid_legacy_audit')
         assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+
+
+@pytest.mark.parametrize('name',['portable-financial-v2','portable-legacy-v2'])
+def test_native_attempt_history_remains_inactive_after_complete_read_only_proof(tmp_path,name):
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture)['value']
+        assert call(page,'history',fence=fence,stageId=stage['id'])==dict(ok=True,value=True)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+        assert call(page,'stages')['value'][0]['state']=='format_valid'
+
+
+@pytest.mark.parametrize('problem,code',[('missing_attempt','missing_attempt_evidence'),('different_payload','missing_attempt_evidence'),('terminal','terminal_history_conflict')])
+def test_native_rehashed_archive_cannot_change_permanent_send_history(tmp_path,problem,code):
+    fixture=deepcopy(FIXTURE)
+    if problem=='missing_attempt':fixture['rows']['delivery_attempts']=[]
+    if problem=='different_payload':
+        index=column('delivery_attempts','payload')
+        for row in fixture['rows']['delivery_attempts']:row[index][1]+=' '
+    if problem=='terminal':fixture['rows']['bank_processing'][0][column('bank_processing','state')]=['text','pending']
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
+        assert call(page,'history',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code=code)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']

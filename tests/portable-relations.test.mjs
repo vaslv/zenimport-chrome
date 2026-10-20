@@ -1,23 +1,8 @@
 import assert from 'node:assert/strict';
-import {readFileSync} from 'node:fs';
 import test from 'node:test';
 import {validateRelations} from '../.local/contracts/portable-format.mjs';
-import {rowKey,unpackRow} from '../.local/contracts/storage-cells.mjs';
 
-const fixture=JSON.parse(readFileSync('contracts/business/v1/portable-financial-v2.json','utf8'));
-const schema=JSON.parse(readFileSync('contracts/business/v1/sqlite-v7.json','utf8'));
-const policy=JSON.parse(readFileSync('contracts/business/v1/portable-policy.json','utf8'));
-const definitions=Object.fromEntries(Object.entries(policy.logical_tables).map(([name,value])=>[name,schema.tables[value.source]]));
-const offset=(name,column)=>definitions[name].columns.findIndex(value=>value.name===column);
-function reader(rows){
-  return {
-    async *rows(table){for(const row of [...rows[table]].sort((a,b)=>rowKey(table,a)<rowKey(table,b)?-1:1))yield unpackRow(table,row);},
-    async find(table,columns,values){
-      const row=rows[table].find(row=>columns.every((column,i)=>JSON.stringify(row[offset(table,column)])===JSON.stringify(values[i])));
-      return row===undefined?null:unpackRow(table,row);
-    },
-  };
-}
+import {current as fixture,definitions,offset,reader} from './portable-fixture-reader.mjs';
 
 test('complete captured and attempted Python fixture passes every native logical relationship',async()=>{
   const result=await validateRelations(reader(fixture.rows));

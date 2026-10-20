@@ -64,6 +64,9 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
     }else if(action==='audit'){
       const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
       await db.checkStageAudit(args.stageId,args.fence);value=true;
+    }else if(action==='history'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
+      await db.checkStageHistory(args.stageId,args.fence);value=true;
     }
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);

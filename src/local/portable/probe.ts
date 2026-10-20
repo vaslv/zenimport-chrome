@@ -5,5 +5,6 @@ export * from './inspect.js';
 export * from './json.js';
 export * from './relations.js';
 export * from './audit.js';
+export * from './history.js';
 export * from '../../domain/python-decimal.js';
 export {decodeJson as decodeGraphJson,ExactDecimal as GraphDecimal} from 'zenmoney-typescript';

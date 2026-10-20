@@ -427,3 +427,18 @@ No archive validity is presented as financial graph or activation authority.
   guard avoids unnecessary long-string allocation and passed the same unit cases.
 - Raw bank/capture/mirror semantics, protected activation, cleanup, format-1
   conversion and independent L4 review remain. No local financial sends enabled.
+
+### L4.9 — permanent send-history proof (L4 in progress)
+
+- Added read-only validation of create-once payload identity, exact original
+  attempt bytes, matching job authorization, quiescent source leases/delivery and
+  permanent terminal receipt/link evidence. Comparisons retain complete payload
+  equality rather than substituting a payload hash. Legacy journal exceptions
+  stay explicit; validation never resumes delivery or changes a processing state.
+- Docker: 133 unit/contract cases passed. Five focused native history cases passed
+  per browser (145: 7.38s; 140: 29.49s), with eight earlier relational/audit cases
+  deselected intentionally. Python independently rejects ten broken-history variants
+  of the shared current fixture; its focused module passed 13 tests in 0.71s.
+- Both current and genuine converted legacy journals pass this partial proof.
+  Full raw bank/capture/mirror semantics and L4 lifecycle/interop/review remain;
+  product behavior is still remote-only, with no new API writes enabled.
