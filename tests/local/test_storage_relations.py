@@ -106,3 +106,29 @@ def test_native_rehashed_archive_cannot_change_permanent_send_history(tmp_path,p
         stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
         assert call(page,'history',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code=code)
         assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+
+
+@pytest.mark.parametrize('name',['portable-financial-v2','portable-legacy-v2'])
+def test_native_raw_mirror_proof_keeps_actual_and_legacy_projection_inactive(tmp_path,name):
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture)['value']
+        assert call(page,'mirror-proof',fence=fence,stageId=stage['id'])==dict(ok=True,value=True)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']
+        assert call(page,'stages')['value'][0]['state']=='format_valid'
+
+
+@pytest.mark.parametrize('problem,code',[('amount','invalid_mirror_projection'),('owner','declared_owner_mismatch'),
+    ('legacy_amount','invalid_legacy_projection'),('legacy_tags','invalid_legacy_tags')])
+def test_native_rehashed_archive_cannot_replace_mirror_or_legacy_owner_evidence(tmp_path,problem,code):
+    name='portable-legacy-v2' if problem.startswith('legacy_') else 'portable-financial-v2'
+    fixture=json.loads(Path('/app/contracts/business/v1',name+'.json').read_text())
+    if problem=='owner':fixture['owner_ids']=['another']
+    elif problem=='legacy_tags':fixture['rows']['zen_tags'][0][column('zen_tags','position')]=['integer','10']
+    else:fixture['rows']['zen_movements'][0][column('zen_movements','outcome')]=['text','999']
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,_,page,_):
+        original=call(page,'open')['value'];fence=original['context']
+        stage=call(page,'stage',fence=fence,golden=fixture);assert stage['ok'],stage
+        assert call(page,'mirror-proof',fence=fence,stageId=stage['value']['id'])==dict(ok=False,code=code)
+        assert call(page,'open')['value']['state']['rows']==original['state']['rows']

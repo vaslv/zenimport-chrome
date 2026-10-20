@@ -442,3 +442,22 @@ No archive validity is presented as financial graph or activation authority.
 - Both current and genuine converted legacy journals pass this partial proof.
   Full raw bank/capture/mirror semantics and L4 lifecycle/interop/review remain;
   product behavior is still remote-only, with no new API writes enabled.
+
+### L4.10 — exact mirror and legacy projection proof (L4 in progress)
+
+- Added derived legacy bank/movement/category proof indexes after classified
+  audit validation. Current mirror entities use the published SDK's entity keys;
+  movement fields preserve exact Decimal text, flags, raw category order and
+  positions. Legacy projections must match the same archived source and tags,
+  including converted entities with no historical run ID.
+- Verifies required mirror context/projections, tombstone identities and the
+  declared owner set. This is archived identity consistency, not a fresh token
+  check or owner adoption. Structured identifier values fail closed rather than
+  inventing a Python representation for an unsupported API identity.
+- Docker: 138 unit/contract cases passed. Six focused native mirror cases passed
+  per browser (145: 8.50s; 140: 38.22s; 13 prior cases intentionally deselected).
+  The Python fixture module passed 14 tests in 0.88s, including the same exact
+  high-precision Decimal projection and rejection of altered category positions.
+- L4 still needs raw bank revisions/capture proofs, protected activation and
+  cleanup, full financial interop, format-1 conversion and independent review.
+  Product remains remote-only; no live calls or production changes occurred.
