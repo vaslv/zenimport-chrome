@@ -1002,7 +1002,11 @@
     "migration_operations",
     "migration_receipts",
     "migration_chunks",
-    "portable_schema_audit"
+    "portable_schema_audit",
+    "migration_work"
   ],
-  "runtime_only_disposition": "Physical installation identity, epoch, migration decisions, chunks and receipts never become portable financial authority. Original source schema audit is exported through source_schema_migrations instead of destination runtime markers."
+  "runtime_only_disposition": "Physical installation identity, epoch, migration decisions, chunks and receipts never become portable financial authority. Original source schema audit is exported through source_schema_migrations instead of destination runtime markers.",
+  "physical_metadata_aliases": {
+    "portable:migration_hold": "migration_hold"
+  }
 }

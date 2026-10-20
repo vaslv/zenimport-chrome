@@ -184,3 +184,25 @@ synchronization remains inaccessible in the product UI until later safety gates.
   passed. No live API calls or production changes.
 - User reports Chrome 155.0.8059.85 installed; minimum 140 remains the candidate
   decision. Native Docker evidence still covers 140/145, not an unrun 155 build.
+
+### L3.4 — portable server API, background staging and atomic installation
+
+- Added the pinned protocol-2 HTTP schemas/routes/command contract and explicit
+  physical alias for legacy hold audit. Receipt null fields are part of integrity
+  and are preserved through the HTTP response model. Ordinary capture API stays 1.
+- Added authenticated bounded chunk transfer; persisted background snapshot,
+  validation and activation tasks; fresh read-only SDK owner checks; atomic
+  financial installation with permanent decision receipts; explicit retry/status.
+- Source quiescence recovers crashed attempts as uncertain without another send.
+  Source/target holds survive every failure. A target stays awaiting explicit Sync.
+  Recovery recognizes committed success even after the coordinator advanced.
+- Reviewed historical source proofs, contiguous revisions, category positions,
+  legacy missing-run-ID compatibility, late mirror commits and indexed audit
+  lookups. Trusted SQL is packaged; archived SQL remains inert. Private scratch
+  is cleaned only for the current installation under its writer lock.
+- Latest native suite: 701 tests passed before the final HTTP status-code mapping;
+  both architecture lifecycle suites passed their 695-test checkpoint, including
+  HTTP/auth, SIGKILL, graceful stop and restored delivery. Chrome compatibility:
+  30 browser/backend cases passed. Chrome unit/contract checks: 70 passed.
+- Final verification/contract pin update remains before declaring L3 complete.
+  L4–L12 have not started; product UI still uses the remote backend exclusively.
