@@ -302,3 +302,14 @@ continues to use the remote backend; do not present standalone mode as ready.
   test-results/local-mode/L4/. No live calls or production data changes.
 - L4 remains incomplete: staged archive interoperability, complete financial
   graph validation, generation activation/cleanup and independent review follow.
+
+### L4 archive-contract correction
+
+Cross-runtime inspection found that the manifest JSON Schema declared table
+counters as strings, although the actual Python codec, canonical digest and
+golden fixture already use bounded JSON integers. Corrected the schema to the
+existing format (0 through 268,435,456) and added golden-descriptor validation,
+fractional/boolean/string/unsafe-counter rejection and Python boundary checks.
+This does not change financial tagged INTEGER strings or HTTP protocol counters.
+Docker: 96 Chrome unit checks and 91 backend codec/graph/reference checks passed.
+No archive validity is presented as financial graph or activation authority.

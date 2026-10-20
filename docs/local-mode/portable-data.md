@@ -66,6 +66,12 @@ and no incidental producer timestamp/session ID in the financial dataset digest.
 Hash raw table bytes; do not reserialize stored raw ZenMoney JSON for hashing.
 Fixtures must give Python and TypeScript the same expected digests.
 
+Table `rows` and `bytes` are bounded JSON integers, from 0 through 268,435,456,
+matching the Python codec and golden descriptor. They are safe exact Numbers in
+the browser. Protocol-2 HTTP counters are decimal strings; do not substitute that
+transport convention into the archive manifest. Financial INTEGER scalars remain
+tagged canonical decimal strings, including values larger than 2^53.
+
 ZIP container bytes need not match between engines. Validate both:
 
 1. Archive SHA-256 for file transfer, retry and user checksums.

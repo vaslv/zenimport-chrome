@@ -64,12 +64,19 @@ test('portable schema distinguishes exact tagged values and rejects unknown mani
     archive_id:id,dataset_id:id,export_session_id:id,created_at:'2026-10-20T12:00:00Z',
     producer:{version:'fixture',engine:'sqlite',contract_revision:digest},
     zenmoney_identity:{owner_ids:['1'],proof_version:1},required_features:[],dataset_digest:digest,
-    tables:[{name:'connections',filename:'tables/connections.ndjson',columns:['id'],rows:'0',bytes:'0',sha256:digest}]};
+    tables:[{name:'connections',filename:'tables/connections.ndjson',columns:['id'],rows:0,bytes:0,sha256:digest}]};
   const validate=ajv.getSchema(schema.$id);
   assert.equal(validate(manifest),true,JSON.stringify(validate.errors));
   assert.equal(validate({...manifest,token:'not-a-secret'}),false);
   assert.equal(validate({...manifest,archive_version:1}),false);
-  assert.equal(validate({...manifest,tables:[{...manifest.tables[0],rows:0}]}),false);
+  for(const value of ['0',-1,0.5,268435457,9007199254740992]){
+    assert.equal(validate({...manifest,tables:[{...manifest.tables[0],rows:value}]}),false);
+    assert.equal(validate({...manifest,tables:[{...manifest.tables[0],bytes:value}]}),false);
+  }
+  const golden=load('portable-golden-v2.json');
+  assert.equal(validate({...manifest,dataset_id:golden.dataset_id,
+    zenmoney_identity:{owner_ids:golden.owner_ids,proof_version:1},
+    tables:golden.expected_tables,dataset_digest:golden.expected_digest}),true,JSON.stringify(validate.errors));
   assert.equal(validate({...manifest,tables:[{...manifest.tables[0],filename:'../../escape'}]}),false);
 });
 
