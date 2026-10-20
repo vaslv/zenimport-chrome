@@ -12,7 +12,7 @@ An independent MV3 extension. Reads history from an open online banking session 
 
 ## Install
 
-Download the ZIP and `SHA256SUMS` from [GitHub Releases](https://github.com/vaslv/zenimport-chrome/releases), verify the checksum, and extract the ZIP into a permanent directory. In desktop Chrome 120 or newer, open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**. Select the extracted directory containing `manifest.json`. The ZIP is not installed directly and this distribution does not update automatically.
+Download the ZIP and `SHA256SUMS` from [GitHub Releases](https://github.com/vaslv/zenimport-chrome/releases), verify the checksum, and extract the ZIP into a permanent directory. In desktop Chrome, open `chrome://extensions`, enable Developer mode, and choose **Load unpacked**. Select the extracted directory containing `manifest.json`. The ZIP is not installed directly and this distribution does not update automatically. The upcoming local development candidate requires Chrome 140 or newer for protected persistent storage; see [the compatibility decision](docs/local-mode/adr-002-supported-chrome.md).
 
 Follow the [installation and update guide](docs/installation.md) to connect your backend, select bank accounts, and synchronize. The published build supports **VietinBank VND current-account history** and **BIDV VND payment-account history**. Published Chrome 0.2.0 uses backend 0.2.0 (API v1) for migration. Chrome 0.2.1 requires backend 0.2.1 for connection discovery in both banks. See the [backend deployment guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.1.md).
 
@@ -22,7 +22,9 @@ Keep the same installation directory when updating and click **Reload** on the e
 
 Neighboring projects: `ZenImportBackend`, `ZenMoneyAPI`. Extension builds do not require their source.
 
-`python3 scripts/build.py` creates a reproducible ZIP, `dist/SHA256SUMS`, and `dist/extension`. Open `chrome://extensions`, enable Developer mode, and load this directory as an unpacked extension. Disable any separate legacy extension first. In the popup, enter the server address and **backend token**, not the ZenMoney token. HTTPS is mandatory except for localhost/127.0.0.1. Bank credentials are never sent to the server.
+`sh scripts/build-docker.sh` creates a reproducible bundled ZIP, `dist/SHA256SUMS`, and `dist/extension` using the pinned Node toolchain in Docker. For a local developer build, use Node 24, `npm ci --ignore-scripts`, `npm run typecheck`, then `python3 scripts/build.py`. Open `chrome://extensions`, enable Developer mode, and load this directory as an unpacked extension. Disable any separate legacy extension first. In the popup, enter the server address and **backend token**, not the ZenMoney token. HTTPS is mandatory except for localhost/127.0.0.1. Bank credentials are never sent to the server.
+
+Standalone mode is being developed in [stages](docs/local-mode/progress.md). The current product UI still uses the backend. Isolated storage/API feasibility probes are excluded from product builds. `sh scripts/test-local-runtime.sh` checks those probes in current Chromium and Chrome 140 with synthetic services only.
 
 Plan and actual limitations: `docs/refactor/03-extension.md`, `docs/refactor/05-progress.md`. No Store publication is performed.
 

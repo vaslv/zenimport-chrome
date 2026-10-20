@@ -527,3 +527,14 @@ Backend Docker: 543 passed; Chrome: 60 unit, 14 standalone browser, 30 full
 integration tests passed. Fixed the fixture ACK race separately in 32f8628.
 See docs/local-mode/progress.md for evidence and remaining gates. No live
 financial API calls, push, tags or publication.
+
+## 2026-10-20 — Standalone extension L1
+
+Pinned published TypeScript SDK/Dexie and the browser bundling toolchain. Docker
+passed 61 unit, 14 standalone browser and 30 backend integration tests. Six native
+storage/SDK cases pass in Chromium 145 and Chrome 140, including content-script
+isolation and full browser restart. Chrome 120 lacks protected persistent storage;
+the upcoming candidate selects Chrome 140 (local-mode ADR 002). One separately
+approved read from the verified test account passed; no financial writes occurred.
+Reproducible artifact evidence and remaining stages are in local-mode/progress.md.
+No production-data changes, push, tags or publication.

@@ -5,6 +5,10 @@
 !contracts/**
 !extension/**
 !scripts/build.py
+!scripts/bundle.mjs
+!scripts/local-runtime-live.py
+!src/**
+!tsconfig.json
 !tests/**
 !Dockerfile.integration
 !LICENSE

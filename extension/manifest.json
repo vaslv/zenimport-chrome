@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "minimum_chrome_version": "120",
+  "minimum_chrome_version": "140",
   "name": "ZenImport",
   "version": "0.2.1",
   "description": "Synchronize bank transaction history with ZenMoney",
-  "permissions": ["activeTab", "scripting", "storage", "alarms"],
+  "permissions": ["activeTab", "scripting", "storage", "alarms", "unlimitedStorage"],
   "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
   "action": {"default_popup": "popup.html"},
   "background": {"service_worker": "background.js", "type": "module"},

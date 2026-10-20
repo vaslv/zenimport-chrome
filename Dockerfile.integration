@@ -1,4 +1,14 @@
 # syntax=docker/dockerfile:1
+FROM node:24-bookworm-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS compiled
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY extension ./extension
+COPY src ./src
+COPY tsconfig.json ./
+COPY scripts/bundle.mjs ./scripts/
+RUN npm run typecheck && npm run build:bundle
+
 FROM mcr.microsoft.com/playwright/python:v1.58.0-noble@sha256:678457c4c323b981d8b4befc57b95366bb1bb6aa30057b1269f6b171e8d9975a AS integration
 WORKDIR /app
 COPY --from=backend requirements.runtime.lock.txt ./
@@ -11,8 +21,9 @@ COPY --from=backend backend ./backend
 COPY --from=backend tests/capture_factory.py tests/mirror_factory.py tests/delivery_factory.py ./fixture_helpers/
 COPY extension ./extension
 COPY scripts/build.py ./scripts/build.py
+COPY --from=compiled /app/.local/bundle ./.local/bundle
 COPY LICENSE PRIVACY.md ./
-RUN python scripts/build.py
+RUN python scripts/build.py --compiled .local/bundle
 COPY tests/browser ./tests/browser
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PYTHONPATH=/app:/app/fixture_helpers
 CMD ["python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/browser"]

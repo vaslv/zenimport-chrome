@@ -160,6 +160,8 @@ backend only if its reference adapter/fixture metadata changes.
    pinned Chromium/Chrome in Docker. If test infrastructure cannot run minimum
    Chrome, document the gap; either obtain real minimum-version evidence or
    explicitly propose raising the manifest minimum before release.
+   L1 implementation decision: Chrome 120 failed the native persistent-storage
+   isolation gate. The local candidate selects verified Chrome 140; see ADR 002.
 8. With separate approval, perform one read-only fetch from the built extension
    using the verified **test** ZenMoney account. Confirm real endpoint, permission,
    response codec and MV3 context. Never print the token or persist response data

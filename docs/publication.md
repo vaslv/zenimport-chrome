@@ -8,11 +8,11 @@ Local origin points to the created repository; its original license is preserved
 
 ```sh
 ./scripts/test-docker.sh
-python3 scripts/build.py
+sh scripts/build-docker.sh
 ```
 
 Load `dist/extension/` through chrome://extensions in Developer mode.
-`dist/zenimport-chrome-0.2.1.zip` contains only extension sources, LICENSE, and
+The versioned ZIP contains only bundled extension assets, LICENSE, and
 PRIVACY.md; it excludes server settings, .env, test data, logs, SQLite, and local
 browser profiles. Builds are reproducible: ZIP file ordering/timestamps are fixed,
 and the build writes `dist/SHA256SUMS` and prints SHA256. Verify it with

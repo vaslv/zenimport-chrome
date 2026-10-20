@@ -15,11 +15,13 @@ jobs:
           persist-credentials: false
       - name: Unit and browser checks with synthetic services
         run: ./scripts/test-docker.sh
+      - name: Offline local storage and SDK probes in current and minimum Chrome
+        run: sh scripts/test-local-runtime.sh
       - name: Reproducible extension archive
         run: |
-          python3 scripts/build.py
+          sh scripts/build-docker.sh
           cp dist/SHA256SUMS "$RUNNER_TEMP/first-build-sha256"
-          python3 scripts/build.py
+          sh scripts/build-docker.sh
           cmp "$RUNNER_TEMP/first-build-sha256" dist/SHA256SUMS
           (cd dist && sha256sum -c SHA256SUMS)
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

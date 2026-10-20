@@ -46,8 +46,58 @@ Status: complete. Source/contract review and Docker validation passed.
 
 Ignored evidence: test-results/local-mode/L0/. No credentials are recorded there.
 
+## L1 — browser architecture and SDK feasibility
+
+Status: complete for the Chrome 140 candidate. Code review and Docker gates passed.
+
+- Installed public zenmoney-typescript 0.1.0 with the L0-pinned npm integrity,
+  Dexie 4.4.6, esbuild 0.28.2 and TypeScript 5.9.3. Docker uses pinned Node 24.
+- Added deterministic browser ESM bundling for the worker and extension pages.
+  Type checking and dependency checks reject external/Node imports. Product ZIPs
+  exclude the isolated feasibility entry, test data, source maps and metafiles.
+- Proved lossless SDK/raw-IDB/Chrome-message roundtrips, compound uniqueness,
+  multiple-store rollback, failed upgrades, versionchange connection closing,
+  actual worker termination, full browser restart and absent-alarm recovery.
+- Tested native host consent denial/grant/revocation, SDK timeout and content
+  script denial of local/session storage. Probes do not expose real credentials.
+- Required unlimitedStorage replaces an unsupported optional grant (ADR 001).
+  Genuine native quota rollback uses the same bundled store on a bounded web
+  origin; extension-origin DevTools quota override is ineffective. Extension
+  transaction quota failure is separately injected. Physical disk exhaustion on
+  the extension origin is not claimed as tested.
+- Chrome 120 failed: local.setAccessLevel is absent and its startup exception
+  prevents message handling. An older matching driver reproduced the missing
+  browser method. Selected Chrome 140 for the local candidate (ADR 002), with the
+  alternative of redesigning credentials offered to the user. This is an explicit
+  compatibility change for the upcoming release, not an update to published 0.2.1.
+- Tested 1k/10k/100k rows, last using 204.8 MB logical payload, chunks of 1,000.
+  Both tested runtimes stayed below the 3 GiB container budget and the 10-second
+  chunk budget. Exact measured times and cgroup peak memory are in ignored JSON.
+  This is feasibility evidence; L4 still tests actual financial archives/stores.
+- The separately approved live read passed from an installed MV3 probe: one
+  SDK request, verified test identity, no financial writes and no stored response
+  data. An earlier preflight failed before browser launch/API dispatch; the
+  read-only filesystem Chrome crashpad configuration was corrected offline.
+  No additional live requests are authorized by this result.
+
+### Validation evidence
+
+- `scripts/test-docker.sh`: 61 unit tests; 14 standalone browser tests passed,
+  2 backend-only modules skipped by design.
+- `scripts/test-integration.sh ../ZenImportBackend`: 30 passed, zero skipped;
+  unchanged remote synchronization semantics after bundling.
+- `sh scripts/test-local-runtime.sh`: six native feasibility cases per supported
+  browser: Chromium 145 passed in 16.08s; Chrome 140 passed in 44.53s. Zero skipped.
+- Two final pinned Docker artifact builds are byte-identical: SHA256
+  fee823b2be137085787373a8cbcd9eb3017f5da1cb0bac6f0b9361ff0e8eff72.
+  Review checked the permission scope, read-only probe guard, package exclusions,
+  SDK pin, isolated profiles and the unsupported Chrome 120 exception. Native
+  content-script denial was added rather than inferring security from API calls.
+- Docker artifact build/checksum comparison and native browser checks are recorded
+  under ignored `test-results/local-mode/L1/`. No production data/services changed.
+
 ## Next stages
 
-L1 is next: bundled SDK/Dexie/browser storage feasibility. The user separately
-approved one read-only installed-MV3 request to the verified test account. It is
-not executed yet. L2–L12 remain not started.
+L2 shared behavior harness/exact arithmetic is next.
+L2–L12 remain not started. Local financial synchronization remains inaccessible
+in the product UI until the later safety gates pass.

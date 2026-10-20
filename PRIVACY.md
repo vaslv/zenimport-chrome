@@ -28,6 +28,11 @@ Chrome requests access to the specific backend/bank host. The extension injects
 no transaction editor into online banking and contains no analytics, advertising,
 or data delivery to the developer.
 
+The required unlimitedStorage permission supports durable browser storage without
+the ordinary quota. It does not grant website, filesystem or account access; API
+and bank host access remains separately requested. Standalone storage is under
+development and is not exposed by the current product UI.
+
 The Discrepancies page reads information through your backend only. Do not attach
 actual financial records or tokens to public GitHub Issues. Uninstalling the
 extension removes local settings; it does not automatically delete the server

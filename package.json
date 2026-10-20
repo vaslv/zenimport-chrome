@@ -1,1 +1,1 @@
-{"name":"zenimport-chrome","version":"0.2.1","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs"},"devDependencies":{"ajv":"8.17.1","ajv-formats":"3.0.1"}}
+{"name":"zenimport-chrome","version":"0.2.1","private":true,"type":"module","scripts":{"test":"node --test tests/*.test.mjs","build:bundle":"node scripts/bundle.mjs","typecheck":"tsc --noEmit"},"dependencies":{"dexie":"4.4.6","zenmoney-typescript":"0.1.0"},"devDependencies":{"ajv":"8.17.1","ajv-formats":"3.0.1","esbuild":"0.28.2","typescript":"5.9.3"}}

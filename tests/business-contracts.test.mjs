@@ -97,3 +97,11 @@ test('transport-independent operations cover the frozen route families and finan
   for(const path of ['/api/v1/info','/api/v1/migration/resume','/api/v1/jobs'])assert.ok(routes.some(r=>r.path===path));
   assert.equal(load('rules.json').rules.length,15);
 });
+
+test('the SDK dependency resolves to the verified public npm release',()=>{
+  const lock=JSON.parse(readFileSync(new URL('../package-lock.json',import.meta.url),'utf8'));
+  const pin=load('baseline.json').sdk;
+  assert.equal(lock.packages['node_modules/zenmoney-typescript'].version,pin.version);
+  assert.equal(lock.packages['node_modules/zenmoney-typescript'].integrity,pin.integrity);
+  assert.equal(lock.packages['node_modules/zenmoney-typescript'].resolved,'https://registry.npmjs.org/zenmoney-typescript/-/zenmoney-typescript-0.1.0.tgz');
+});

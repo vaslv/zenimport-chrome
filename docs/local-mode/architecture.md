@@ -509,9 +509,11 @@ Fields persist drafts across popup closure. Configured sections start collapsed.
 No bank UI toggle, token echoed in status, transaction editor or bank-login fields.
 Connection names and saved drafts are scoped to the active dataset.
 
-On local setup request exact API host access and `unlimitedStorage` as optional
-permissions initiated by a user gesture, subject to L1 validation on Chrome 120.
-If required permission is declined/revoked, local readiness is blocked; server mode
+L1 found that Chrome rejects optional `unlimitedStorage`, despite a migration-doc
+example suggesting otherwise. Declare `unlimitedStorage` as a required manifest
+permission; request only the exact API host through a setup user gesture. See
+[ADR 001](adr-001-chrome-storage-permission.md). If API host access is
+declined/revoked, local readiness is blocked; server mode
 remains usable. Monitor quota/write errors anyway: physical disk exhaustion and
 uninstall are not solved by that permission. No silent data pruning of journals.
 

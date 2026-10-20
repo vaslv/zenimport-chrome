@@ -104,7 +104,9 @@ technical gates, not assumptions disguised as completed work:
 1. L1: direct **real test-account read** from the built MV3 extension, with the
    exact API host permission; synthetic browser tests do not prove this.
 2. L1/L4: IndexedDB durability, quota handling, upgrades and large staged imports
-   in Chrome 120 and the pinned current test browser.
+   in the supported minimum Chrome and the pinned current test browser. L1 found
+   Chrome 120 lacks required storage isolation; the selected candidate minimum is
+   Chrome 140, documented in [ADR 002](adr-002-supported-chrome.md).
 3. L2: behavioral parity with the Python backend, including SQL-enforced invariants.
 4. L3/L10: old archives, resumable transfer and crash-safe activation.
 5. L12: complete installed-extension acceptance with zero extra financial writes
