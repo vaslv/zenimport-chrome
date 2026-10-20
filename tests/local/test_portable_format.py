@@ -65,3 +65,23 @@ def test_native_archive_row_boundary_uses_exact_numeric_sources_and_bounded_stri
         assert result['length']==result['limit']-result['overhead']
         assert result['exact']==['9007199254740993','1e9999','-0.0','1.00000000000000000001']
         assert result['duplicateRejected']
+
+
+def test_native_bank_model_and_legacy_clock_follow_actual_python_observations(tmp_path):
+    vectors=json.loads(Path('/app/contracts/business/v1/bank-record-vectors.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        count=worker.evaluate('''vectors=>{
+          let count=0;
+          for(const vector of vectors.records){
+            let actual;try{actual={accepted:true,value:portableProbe.bankRecord(vector.input)};}catch{actual={accepted:false};}
+            if(JSON.stringify(actual)!==JSON.stringify(vector.expected))throw Error('bank-model-'+count);count++;
+          }
+          for(const vector of vectors.timestamp_pairs){
+            if((portableProbe.timestampProjection(vector.left).micros===portableProbe.timestampProjection(vector.right).micros)!==vector.equal)throw Error('timestamp-'+count);count++;
+          }
+          for(const vector of vectors.legacy_timestamps){
+            if(portableProbe.legacyOccurred(vector.raw,vector.bank,vector.local_date)!==vector.expected)throw Error('legacy-time-'+count);count++;
+          }
+          return count;
+        }''',vectors)
+        assert count==sum(len(vectors[key]) for key in ('records','timestamp_pairs','legacy_timestamps'))

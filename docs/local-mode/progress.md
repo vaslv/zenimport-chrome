@@ -461,3 +461,23 @@ No archive validity is presented as financial graph or activation authority.
 - L4 still needs raw bank revisions/capture proofs, protected activation and
   cleanup, full financial interop, format-1 conversion and independent review.
   Product remains remote-only; no live calls or production changes occurred.
+
+### L4 bank wire/time prerequisite (L4 in progress)
+
+- Ported the actual bank wire model's fields, code-point limits, defaults, exact
+  amount strings and timestamp serialization. Aware comparisons use integer
+  microseconds rather than Date's millisecond precision. Legacy Vietnam clock
+  projection checks historical offsets and fold/gap behavior instead of assuming
+  every old timestamp used UTC+7.
+- Shared reference observations cover 111 real Python model outcomes, five aware
+  timestamp pairs and 302 legacy clocks around every observed historical Vietnam
+  offset change and calendar extremes. Python recomputes the fixed fixture.
+- Docker: strict typing and 141 unit/contract cases passed. All 418 observations
+  passed in one native case per browser (145: 2.34s; 140: 5.81s; three unrelated
+  cases intentionally deselected). Python reference/financial checks: 15 passed
+  in 0.94s. No API calls or production data were involved.
+- Review caught a late legacy-kind guard that passed bundling but failed strict
+  typing. Fixed it separately and made every Docker unit build run TypeScript
+  checks as well; no claim of a passing earlier failing build is made.
+- This prerequisite does not yet validate all raw-bank/capture graph relations.
+  Full L4 lifecycle/interop/review and L5–L12 remain outstanding.
