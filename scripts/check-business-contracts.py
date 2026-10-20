@@ -3,6 +3,7 @@ import argparse
 from hashlib import sha256
 import json
 from pathlib import Path
+import subprocess
 
 root = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
@@ -19,4 +20,6 @@ for directory in [source, target]:
         assert sha256((directory/name).read_bytes()).hexdigest() == digest, name
 pin = json.loads((target.parent/'revision.json').read_text())
 assert pin['manifest_sha256'] == sha256((source/'manifest.json').read_bytes()).hexdigest()
+declared = subprocess.check_output(['git', '-C', str(root), 'show', pin['source_commit'] + ':contracts/business/v1/manifest.json'])
+assert declared == (source/'manifest.json').read_bytes(), 'Pinned source commit does not contain the declared contract'
 print('PASS: canonical and backend contract copies agree; all artifacts verified')

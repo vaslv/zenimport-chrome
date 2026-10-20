@@ -105,3 +105,21 @@ test('the SDK dependency resolves to the verified public npm release',()=>{
   assert.equal(lock.packages['node_modules/zenmoney-typescript'].integrity,pin.integrity);
   assert.equal(lock.packages['node_modules/zenmoney-typescript'].resolved,'https://registry.npmjs.org/zenmoney-typescript/-/zenmoney-typescript-0.1.0.tgz');
 });
+
+test('portable-v2 format golden preserves tagged integers and agrees on UTF-8 bytes/digest',()=>{
+  const golden=load('portable-golden-v2.json'),schema=load('portable-v2.schema.json');
+  assert.equal(golden.format_only,true);assert.equal(golden.activation_permitted,false);
+  const validate=validator().compile({$defs:schema.$defs,$ref:'#/$defs/row'});
+  for(const entry of golden.expected_tables) {
+    const rows=golden.rows[entry.name];
+    for(const row of rows)assert.equal(validate(row),true,JSON.stringify(validate.errors));
+    const bytes=Buffer.from(rows.map(row=>JSON.stringify(row)+'\n').join(''),'utf8');
+    assert.equal(bytes.length,entry.bytes);
+    assert.equal(createHash('sha256').update(bytes).digest('hex'),entry.sha256);
+  }
+  const descriptor={financial_schema_version:1,dataset_id:golden.dataset_id,
+    zenmoney_identity:{owner_ids:golden.owner_ids,proof_version:1},
+    required_features:load('portable-format-v2.json').required_features,tables:golden.expected_tables};
+  assert.equal(createHash('sha256').update(JSON.stringify(descriptor)+'\n','utf8').digest('hex'),golden.expected_digest);
+  assert.equal(golden.rows.source_schema_migrations[0][1][1],'9007199254740993');
+});

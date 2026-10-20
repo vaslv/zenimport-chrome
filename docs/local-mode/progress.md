@@ -135,6 +135,8 @@ Status: complete. Cross-language, native-browser and source-code review gates pa
 
 ## Next stages
 
-L3 portable server migration and durable operations is next. L3–L12 remain not
-started. Local financial synchronization remains inaccessible in the product UI
-until the later safety gates pass.
+L3 is in progress: format-only codec primitives and golden bytes are being tested.
+The new format is not exposed by HTTP or offered to users. Financial graph,
+identity, durable participant/handoff, chunk transfer and compatibility gates
+remain required before L3 can be complete. L4–L12 have not started. Local financial
+synchronization remains inaccessible in the product UI until later safety gates.
