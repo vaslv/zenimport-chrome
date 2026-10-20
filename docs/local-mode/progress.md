@@ -140,3 +140,22 @@ The new format is not exposed by HTTP or offered to users. Financial graph,
 identity, durable participant/handoff, chunk transfer and compatibility gates
 remain required before L3 can be complete. L4–L12 have not started. Local financial
 synchronization remains inaccessible in the product UI until later safety gates.
+
+### L3.2 — private financial graph validation
+
+- Added an explicit shared metadata/legacy classification contract and runtime
+  copy. Unknown keys, objects and columns fail until reviewed; archived SQL is
+  inert data, not executed schema. Stock legacy projections are verified against
+  archived facts instead of relaxing modern SDK checks.
+- The backend validates all staged hashes again, relational/insert constraints,
+  raw bank aliases/revisions, capture/request/coverage proofs, terminal processing,
+  attempted identity and authorization, current mirror projections, owner claims
+  and nested credential markers in a disposable private proof database.
+- Source host paths/leases have documented normalization. Owner comparison is not
+  fresh authentication; graph validation grants no import or activation authority.
+- Docker: 626 backend tests and 70 Chrome unit/contract tests passed. Only synthetic
+  fixtures, no live calls. Review added missing projection rejection and a legacy
+  source-proof regression rather than accepting modern malformed string amounts.
+- L3 remains incomplete: durable participant/epoch/CAS, transfer endpoints, staged
+  installation, old-client hold guards and crash/race acceptance are next. No
+  format-2 HTTP route or user-facing local financial mode is enabled yet.
