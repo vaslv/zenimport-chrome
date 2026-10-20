@@ -6,6 +6,11 @@ import {datasetControl,runtimeControl} from '../.local/contracts/control-validat
 const marker={version:'1',installationId:'00000000-0000-4000-8000-000000000001',datasetId:'00000000-0000-4000-8000-000000000002',
   generation:'00000000-0000-4000-8000-000000000003',state:'initializing',financialMayHaveStarted:false};
 
+test('trusted sentinel identities must match the entire UUID value',()=>{
+  for(const key of ['installationId','datasetId','generation'])for(const suffix of ['\n','\r','\u2028','\u2029'])
+    assert.throws(()=>validateSentinel({...marker,[key]:marker[key]+suffix}),/storage_corrupt/);
+});
+
 function area(){
   const data={};let protectedArea=false;
   return {data,

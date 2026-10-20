@@ -26,6 +26,14 @@ function storeZip(entries){
 }
 function rawEntries(){return [['manifest.json',canonical(manifest())],...TABLES.map(name=>['tables/'+name+'.ndjson',new TextEncoder().encode(golden.rows[name].map(row=>JSON.stringify(row)+'\n').join(''))])];}
 
+test('manifest UUID, hash and timestamp fields reject a trailing line terminator',()=>{
+  for(const suffix of ['\n','\r','\u2028','\u2029']){
+    const id=manifest();id.archive_id+=suffix;assert.throws(()=>validateManifest(id));
+    const hash=manifest();hash.producer.contract_revision+=suffix;assert.throws(()=>validateManifest(hash));
+    const time=manifest();time.created_at+=suffix;assert.throws(()=>validateManifest(time));
+  }
+});
+
 test('browser-format ZIP preserves all golden bytes, exact values and dataset digest',async()=>{
   const first=await archive();assert.equal(first.result.manifest.dataset_digest,golden.expected_digest);
   assert.deepEqual(first.result.manifest.tables,golden.expected_tables);

@@ -42,8 +42,8 @@ test('IDB ASCII keys preserve UTF-8 tuple order rather than JavaScript UTF-16 or
   assert.notEqual(encodeKey([['text','a'],['text','/b']]),encodeKey([['text','a/'],['text','b']]));
 });
 
-for(const value of ['-0','01','1.0','1e3','9223372036854775808','-9223372036854775809',9007199254740992,true]){
-  test('invalid integer scalar fails without exposing its value: '+String(value),()=>{
+for(const value of ['-0','01','1.0','1e3','1\n','1\r','1\u2028','1\u2029','9223372036854775808','-9223372036854775809',9007199254740992,true]){
+  test('invalid integer scalar fails without exposing its value: '+JSON.stringify(value),()=>{
     assert.throws(()=>validateCells('source_schema_migrations',[['integer',value],['integer','0'],['null']]),error=>error.message==='invalid_row');
   });
 }

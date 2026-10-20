@@ -515,3 +515,13 @@ No archive validity is presented as financial graph or activation authority.
   Focused Python screening/resource/graph suite: 56 passed in 5.24s. Python's two
   allocation defects were fixed/tested in separate backend commits.
 - No graph activation, local delivery, live API access or production change.
+
+### L4 line-terminator contract coverage
+
+- Extended independent reference observations for trailing LF/CR/Unicode line
+  separators in integer, money, UUID, timestamp, hash, metadata and label fields.
+  Existing runtime validators already reject these malformed lexical values;
+  the new tests passed before any runtime change, so no corrective rewrite was made.
+- Docker: strict typing and 153 unit/contract cases passed; all 2,642 actual SQLite
+  CHECK outcomes and 1,132 Python value observations agree. Two focused Python
+  vector-regeneration checks passed in 0.21s. No new product behavior or authority.

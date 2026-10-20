@@ -35,5 +35,5 @@ test('legacy header and numeric tags preserve Python ASCII packing and int seman
   assert.equal(legacyHeader(['é','😀',null]),'[["text","\\u00e9"],["text","\\ud83d\\ude00"],["null",null]]\n');
   assert.equal(legacyCell(['integer','9007199254740993']),9007199254740993n);
   assert.equal(legacyCell(['null',null]),null);assert.equal(legacyCell(['text','unchanged']),'unchanged');
-  for(const cell of [['null',''],['integer','01'],['integer','-0'],['integer','1'.repeat(4301)],['real','0x1'],['text',3]])assert.throws(()=>legacyCell(cell));
+  for(const cell of [['null',''],['integer','01'],['integer','-0'],['integer','1\n'],['integer','1'.repeat(4301)],['real','0x1'],['text',3]])assert.throws(()=>legacyCell(cell));
 });
