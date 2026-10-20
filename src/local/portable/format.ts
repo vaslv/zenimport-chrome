@@ -1,5 +1,5 @@
 /** Format/integrity only. No graph verification or financial activation rights. */
-import {decodeJson} from 'zenmoney-typescript';
+import {archiveJson} from './json.js';
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import {SCHEMA} from '../storage/schema.generated.js';
@@ -29,7 +29,7 @@ export function canonical(value:unknown):Uint8Array{
 export function digest(raw:Uint8Array):string{return bytesToHex(sha256(raw));}
 export function parseJson(raw:Uint8Array):unknown{
   requirePortable(!(raw[0]===239&&raw[1]===187&&raw[2]===191),'invalid_utf8');
-  try{return decodeJson(raw);}catch{throw new PortableError('invalid_json');}
+  try{return archiveJson(raw,true);}catch{throw new PortableError('invalid_json');}
 }
 export function object(value:unknown,keys:readonly string[],code='invalid_manifest'):Record<string,unknown>{
   requirePortable(typeof value==='object'&&value!==null&&!Array.isArray(value),code);
@@ -99,7 +99,7 @@ export function validateManifest(input:unknown):PortableManifest{
     requirePortable(typeof item.sha256==='string'&&hex.test(item.sha256),'invalid_tables');total+=item.bytes as number;
   }
   const manifest=value as unknown as PortableManifest,bytes=canonical(manifest);
-  // decodeJson rejects lone Unicode surrogates; validate generated manifests too.
+  // Check Unicode in generated manifests as well as imported JSON.
   parseJson(bytes);
   requirePortable(bytes.length<=LIMITS.manifest_bytes,'manifest_too_large');
   requirePortable(total+bytes.length<=LIMITS.uncompressed_bytes,'dataset_too_large');

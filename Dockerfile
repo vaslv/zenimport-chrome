@@ -9,6 +9,7 @@ COPY contracts ./contracts
 COPY tests ./tests
 COPY src ./src
 COPY scripts/bundle-contracts.mjs scripts/run-business-contracts.mjs scripts/build-storage-schema.mjs scripts/portable-format-interop.mjs ./scripts/
+COPY scripts/portable-values-budget.mjs ./scripts/
 RUN node scripts/build-storage-schema.mjs --check && node scripts/bundle-contracts.mjs
 USER node
 CMD ["node", "--test", "tests/*.test.mjs"]

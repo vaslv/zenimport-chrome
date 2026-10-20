@@ -10,6 +10,7 @@
 !scripts/build-storage-schema.mjs
 !scripts/run-business-contracts.mjs
 !scripts/portable-format-interop.mjs
+!scripts/portable-values-budget.mjs
 !THIRD_PARTY_NOTICES.md
 !scripts/local-runtime-live.py
 !src/**

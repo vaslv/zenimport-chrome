@@ -5,12 +5,29 @@ It validates format and integrity only. The golden fixture deliberately lacks a
 valid financial graph; successfully reading it never authorizes installation,
 owner adoption, a mode switch or another API write.
 
-`src/local/portable/` uses the published SDK's duplicate-key-rejecting lossless
-JSON parser, pinned fflate 0.8.3 synchronous DEFLATE streams and @noble/hashes 2.4.0
+`src/local/portable/` uses native JSON grammar with a bounded lexical preflight,
+mandatory reviver `context.source` and the published SDK's exact numeric types,
+pinned fflate 0.8.3 synchronous DEFLATE streams and @noble/hashes 2.4.0
 incremental SHA256. Dependencies are bundled locally, with no Node polyfill,
 dynamic dependency fetch, eval or worker-backed compression helper. Exact raw
 JSON remains TEXT. Tagged financial integers remain canonical signed-64-bit text.
 Manifest counters are separately bounded exact JSON integers.
+
+The archive decoder is separate from the SDK's HTTP response decoder. Its
+preflight rejects duplicate decoded keys and bounds depth, node count and numeric
+token length before native allocation/revival. Numeric values are reconstructed
+from their original source token, never from the rounded Number supplied by the
+engine. Missing numeric source support fails closed. Raw and escaped lone Unicode
+surrogates are rejected. This is exercised on actual Chrome 140 and Chromium 145.
+The native path avoids per-character string accumulation observed in the SDK's
+underlying JSON parser for large archive fields; the public API SDK is unchanged.
+
+Financial JSON credential screening, classified metadata and mirror decimal/flag
+projections are checked against independently generated actual Python outcomes.
+The frozen Unicode-15 word boundary and Python case-insensitive ASCII matches
+prevent different browser Unicode versions from changing credential detection.
+Screening does not rewrite stored raw JSON. It is a format-validation prerequisite,
+not a complete financial graph check or an authorization proof.
 
 The reader bounds the immutable input Blob at 64 MiB, reads a private byte copy,
 and streams each DEFLATE member in 4 KiB compressed blocks. Emitted data is checked

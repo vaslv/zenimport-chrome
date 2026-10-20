@@ -23,3 +23,45 @@ def test_native_bundled_portable_codec_preserves_exact_golden_tables_without_wor
         assert result['digest']==golden['expected_digest']
         assert result['rows']==golden['rows'] and result['tables']==golden['expected_tables']
         assert result['archiveSha']==result['originalSha'] and result['extraWorkers']==0
+
+
+def test_native_archive_screening_and_decimal_rules_match_the_python_vectors(tmp_path):
+    vectors=json.loads(Path('/app/contracts/business/v1/archive-value-vectors.json').read_text())
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        result=worker.evaluate('''vectors=>{
+          let count=0;
+          function check(operation,expected){
+            let actual;try{actual={accepted:true,value:operation()};}catch(error){actual={accepted:false,code:error.code};}
+            if(actual.accepted!==expected.accepted||('code' in expected&&actual.code!==expected.code)||
+                ('value' in expected&&actual.value!==expected.value))throw Error('archive-value-mismatch-'+count);
+            count++;
+          }
+          for(const item of vectors.screening)check(()=>portableProbe.financialJson(item.raw),item.expected);
+          for(const item of vectors.metadata)check(()=>portableProbe.metadataValue(item.key,item.value,vectors.dataset_id),item.expected);
+          for(const item of vectors.decimals)check(()=>portableProbe.pythonDecimalText(new portableProbe.GraphDecimal(item.token)),{accepted:true,value:item.expected});
+          for(const item of vectors.amounts)check(()=>portableProbe.mirrorAmountText(portableProbe.decodeGraphJson(item.raw)),item.expected);
+          for(const item of vectors.flags)check(()=>portableProbe.mirrorFlagText(portableProbe.decodeGraphJson(item.raw)),item.expected);
+          const exact=portableProbe.financialJson('{"id":9007199254740993,"amount":1.00000000000000000001}');
+          return {count,id:exact.id.toString(),amount:exact.amount.toString()};
+        }''',vectors)
+        assert result==dict(count=sum(len(vectors[key]) for key in ('screening','metadata','decimals','amounts','flags')),
+                           id='9007199254740993',amount='1.00000000000000000001')
+
+
+def test_native_archive_row_boundary_uses_exact_numeric_sources_and_bounded_string_memory(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        result=worker.evaluate('''()=>{
+          const limit=portableProbe.LIMITS.row_bytes;
+          const prefix='[["text","boundary"],["text","',suffix='"]]\\n';
+          const bytes=new TextEncoder().encode(prefix+'x'.repeat(limit-prefix.length-suffix.length)+suffix);
+          const parsed=portableProbe.parseJson(bytes);
+          const result=portableProbe.rowBytes('dataset_metadata',parsed);
+          const exact=portableProbe.archiveJson('[9007199254740993,1e9999,-0.0,1.00000000000000000001]');
+          let failure;try{portableProbe.archiveJson('{"a":1,"\\\\u0061":1}');}catch{failure=true;}
+          return {bytes:result.bytes.length,length:parsed[1][1].length,overhead:prefix.length+suffix.length,limit,
+            exact:exact.map(value=>value.toString()),duplicateRejected:failure===true};
+        }''')
+        assert result['bytes']==result['limit']==128*1024*1024
+        assert result['length']==result['limit']-result['overhead']
+        assert result['exact']==['9007199254740993','1e9999','-0.0','1.00000000000000000001']
+        assert result['duplicateRejected']

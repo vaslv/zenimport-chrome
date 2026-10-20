@@ -366,3 +366,26 @@ No archive validity is presented as financial graph or activation authority.
   activation/retirement, backup-aware cleanup, legacy conversion and independent
   review remain. L5–L12 have not started. No live calls, production changes,
   push, tags or publication were performed.
+
+### L4.6 — archive JSON and Python value parity (L4 in progress)
+
+- Added 1,044 independent actual-Python expectations for secret screening,
+  classified audit metadata, Decimal text and mirror amount/flag projections.
+  Frozen Unicode-15 word ranges and Python case folds avoid host Unicode drift.
+  Nested JSON, escaped lone surrogates, unknown metadata and invalid provenance
+  fail before any graph activation; original raw JSON is not rewritten.
+- A large-field regression exposed excessive temporary string allocation in the
+  SDK dependency's JSON parser. Archive JSON now uses native grammar with bounded
+  preflight and mandatory numeric source revival into SDK exact types. API SDK
+  0.1.0 and its HTTP client are unchanged. Duplicate decoded keys, unsafe numeric
+  coercion, excessive nesting and invalid Unicode remain rejected.
+- Docker: 123 unit/contract cases passed; native archive/value/boundary cases
+  passed on Chromium 145 (3 in 5.77s) and Chrome 140 (3 in 18.71s). Both actual
+  browsers parsed/canonicalized a 128 MiB row under the 3 GiB container limit.
+  A separate 16 MiB invalid-ID regression passed with a 128 MiB JS heap.
+- Backend's complete offline Docker suite passed 737 cases after the source-side
+  JSON/audit corrections. The shared vectors are recomputed from those actual
+  Python functions, not copied expected TypeScript results. Focused native checks
+  do not replace the later complete L4 gate or independent storage review.
+- Full graph validation, protected lifecycle/cleanup and legacy conversion remain
+  next. Product mode is still remote-only. No live calls or production changes.
