@@ -389,3 +389,24 @@ No archive validity is presented as financial graph or activation authority.
   do not replace the later complete L4 gate or independent storage review.
 - Full graph validation, protected lifecycle/cleanup and legacy conversion remain
   next. Product mode is still remote-only. No live calls or production changes.
+
+### L4.7 — read-only relational graph proof (L4 in progress)
+
+- Added a complete synthetic captured/delivered journal produced by the actual
+  isolated Python application. Python independently validates its full graph and
+  canonical dataset digest. It includes attempted sends and permanent receipts;
+  it is separate from the intentionally invalid format-only golden fixture.
+- A bounded, storage-private reader rechecks immutable stage identity, routing
+  epoch, trusted sentinel, generation ownership, stored bytes/hashes and derived
+  index fields. It exposes only rows and packaged unique-key lookups, no SQL or
+  database handles. Partial proof does not change a stage lifecycle or active data.
+- Checks cover every logical table's CHECKs, primary/unique ordering and populated
+  foreign keys, plus all three packaged historical insert proofs after loading.
+  Unknown future insert invariants fail closed until explicitly implemented.
+- Docker: 127 unit/contract cases passed. Missing-parent mutations cover all 33
+  populated reference cohorts in the shared fixture, including composite keys.
+  Python financial fixture/graph checks passed 54 tests. Five native reader cases
+  passed per browser (145: 4.33s; 140: 28.62s), including invalid relationship/proof,
+  poisoned derived index, stale epoch and active-generation protection.
+- This is intentionally not a complete financial graph validator: raw record,
+  capture, legacy and mirror semantics follow next. L4 and local mode stay incomplete.

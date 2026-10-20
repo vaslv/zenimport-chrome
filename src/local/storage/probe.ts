@@ -40,7 +40,7 @@ async function state(name:string){
   finally{db.close();}
 }
 
-export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence}){
+export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string}){
   try{
     let value:unknown;
     if(action==='open')value=await open(args.name,args.mode);
@@ -51,6 +51,16 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
       value=await stagingProbe(db,args as unknown as StagingArguments);
     }else if(action==='stages'){
       const db=stores.get(args.name);if(!db)throw Error('missing_test_handle');value=await db.stages();
+    }else if(action==='relations'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
+      if(args.mode==='poison-index'){
+        const raw=new FinancialDatabase(args.name,false);await raw.open();
+        try{
+          const table=raw.financial('bank_transactions'),row=await table.where('generation').equals(args.stageId).first();
+          if(!row)throw Error('missing_test_row');await table.update([row.generation,row.key],{i0:'poisoned-derived-index'});
+        }finally{raw.close();}
+      }
+      value=await db.checkStageRelations(args.stageId,args.fence);
     }
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);

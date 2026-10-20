@@ -8,6 +8,8 @@ import {int64,requireStorage,storageFailure} from './types.js';
 import type {TableName,RowByTable} from './schema.generated.js';
 import {stageArchive,stageSummaries} from './staging.js';
 import type {StageSummary} from './stage-types.js';
+import {StageGraphReader} from './graph-reader.js';
+import {validateRelations} from '../portable/relations.js';
 
 const opening=new Map<string,Promise<void>>();
 
@@ -79,6 +81,11 @@ export class LocalDatabase{
   }
 
   async stages():Promise<StageSummary[]>{return stageSummaries(this.#db);}
+
+  /** Partial read-only proof; no lifecycle change or installation authority. */
+  async checkStageRelations(id:string,fence:ContextFence):Promise<Readonly<Record<TableName,string>>>{
+    return validateRelations(await StageGraphReader.open(this.#db,this.#sentinel,fence,id));
+  }
 
   /** Persist outside IDB before the first financial mutation/dispatch claim. */
   async markFinancialActivity(fence:ContextFence):Promise<void>{

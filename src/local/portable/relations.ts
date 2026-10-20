@@ -1,0 +1,62 @@
+/** Read-only relational proof. This result never grants activation rights. */
+import type {RowByTable,TableName} from '../storage/schema.generated.js';
+import {SCHEMA} from '../storage/schema.generated.js';
+import type {Scalar} from '../storage/types.js';
+import {packRow,rowKey} from '../storage/cells.js';
+import {envelope,field} from '../storage/envelope.js';
+import {requirePortable} from './format.js';
+
+export interface GraphReader{
+  rows<K extends TableName>(table:K):AsyncIterable<RowByTable[K]>;
+  /** Packaged primary/unique columns only. No query language or SQL input. */
+  find<K extends TableName>(table:K,columns:readonly string[],values:readonly Scalar[]):Promise<RowByTable[K]|null>;
+}
+
+const text=(value:string):Scalar=>['text',value];
+
+async function insertProof(reader:GraphReader,table:TableName,data:RowByTable[TableName]):Promise<void>{
+  if(table==='capture_intervals'){
+    const row=data as RowByTable['capture_intervals'];
+    const snapshot=await reader.find('job_accounts',['job_id','account_id'],[text(row.job_id),text(row.account_id)]);
+    requirePortable(snapshot!==null&&snapshot.settings_version===row.settings_version,'invalid_insert_proof');
+  }else if(table==='captured_records'){
+    const row=data as RowByTable['captured_records'];
+    const interval=await reader.find('capture_intervals',['id'],[text(row.interval_id)]);
+    const bank=await reader.find('bank_transactions',['id'],[text(row.bank_id)]);
+    requirePortable(interval!==null&&bank!==null&&interval.account_id===bank.account_id,'invalid_insert_proof');
+  }else if(table==='delivery_authorizations'){
+    const row=data as RowByTable['delivery_authorizations'];
+    const proof=await reader.find('captured_records',['interval_id','bank_id'],[text(row.interval_id),text(row.bank_id)]);
+    const interval=await reader.find('capture_intervals',['id'],[text(row.interval_id)]);
+    const bank=await reader.find('bank_transactions',['id'],[text(row.bank_id)]);
+    const snapshot=bank===null?null:await reader.find('job_accounts',['job_id','account_id'],[text(row.job_id),text(bank.account_id)]);
+    requirePortable(proof!==null&&interval!==null&&snapshot!==null&&proof.revision===row.revision&&
+      interval.state==='complete'&&snapshot.settings_version===row.settings_version&&snapshot.target_id===row.target_id,'invalid_insert_proof');
+  }
+}
+
+export async function validateRelations(reader:GraphReader):Promise<Readonly<Record<TableName,string>>>{
+  const insertNames=Object.values(SCHEMA).flatMap(table=>table.triggers.filter(trigger=>/BEFORE\s+INSERT\s+ON/i.test(trigger.sql)).map(trigger=>trigger.name)).sort();
+  requirePortable(insertNames.join(',')==='captured_record_scope,delivery_authorization_proof,interval_scope','unsupported_invariant');
+  const counts={} as Record<TableName,string>;
+  for(const table of Object.keys(SCHEMA).sort() as TableName[]){
+    const definition=SCHEMA[table],seen=definition.indexes.filter(index=>index.unique).map(index=>({index,keys:new Set<string>()}));
+    let previous:string|null=null,count=0n;
+    for await(const data of reader.rows(table)){
+      const packed=packRow(table,data),value=envelope('relational-proof-only',table,packed),key=rowKey(table,packed);
+      requirePortable(previous===null||previous<key,'duplicate_or_unordered_key');previous=key;count++;
+      for(const {index,keys}of seen){
+        const candidate=value[index.key];if(candidate===undefined)continue;
+        requirePortable(typeof candidate==='string'&&!keys.has(candidate),'invalid_relationship');keys.add(candidate);
+      }
+      for(const foreign of definition.foreignKeys){
+        const values=foreign.columns.map(column=>field(table,packed,column));
+        if(values.some(value=>value[0]==='null'))continue; // SQLite MATCH SIMPLE.
+        requirePortable(await reader.find(foreign.table,foreign.target,values)!==null,'invalid_relationship');
+      }
+      await insertProof(reader,table,data);
+    }
+    counts[table]=count.toString();
+  }
+  return counts;
+}
