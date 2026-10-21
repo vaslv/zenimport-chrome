@@ -16,7 +16,7 @@ def test_native_profiles_share_only_canonical_bank_accounts_and_keep_names(tmp_p
         first=call(worker,'connections-discover',data=discovery());assert first['ok'],first
         a=first['result'];assert a['label']=='owner-1' and a['accounts'][0]['settings_version']=='0'
         second=call(worker,'connections-discover',data=discovery('owner-2',('primary','secondary')));assert second['ok'],second
-        b=second['result'];assert a['id']!=b['id'] and a['accounts'][0]['id']==b['accounts'][0]['id']
+        b=second['result'];assert a['id']!=b['id'] and a['accounts'][0]['id']==next(row['id'] for row in b['accounts'] if row['source_key']=='primary')
         changed=call(worker,'connections-rename',id=a['id'],label='  Personal BIDV  ');assert changed['result']['label']=='Personal BIDV'
         repeat=call(worker,'connections-discover',data=discovery(label=None));assert repeat['result']['id']==a['id'] and repeat['result']['label']=='Personal BIDV'
         assert len(call(worker,'connections-list')['result']['connections'])==2

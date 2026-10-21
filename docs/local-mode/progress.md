@@ -917,3 +917,41 @@ or publication was performed.
 Not yet complete: L7 account settings/catalog proof, immutable capture jobs,
 leases/pages/completion and complete captured-fact parity. The product remains
 remote-only. L8–L12 remain pending; no release or publication is implied.
+
+### L7.2 — account settings and bounded context invalidation
+
+- Added optimistic/idempotent settings, current mirrored target/type/currency
+  checks, exact version text, historical bindings and the unknown-delivery barrier
+  even after temporarily ignoring an account. Complete bank coverage retains its
+  identity; changing import_start recomputes its contiguous frontier.
+- Only never-attempted prepared deliveries lose their old authorization and gain
+  needs_rebuild. Attempted, uncertain, delivered and suppressed facts/payloads are
+  preserved. The private repository performs no SDK or financial HTTP call.
+- The 100k gate found a mistaken primary-key lookup, then exposed a 21.1-second
+  atomic update. Fixed indexed bank-ID lookups and replaced that transaction with
+  ADR 006's durable exclusive settings hold and at-most-500-row units. Export,
+  migration and other writers cannot observe partial settings. An identical
+  request or explicit startup recovery resumes the last committed unit.
+- Independent API/red-team review found terminal-reply races and a MAX_INT64
+  overflow that could strand the hold. Both are fixed and covered by native
+  regressions; the final red-team pass reported no further confirmed issue.
+- Current Chromium Docker: 22 native settings/connections/kernel cases passed in
+  113.48s, including 100k prepared rows, quota, worker death, concurrent configure
+  and recovery, and the unchanged per-transaction 10-second budget. Actual
+  Python/browser account and 250-case period adapters: 2 passed (one existing
+  dependency deprecation warning). Minimum-browser checks are recorded below
+  after their completion. The previous failed stress runs are not counted as
+  passed. See reviews/l7-settings-2026-10-21.md.
+
+Minimum-browser gate: Chrome 140 Docker passed all 12 settings/connection cases
+in 180.12s, including the same 100k stress/transaction budget and worker/quota/
+concurrent-recovery cases. The final UUID-collision precondition reran all eight
+non-size settings cases successfully. Strict typing and 186 unit/contracts also
+passed. Logs: /tmp/zenimport-l7-settings-bounded.log,
+/tmp/zenimport-l7-minimum.log, /tmp/zenimport-l7-settings-last.log,
+/tmp/zenimport-l7-unit.log and /tmp/zenimport-l7-parity.log.
+
+L7 remains in progress. The next point is durable local capture requests,
+immutable account/plan snapshots, leases, pages and completion. Ordinary imported
+awaiting-sync writes are still blocked; the later first-sync wiring must release
+that fence explicitly. Local product routing and L8–L12 are not enabled.

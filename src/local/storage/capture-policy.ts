@@ -2,6 +2,12 @@
 import type {RepositorySession} from './kernel.js';
 import {int64} from './types.js';
 import {CaptureError} from '../capture/errors.js';
+import {capabilities} from '../capture/validation.js';
+import type {RowByTable} from './schema.generated.js';
+export function connectionCapabilities(row:RowByTable['connections']){
+  try{const value=capabilities(JSON.parse(row.capabilities_json));if(!['bidv','vietinbank'].includes(row.bank)||value.details==='unavailable')throw new Error();return value;}
+  catch{throw new CaptureError('capture_context_changed');}
+}
 export const text=(value:string)=>['text',value] as const;
 export const ACTIVE=['planned','collecting','paused'];
 export function aggregate(states:readonly string[]){for(const state of [...ACTIVE,'failed','cancelled'])if(states.includes(state))return state;return 'complete';}

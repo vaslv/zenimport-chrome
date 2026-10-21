@@ -58,6 +58,32 @@ export class RepositorySession{
       return row===null?null:unpackRow(table,row);
     });
   }
+  async getMany<K extends TableName>(table:K,primary:readonly (readonly Scalar[])[]):Promise<(RowByTable[K]|null)[]>{
+    return this.#guard(async()=>{requireStorage(primary.length<=500,'invariant_violation');
+      const rows=await this.#db.financial(table).bulkGet(primary.map(key=>[this.#scope(table),encodeKey(key)]));
+      return rows.map(value=>{const row=this.#checked(table,value);return row===null?null:unpackRow(table,row);});
+    });
+  }
+  async findMany<K extends TableName>(table:K,columns:readonly string[],values:readonly (readonly Scalar[])[]):Promise<(RowByTable[K]|null)[]>{
+    return this.#guard(async()=>{
+      requireStorage(values.length<=500&&values.every(value=>value.length===columns.length),'schema_unsupported');
+      const definition=SCHEMA[table];if(same(columns,definition.primary))return this.getMany(table,values);
+      const index=definition.indexes.find(index=>index.unique&&!index.partial&&same(index.columns,columns));requireStorage(index!==undefined,'schema_unsupported');
+      const rows=await this.#db.financial(table).where('[generation+'+index.key+']').anyOf(values.map(value=>[this.#scope(table),encodeKey(value)])).toArray();
+      const found=new Map(rows.map(value=>{const row=this.#checked(table,value)!;return [valuesKey(table,row,columns),unpackRow(table,row)];}));
+      return values.map(value=>found.get(encodeKey(value))??null);
+    });
+  }
+  /** Fixed derived-context invalidation, with no attempted/terminal mutation. */
+  async invalidatePrepared(bankIds:readonly string[]){
+    return this.#guard(async()=>{
+      requireStorage(!this.#mirrorOnly&&bankIds.length<=500,'dataset_not_writable');
+      const rows=await this.findMany('deliveries',['bank_id'],bankIds.map(id=>[['text',id]]));
+      const values=rows.filter((row):row is RowByTable['deliveries']=>row!==null&&row.state==='prepared'&&row.ever_attempted==='0')
+        .map(row=>envelope(this.#generation,'deliveries',packRow('deliveries',{...row,needs_rebuild:'1' as RowByTable['deliveries']['needs_rebuild'],authorized_job_id:null})));
+      if(values.length)await this.#db.financial('deliveries').bulkPut(values);
+    });
+  }
 
   /** Storage-private snapshot enumeration, bounded by the caller's operation. */
   async rows<K extends TableName>(table:K,prefix:readonly Scalar[]=[]):Promise<RowByTable[K][]> {

@@ -1,7 +1,6 @@
 /** Named connection/account owner; no HTTP emulation or raw handles escape. */
 import type {ContextFence,SentinelPort} from '../../control/types.js';
 import type {DiscoverConnection} from '../../application/dto.generated.js';
-import type {RowByTable} from './schema.generated.js';
 import type {RepositorySession} from './kernel.js';
 import {RepositoryOwner} from './repository-owner.js';
 import {int64} from './types.js';
@@ -9,22 +8,12 @@ import {discovery,name,text as validText} from '../capture/validation.js';
 import {CaptureError,requireCapture} from '../capture/errors.js';
 import {text,get,invalidateAccounts,canonicalSupport} from './capture-policy.js';
 import {canonicalDto} from '../../domain/codec.js';
+import {AccountSettingsOwner} from './account-settings.js';
+import {connectionView} from './account-views.js';
 
-export function accountView(row:RowByTable['bank_accounts'],discovered?:RowByTable['connection_discovery']){
-  const {id,source_key,label,masked_number,currency,scale,supported,unsupported_reason,settings_version,selection,zenmoney_account_id,import_start,last_complete_end}=row;
-  return {id,source_key,label:discovered?.label??label,masked_number:discovered?.masked_number??masked_number,currency,scale:Number(scale),
-    supported:(discovered?.supported??supported)==='1',unsupported_reason:discovered?discovered.unsupported_reason:unsupported_reason,
-    settings_version,selection,zenmoney_account_id,import_start,last_complete_end};
-}
-export async function connectionView(view:RepositorySession,id:string){
-  const row=await get(view,'connections',id),accounts=[];
-  for(const found of await view.rows('connection_discovery',[text(id)]))if(found.present==='1')accounts.push(accountView(await get(view,'bank_accounts',found.account_id),found));
-  const label=await view.get('connection_labels',[text(id)]),bank=({bidv:'BIDV',vietinbank:'VietinBank'} as Record<string,string>)[row.bank]??row.bank;
-  return {id:row.id,bank:row.bank,accounts_complete:row.accounts_complete==='1',accounts,profile_key:row.profile_key,profile_identity:row.profile_identity,label:label?.label??bank+' '+id.slice(0,6)};
-}
 export class AccountRepository{
-  private constructor(private owner:RepositoryOwner){}
-  static async open(name:string,sentinel:SentinelPort,fence:ContextFence){return new AccountRepository(await RepositoryOwner.open(name,sentinel,fence));}
+  private constructor(private owner:RepositoryOwner,private name:string,private sentinel:SentinelPort,private fence:ContextFence){}
+  static async open(name:string,sentinel:SentinelPort,fence:ContextFence){return new AccountRepository(await RepositoryOwner.open(name,sentinel,fence,true),name,sentinel,{...fence});}
   async list(bank:string){
     requireCapture(['bidv','vietinbank'].includes(bank),'unsupported_bank');
     return this.owner.read(async view=>{const connections=[];
@@ -82,6 +71,14 @@ export class AccountRepository{
       if(discovered)await view.replace('connection_discovery',[text(id),text(accountId)],{...discovered,present:int64('0')});
       await invalidateAccounts(view,new Set([accountId]),'settings_conflict',now,id);await canonicalSupport(view);return connectionView(view,id);
     });
+  }
+  async configure(id:string,input:unknown,now:string){
+    validText(id);const setup=await AccountSettingsOwner.open(this.name,this.sentinel,this.fence);
+    try{return await setup.run(id,input,now);}finally{setup.close();}
+  }
+  async recoverSettings(){
+    const setup=await AccountSettingsOwner.open(this.name,this.sentinel,this.fence);
+    try{return await setup.recover();}finally{setup.close();}
   }
   close(){this.owner.close();}
 }

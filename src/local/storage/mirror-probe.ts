@@ -2,10 +2,11 @@
 import {LocalDatabase} from './bootstrap.js';
 import {FinancialDatabase} from './database.js';
 import type {FinancialEnvelope} from './database.js';
-import {unpackRow,packRow} from './cells.js';
+import {unpackRow,packRow,encodeKey} from './cells.js';
 import {SCHEMA} from './schema.generated.js';
 import type {TableName,RowByTable} from './schema.generated.js';
 import {envelope} from './envelope.js';
+import {int64} from './types.js';
 import {MirrorRepository} from './mirror-repository.js';
 import {trustedSentinel} from '../../control/sentinel.js';
 import type {StorageArea} from '../../application/state.js';
@@ -34,7 +35,7 @@ function area(name:string,session=false):StorageArea{
     remove:keys=>source.remove((typeof keys==='string'?[keys]:keys).map(key=>prefix+key)),
   };
 }
-export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number;data?:unknown;id?:string;accountId?:string;label?:string}){
+export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number;data?:unknown;id?:string;accountId?:string;label?:string;version?:string}){
   const storage=area(args.name),sentinel=trustedSentinel(storage),now=args.now??1000;let store:MirrorRepository|undefined,calls=0,maxTransactionMs=0;
   const nativeTransaction=IDBDatabase.prototype.transaction;
   IDBDatabase.prototype.transaction=function(...values:Parameters<IDBDatabase['transaction']>){
@@ -53,15 +54,40 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
-    if(action.startsWith('connections-')){
-      const {root}=await store.context(),accounts=await AccountRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+    if(action==='accounts-state'||action==='seed-account-version'){
+      const db=new FinancialDatabase(args.name,false);await db.open();try{const root=(await db.runtime.get('runtime'))!,generation=root.activeGeneration!,dataset=(await db.datasets.get(generation))!;
+        if(action==='seed-account-version'){
+          const key=encodeKey([['text',args.id!]]),old=(await db.financial('bank_accounts').get([generation,key]))!;
+          await db.financial('bank_accounts').put(envelope(generation,'bank_accounts',packRow('bank_accounts',{...unpackRow('bank_accounts',old.row),settings_version:int64(args.version!)})));
+        }
+        return {ok:true,result:{root,dataset,operation:dataset.holdId?(await db.applicationState.get('account-settings:'+dataset.holdId))?.value:null}};
+      }finally{db.close();}
+    }
+    if(action.startsWith('connections-')||action.startsWith('accounts-')){
+      const raw=new FinancialDatabase(args.name,false);await raw.open();const root=(await raw.runtime.get('runtime'))!;raw.close();
+      const accounts=await AccountRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      const put=IDBObjectStore.prototype.put,transaction=FinancialDatabase.prototype.transaction;let advanced=false;
+      if(['pause-settings','quota-settings'].includes(args.mode??'')){
+        IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){const row=values[0] as {scope?:string;value?:{phase?:string;after?:string|null}};
+          if(this.name==='application_state'&&row.scope?.startsWith('account-settings:')&&row.value?.phase==='invalidate'&&row.value.after!=null){
+            advanced=true;if(args.mode==='quota-settings')throw new DOMException('private-settings-fixture','QuotaExceededError');
+          }return put.apply(this,values);
+        };
+        if(args.mode==='pause-settings')FinancialDatabase.prototype.transaction=new Proxy(transaction,{apply(target,db,parameters){
+          return (Reflect.apply(target,db,parameters) as Promise<unknown>).then(value=>{if(advanced&&!paused){paused=true;return new Promise(()=>{});}return value;});
+        }});
+      }
       try{
         if(action==='connections-discover')result=await accounts.discover(args.data,String(now));
         else if(action==='connections-list')result=await accounts.list(args.id??'bidv');
         else if(action==='connections-get')result=await accounts.get(args.id!);
         else if(action==='connections-rename')result=await accounts.rename(args.id!,args.label);
         else if(action==='connections-unlink')result=await accounts.unlink(args.id!,args.accountId!,String(now));
-      }finally{accounts.close();}
+        else if(action==='accounts-configure')result=await accounts.configure(args.id!,args.data,String(now));
+        else if(action==='accounts-recover')result=await accounts.recoverSettings();
+        else if(action==='accounts-concurrent')result=await Promise.allSettled([accounts.configure(args.id!,args.data,String(now)),args.mode==='recover'?accounts.recoverSettings():accounts.configure(args.id!,args.data,String(now))])
+          .then(rows=>rows.map(row=>row.status==='fulfilled'?{status:'fulfilled',value:row.value}:{status:'rejected',code:(row.reason as {code?:string}).code}));
+      }finally{accounts.close();IDBObjectStore.prototype.put=put;FinancialDatabase.prototype.transaction=transaction;}
     }
     if(action==='verify'){
       const original=MirrorRepository.prototype.adopt;
@@ -80,16 +106,28 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
           const fields=Object.fromEntries(SCHEMA[table].columns.map(column=>[column.name,column.required?column.type==='INTEGER'?'0':'':null]));
           return envelope(generation,table,packRow(table,{...fields,...changes} as RowByTable[K]));
         }
-        await db.financial('bank_accounts').add(row('bank_accounts',{id:'pred-account',bank:'fixture',identity_scope:'bank',source_key:'primary',currency:'VND',scale:'0',supported:'1',selection:'enabled',zenmoney_account_id:'a',import_start:'2026-10-01'}));
+        if(!args.accountId)await db.financial('bank_accounts').add(row('bank_accounts',{id:'pred-account',bank:'fixture',identity_scope:'bank',source_key:'primary',currency:'VND',scale:'0',supported:'1',selection:'enabled',zenmoney_account_id:'a',import_start:'2026-10-01'}));
         for(let start=0;start<(args.size??10000);start+=500){
-          const banks:FinancialEnvelope[]=[],versions:FinancialEnvelope[]=[],predictions:FinancialEnvelope[]=[];
+          const banks:FinancialEnvelope[]=[],versions:FinancialEnvelope[]=[],predictions:FinancialEnvelope[]=[],deliveries:FinancialEnvelope[]=[],processing:FinancialEnvelope[]=[];
           for(let i=start;i<Math.min(start+500,args.size??10000);i++){
-            const id='b-'+i;banks.push(row('bank_transactions',{id,account_id:'pred-account',external_id:id,identity_kind:'bank',identity_version:'v1',local_date:'2026-10-20',direction:'expense',amount:'1',currency:'VND',raw_json:'{}',revision:'1'}));
+            const id='b-'+i;banks.push(row('bank_transactions',{id,account_id:args.accountId??'pred-account',external_id:id,identity_kind:'bank',identity_version:'v1',local_date:'2026-10-20',direction:'expense',amount:'1',currency:'VND',raw_json:'{}',revision:'1'}));
             versions.push(row('bank_versions',{bank_id:id,revision:'1',data_json:'{}',raw_json:'{}'}));
             predictions.push(row('category_predictions',{bank_id:id,bank_revision:'1',category_id:null,source:'unknown',reason:'fixture',candidates_json:'[]',mirror_generation:mirrorGeneration}));
+            if(args.mode==='prepared'){
+              deliveries.push(row('deliveries',{bank_id:id,zen_id:crypto.randomUUID(),payload:'{}',state:'prepared',ever_attempted:'0',origin:'created',authorized_job_id:null,updated_at:String(now),needs_rebuild:'0'}));
+              processing.push(row('bank_processing',{bank_id:id,state:'prepared',reason:'fixture',updated_at:String(now)}));
+            }
           }
-          await db.transaction('rw',db.tables,async()=>{await db.financial('bank_transactions').bulkAdd(banks);await db.financial('bank_versions').bulkAdd(versions);await db.financial('category_predictions').bulkAdd(predictions);});
+          await db.transaction('rw',db.tables,async()=>{await db.financial('bank_transactions').bulkAdd(banks);await db.financial('bank_versions').bulkAdd(versions);await db.financial('category_predictions').bulkAdd(predictions);if(deliveries.length){await db.financial('deliveries').bulkAdd(deliveries);await db.financial('bank_processing').bulkAdd(processing);}});
         }
+      }finally{db.close();}
+    }
+    if(action==='seed-delivery'){
+      const db=new FinancialDatabase(args.name,false);await db.open();try{const {root}=await store.context();
+        await writeTransaction(db,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch},async view=>{
+          await view.insert('bank_processing',{bank_id:'b-0',state:args.mode==='uncertain'?'uncertain':'pending',reason:'fixture',updated_at:String(now) as RowByTable['bank_processing']['updated_at']});
+          await view.insert('deliveries',{bank_id:'b-0',zen_id:crypto.randomUUID(),payload:'{}',state:args.mode==='uncertain'?'uncertain':'prepared',ever_attempted:(['uncertain','attempted-prepared'].includes(args.mode??'')?'1':'0') as RowByTable['deliveries']['ever_attempted'],origin:'created',authorized_job_id:null,updated_at:String(now) as RowByTable['deliveries']['updated_at'],needs_rebuild:'0' as RowByTable['deliveries']['needs_rebuild']});
+        });
       }finally{db.close();}
     }
     if(action==='awaiting'){
@@ -140,6 +178,7 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
     const db=new FinancialDatabase(args.name,false);await db.open();
     try{
       const root=await db.runtime.get('runtime'),generation=root!.activeGeneration!,projection=await mirrorScope(db,generation);
+      if(action==='delivery-state')result=(await db.financial('deliveries').where('generation').equals(generation).toArray()).map(row=>unpackRow('deliveries',row.row));
       const tables:Record<string,unknown>={};for(const name of ['zen_mirror_state','zen_entities','zen_movements','zen_sync_runs','zen_tags','zen_tombstones','zen_deletions'] as TableName[])
         tables[name]=args.summary?await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).count():
           (await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).toArray()).map(row=>unpackRow(name,row.row));

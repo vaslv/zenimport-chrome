@@ -3,6 +3,8 @@ from datetime import date,timedelta
 import json
 import random
 import sqlite3
+import pytest
+pytest.importorskip('backend')
 from playwright.sync_api import sync_playwright
 from test_runtime import installed
 from backend import capture
