@@ -992,3 +992,10 @@ report browser suite passed 14 cases with two Python-only modules skipped in
 90.41s; those modules run separately in the Python integration target. Logs:
 /tmp/zenimport-l7-capture-minimum-final.log, /tmp/zenimport-l7-capture-regression.log,
 /tmp/zenimport-l7-product.log. Full remote HTTP integration is recorded next.
+
+Remote HTTP regression gate: all 14 actual backend/SQLite/SDK/browser integration
+cases passed in 271.28s (one existing dependency warning), including both banks,
+repeat import, lost ACK, worker termination, API outage, deletion and migration.
+Log: /tmp/zenimport-l7-remote-integration.log. L7's captured-fact and connector exit
+gates are complete. L8 begins next. The packaged product remains remote-only;
+local first-sync activation, SDK delivery, switching and popup wiring await L9–L12.
