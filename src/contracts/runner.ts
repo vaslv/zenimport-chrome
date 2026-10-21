@@ -83,3 +83,4 @@ export {DomainError, ExactMoney, signedMovement, normalized, recipient, calendar
 export {uniqueSubset,unmatchedSides} from '../domain/reconciliation/subsets.js';
 export {singleMatches,groupMatches} from '../domain/reconciliation/matching.js';
 export {backfillOwnership,recoverTransferOwnership,blockedOwnership,ownershipClaims} from '../domain/reconciliation/ownership.js';
+export {buildCategoryEvidence,categoryContext,predictCategory} from '../domain/prediction/categories.js';

@@ -1048,3 +1048,27 @@ Final L8.2 gate: all 11 native/source tests passed in 11.43s (one existing depen
 warning). Both 100k backfill and 100k unresolved-owner scans stayed below their
 individual 10-second worker-unit limits. Both final independent readers reported
 no remaining finding. Durable browser application remains a later L8 point.
+
+### L8.3 — reviewed category evidence and conservative confidence
+
+- Ported current reviewed ordinary-payment evidence, independent payment ownership,
+  one-payment split counting, exclusions, historical bindings, original numeric
+  scale checks and chronological-pair exclusion. Unreviewed predictions do not
+  teach the model until reviewed in the mobile application.
+- Ported current valid category/direction checks, explicit manual/rule precedence,
+  own-payment exclusion, conflicting-history blockers and the three-consistent-
+  payments threshold. Unsupported Unicode cannot hide a known conflicting category
+  or replace a stronger recipient identity. Both independent rechecks are clean;
+  see reviews/l8-prediction-2026-10-21.md.
+- Docker: strict types/generated contracts and 207 unit/contracts passed; actual
+  Python/native browser comparison passed all 25 evidence/prediction cases in
+  20.39s. Existing dependency deprecation warning only. Logs:
+  /tmp/zenimport-l8-prediction-unit.log and /tmp/zenimport-l8-prediction-parity.log.
+- The duplicate-tag source hypothesis was disproved by existing mirror validation;
+  no backend change remains. Its final full Docker gate passed 766 tests in 36.01s
+  (/tmp/zenimport-l8-backend-final.log). Initial invalid fixture setup attempted
+  immutable receipt changes; corrected fixtures create those histories at birth.
+
+L8 still needs revision-fenced repository snapshots/application, persisted derived
+caches and complete-bank-coverage report assembly. L9–L12 remain pending. Local
+product routing and financial SDK dispatch are disabled; no push/tags/publication.
