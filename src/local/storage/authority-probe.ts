@@ -37,7 +37,7 @@ const native=()=> (globalThis as unknown as {chrome:{storage:{local:Area&{remove
 const owners=new Map<string,MigrationOwner>(),peers=new Map<string,MigrationOwner>(),reads=new Map<string,number>();
 const externalPeers=new Map<string,PeerStatus>();
 const remotePeers=new Map<string,{client:RemoteParticipant;adapter:ServerParticipant}>();
-const modes=new Map<string,string>();let checkpoint=false;
+const modes=new Map<string,string>(),restoreClocks=new Map<string,string>();let checkpoint=false;
 let release:(()=>void)|undefined;
 function port(name:string){
   const prefix='l4-authority:'+name+':',area=native();
@@ -100,16 +100,19 @@ export async function run(action:string,args:Arguments){
       }else if(action.startsWith('restore-')){
         const raw=args.fixture?.rows.zen_sync_runs[0].at(-1)?.[1] as string??JSON.stringify({serverTimestamp:1792540800,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
         const proof={ownerIds:args.mode==='wrong-owner'?['2']:['1'],sourceHash:'f'.repeat(64)};
-        const restore=await RestoreOwner.open(args.name,port(args.name),{
+        const restoreMarker=port(args.name);let restoreReads=0;
+        const restore=await RestoreOwner.open(args.name,{...restoreMarker,async read(){if(args.mode==='pause-restore-activate'&&++restoreReads===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return restoreMarker.read();}},{
           async verify(){if(args.mode==='offline')throw new ParticipantError('zenmoney_unavailable');if(args.mode==='pause-restore-preview'){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return {...proof,raw};},
           async credential(){return proof;},async permission(){return args.mode!=='permission-denied';},
-        },()=>Number(args.now??now));
+        },()=>Number(restoreClocks.get(args.name)??args.now??now));
         const put=IDBObjectStore.prototype.put;
         if(args.mode==='quota-activate'||args.mode==='quota-validated')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('archive-restore:')&&values[0]?.value?.phase===(args.mode==='quota-activate'?'activated':'validated'))throw new DOMException('synthetic-restore-quota','QuotaExceededError');return put.apply(this,values);};
+        if(args.mode==='expire-after-restore-write')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&values[0]?.value?.phase==='activated')restoreClocks.set(args.name,String(BigInt(values[0].value.preview.checkedAt)+301n));return put.apply(this,values);};
         const blob=async()=>args.count?fixtureArchive({golden:args.fixture! as Parameters<typeof fixtureArchive>[0]['golden'],count:args.count,mode:'valid-graph'}):new Blob([Uint8Array.from(atob(args.base64!),char=>char.charCodeAt(0))]);
         try{
           if(action==='restore-begin')value=await restore.begin(args.requestId!,await blob(),args.credentialRef!,{formerWritersRetired:args.mode!=='no-retirement',acceptPostSnapshotEvidenceLoss:args.mode!=='no-loss-consent',replaceInactiveLocalCopy:args.mode==='replace-copy'});
           else if(action==='restore-current')value=await restore.current();
+          else if(action==='restore-clock'){restoreClocks.set(args.name,args.now!);value=true;}
           else if(action==='restore-load')value=await restore.load(args.requestId!,await blob());
           else if(action==='restore-preview')value=await restore.preview(args.requestId!);
           else if(action==='restore-activate')value=await restore.activate(args.requestId!,args.peerId!,args.mode!=='no-summary');

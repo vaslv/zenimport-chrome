@@ -127,11 +127,12 @@ export class RestoreOwner{
     participantUuid(previewId);requireParticipant(acceptSummary===true,'migration_paused');
     const value=await this.#unit(false,()=>this.#read(id));if(value.phase==='activated'){requireParticipant(value.preview?.id===previewId);return value;}
     requireParticipant(value.phase==='preview'&&value.preview?.id===previewId,'migration_incomplete');
-    const proof=await this.ports.credential(value.credentialRef);requireParticipant(await this.ports.permission(),'permission_required');const now=this.#now();
+    const proof=await this.ports.credential(value.credentialRef);requireParticipant(await this.ports.permission(),'permission_required');
     return this.#unit(true,async(root,marker)=>{
       await this.#guard(value,marker);const current=await this.#read(id);requireParticipant(current.phase==='preview'&&current.preview?.id===previewId,'migration_incomplete');
-      requireParticipant(BigInt(now)>=BigInt(current.preview.checkedAt)&&BigInt(now)-BigInt(current.preview.checkedAt)<=300n&&proof.sourceHash===current.preview.sourceHash&&
-        same(proof.ownerIds,validateManifest(parseJson(new TextEncoder().encode(current.manifest))).zenmoney_identity.owner_ids),'migration_wrong_account');
+      const fresh=()=>{const now=this.#now();requireParticipant(BigInt(now)>=BigInt(current.preview!.checkedAt)&&BigInt(now)-BigInt(current.preview!.checkedAt)<=300n&&proof.sourceHash===current.preview!.sourceHash&&
+        same(proof.ownerIds,validateManifest(parseJson(new TextEncoder().encode(current.manifest))).zenmoney_identity.owner_ids),'migration_wrong_account');};
+      fresh();
       await verifyReplacement(this.db,id);
       const stage=stageRecord(await this.db.stages.get(value.generation)),dataset=datasetControl(await this.db.datasets.get(value.generation));
       requireParticipant(stage.state==='graph_valid'&&stage.archiveSha256===value.archiveSha256&&stage.manifest===current.manifest&&stage.graphDigest===validateManifest(parseJson(new TextEncoder().encode(current.manifest))).dataset_digest,'migration_incomplete');
@@ -140,7 +141,10 @@ export class RestoreOwner{
       await this.db.participants.put({id:value.participantId,generation:value.generation,epoch:'2',state:'active',operationId:null,everActivated:true,awaitingSync:true});
       await this.db.runtime.put({...root,activeMode:'local',activeGeneration:value.generation,pendingSwitchId:null,credentialRef:value.credentialRef,
         credentialEpoch:increment(root.credentialEpoch),epoch:increment(root.epoch),financialMayHaveStarted:true});
-      const next={...current,phase:'activated' as const};await this.#save(next);return next;
+      const next={...current,phase:'activated' as const};await this.#save(next);
+      // Anchor reads and native writes may await past the preview deadline.
+      // Throwing here rolls back the entire activation, including Root.
+      fresh();return next;
     });
   }
   async cancel(id:string){return this.#unit(true,async(root,marker)=>{

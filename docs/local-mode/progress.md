@@ -1668,3 +1668,22 @@ push, tags or publication.
 
 Major L10 review and broad browser suite remain in progress. Product local routing
 is disabled. No live API/data, push, tags or publication.
+
+### L10 major review correction — native restore preview deadline
+
+- Sample the preview clock inside the final activation transaction, after the
+  anchor wait, and again after all native writes. Expiry rolls back all authority
+  and staged activation together; a new explicit preview can then be accepted.
+- Independent API reread: no findings. See
+  reviews/l10-native-preview-expiry-2026-10-22.md. Cross-model CLI unavailable.
+- Docker strict/generated/bundle and 256 unit/contracts passed (1838.07ms).
+  Current Chromium: 14 functional restore cases passed in 47.42s. Minimum Chrome
+  140: both new deadline races passed in 30.40s (15 unrelated cases deselected).
+  Logs: /tmp/zenimport-l10-restore-expiry-{unit,native,minimum}.log.
+- Broad native run was interrupted by host disk exhaustion, not counted as a
+  pass. Removed only task-created disposable image tags and the task's dead
+  container; production containers and all volumes were untouched. A connector
+  fixture failure is being investigated separately after space recovery.
+
+L10 major gate remains open for the stale-initial-Root race and broad verification.
+Product local routing remains disabled. No live API/data, push, tags or publication.

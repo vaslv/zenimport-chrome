@@ -185,3 +185,22 @@ def test_cancelled_stage_cleanup_requires_retaining_archive_and_never_touches_so
         assert ok(worker,'inspect')['rows']==source_rows
         assert not call(worker,'restore-load','target',requestId=decision['id'],base64=raw)['ok']
         assert begin(worker,raw)['phase']=='loading'
+
+
+@pytest.mark.parametrize('point',['anchor-read','final-write'])
+def test_preview_expiry_during_native_activation_rolls_back_even_after_final_write(tmp_path,point):
+    with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,page,_):
+        raw,_,_=source_archive(worker);ok(worker,'create','target');decision=begin(worker,raw)
+        preview=load_preview(worker,raw,decision);proof=preview['preview'];root=ok(worker,'current','target')['root']
+        args=dict(name='target',requestId=decision['id'],peerId=proof['id'],now=str(int(proof['checkedAt'])+299))
+        if point=='anchor-read':
+            worker.evaluate("args=>{globalThis.lateRestoreExpiry=authorityProbe.run('restore-activate',args);}",args|dict(mode='pause-restore-activate'))
+            checkpoint(worker,page);ok(worker,'restore-clock','target',now=str(int(proof['checkedAt'])+301));ok(worker,'release')
+            result=worker.evaluate('()=>globalThis.lateRestoreExpiry')
+        else:result=call(worker,'restore-activate',**args,mode='expire-after-restore-write')
+        assert not result['ok'],result
+        assert ok(worker,'current','target')['root']==root
+        assert ok(worker,'restore-current','target')['phase']=='preview'
+        fresh=ok(worker,'restore-preview','target',requestId=decision['id'],fixture=FIXTURE)
+        assert fresh['preview']['id']!=proof['id']
+        assert ok(worker,'restore-activate','target',requestId=decision['id'],peerId=fresh['preview']['id'])['phase']=='activated'
