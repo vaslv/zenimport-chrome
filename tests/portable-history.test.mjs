@@ -38,3 +38,13 @@ test('terminal receipts survive soft deletion and cannot become pending delivery
   const locked=structuredClone(current.rows);locked.source_capture_leases.push([['text','unused'],['text','unused']]);
   await assert.rejects(validateHistory(reader(locked)),{code:'capture_not_quiescent'});
 });
+
+
+test('a later existing click can retain authorization for an earlier complete observation',async()=>{
+  const rows=structuredClone(current.rows),job=structuredClone(rows.capture_jobs[0]),later='10000000-0000-4000-8000-000000000099';
+  job[offset('capture_jobs','id')]=['text',later];rows.capture_jobs.push(job);
+  for(const row of rows.delivery_authorizations)row[offset('delivery_authorizations','job_id')]=['text',later];
+  for(const row of rows.deliveries)row[offset('deliveries','authorized_job_id')]=['text',later];
+  // History-only unit; native complete graph validation is tested separately.
+  await validateHistory(reader(rows));
+});

@@ -1178,3 +1178,21 @@ in 90.14s. Both skipped cases remain skips, not evidence of successful coverage.
 
 L8 is complete. L9–L12 remain pending. No local product routing/writer or live
 data/API, push, tags or publication.
+
+
+### L9.1 — completed-revision delivery authorization
+
+- Added source-fenced, bounded native authorization and durable schedule writes.
+  Prior complete observations can be authorized by a new click even before its
+  overlap is captured; current settings/target/date scope and never-attempted
+  status remain mandatory. Uppercase job UUIDs canonicalize before lookup.
+- Fixed the existing cross-job authorization mismatch in kernel and browser/server
+  portable history validators. Their current full SQL/FK/immutable revision proofs
+  remain enforced; invalid jobs and attempted identity remain rejected.
+- Independent API final recheck is clean; see reviews/l9-authorization-2026-10-21.md.
+  Docker: 217 unit/contracts; 47 native/storage/source cases in 61.17s; five final
+  native/source cases in 7.98s. Backend: 767 tests in 38.05s plus complete isolated
+  HTTP/auth/crash/graceful-stop/snapshot-restoration lifecycle checks passed.
+
+L9 remains in progress. Local product routing and financial SDK dispatch remain
+unavailable. No live API/data, push, tags or publication.

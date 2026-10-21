@@ -5,7 +5,7 @@ from uuid import uuid4
 import pytest
 pytest.importorskip('backend')
 from playwright.sync_api import sync_playwright
-from backend import accounts,capture,storage
+from backend import accounts,capture,storage,delivery
 from backend.sync_contracts import DiscoverConnection,AccountSettings,StartSync,CaptureLeaseRequest,CapturePage,CaptureComplete
 from mirror_factory import Fixture
 from test_runtime import installed
@@ -57,7 +57,7 @@ def test_actual_python_and_browser_capture_portable_facts_match(tmp_path):
         db.execute('DELETE FROM account_bindings');db.execute('DELETE FROM bank_accounts')
     reference.refresh(json.loads(full()))
     with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
-        for action in ('init','verify','refresh'):assert call(worker,action,now=NOW)['ok']
+        for action in ('init','verify','refresh'):assert call(worker,action,now=NOW,token='fixture-zenmoney-token')['ok']
         data=discovery()
         with storage.transaction(reference.path) as db:left=accounts.discover(db,DiscoverConnection.model_validate(data),NOW)
         right=call(worker,'connections-discover',data=data,now=NOW)['result']
@@ -69,6 +69,15 @@ def test_actual_python_and_browser_capture_portable_facts_match(tmp_path):
             with storage.transaction(reference.path) as db:expected=capture.start(db,StartSync(connection_id=left['id'],request_id=request,reimport_from='2026-10-01'),NOW)
             actual=call(worker,'capture-start',data=dict(connection_id=right['id'],request_id=request,reimport_from='2026-10-01'),now=NOW)['result']
             interval_l=expected['accounts'][0]['intervals'][0]['id'];interval_r=actual['accounts'][0]['intervals'][0]['id']
+            if run:
+                # A new click authorizes prior complete observations even while
+                # this job's overlap is still uncollected (actual Python SQL).
+                with storage.transaction(reference.path) as db:
+                    delivery.authorize_job(db,expected['id'],NOW)
+                    assert db.execute('SELECT count(*) FROM delivery_authorizations WHERE job_id=?',(expected['id'],)).fetchone()[0]==2
+                authorized=call(worker,'authorize-job',id=actual['id'],now=NOW)
+                assert authorized['ok'] and authorized['result']['authorized']==2,authorized
+
             with storage.transaction(reference.path) as db:owned=capture.lease(db,expected['id'],CaptureLeaseRequest(worker_id=WORKER),NOW)
             owned_r=call(worker,'capture-lease',id=actual['id'],data=dict(worker_id=WORKER),now=NOW)['result']
             assert str(owned['epoch'])==owned_r['epoch']
@@ -89,5 +98,15 @@ def test_actual_python_and_browser_capture_portable_facts_match(tmp_path):
             with storage.transaction(reference.path,read_only=True) as db:
                 remote={table:[dict(row) for row in db.execute('SELECT * FROM '+('account_capture_locks' if table=='source_capture_leases' else table))] for table in TABLES}
             for table in TABLES:assert normalized(local)[table]==normalized(remote)[table],(run,table,normalized(local)[table],normalized(remote)[table])
+            # L9 authorization is independently reconstructed from the committed
+            # complete capture, never from an in-memory completion callback.
+            with storage.transaction(reference.path) as db:delivery.authorize_job(db,expected['id'],NOW)
+            authorized=call(worker,'authorize-job',id=actual['id'],now=NOW);assert authorized['ok'],authorized
+            local_auth=call(worker,'authorization-state')['result']
+            with storage.transaction(reference.path,read_only=True) as db:remote_auth=dict(authorizations=[dict(r) for r in db.execute('SELECT * FROM delivery_authorizations')],schedule=[dict(r) for r in db.execute('SELECT * FROM delivery_schedule')])
+            def normalized_auth(values,tables):
+                ids=identity_map(tables)
+                return {name:sorted([{k:ids.get(v,v) if isinstance(v,str) else str(v) if isinstance(v,int) else v for k,v in row.items()} for row in rows],key=repr) for name,rows in values.items()}
+            assert normalized_auth(local_auth,local)==normalized_auth(remote_auth,remote)
         assert call(worker,'export',now=NOW)['ok']
     reference.close()

@@ -1,3 +1,4 @@
+import {DeliveryAuthorizationRepository} from './delivery-authorization-repository.js';
 /** Private native fixture. Synthetic responses only; never bundled in product. */
 import {LocalDatabase} from './bootstrap.js';
 import {FinancialDatabase} from './database.js';
@@ -67,6 +68,14 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action==='authorize-job'){
+      const {root}=await store.context(),repository=await DeliveryAuthorizationRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{result=await repository.authorize(args.id!,String(now));}finally{repository.close();}
+    }
+    if(action==='authorization-state'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{result=await owner.read(async view=>({authorizations:await view.rows('delivery_authorizations'),schedule:await view.rows('delivery_schedule')}));}finally{owner.close();}
+    }
     if(action==='categories-build'){
       const {root}=await store.context(),repository=await CategoryRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put,native=FinancialDatabase.prototype.transaction;let wrotePrediction=false,armed=true;

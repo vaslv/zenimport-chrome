@@ -87,3 +87,5 @@ export {buildCategoryEvidence,categoryContext,predictCategory} from '../domain/p
 // Private contract adapters; this runner is excluded from the product bundle.
 export {categoryPlan} from '../local/reconciliation/categories.js';
 export {sourceFacts} from '../local/reconciliation/facts.js';
+
+export {authorizeJob} from '../local/delivery/authorization.js';

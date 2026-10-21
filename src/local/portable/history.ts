@@ -14,15 +14,17 @@ const evidence=tupleText;
 
 export async function validateHistory(reader:GraphReader):Promise<void>{
   for await(const _ of reader.rows('source_capture_leases'))requirePortable(false,'capture_not_quiescent');
-  const intervals=new Map<string,string>(),authorizations=new Map<string,string>(),terminal=new Set<string>(),attempted=new Set<string>();
-  for await(const row of reader.rows('capture_intervals'))intervals.set(row.id,row.job_id);
+  const jobs=new Set<string>(),authorizations=new Map<string,string>(),terminal=new Set<string>(),attempted=new Set<string>();
+  for await(const row of reader.rows('capture_jobs'))jobs.add(row.id);
   for await(const row of reader.rows('processing_receipts'))terminal.add(row.bank_id);
   for await(const row of reader.rows('link_bank_members'))terminal.add(row.bank_id);
   for await(const row of reader.rows('delivery_attempts')){
     payloadIdentity(row.payload,row.zen_id);attempted.add(evidence(row.bank_id,row.zen_id,row.payload));
   }
   for await(const row of reader.rows('delivery_authorizations')){
-    requirePortable(intervals.get(row.interval_id)===row.job_id,'invalid_authorization_job');authorizations.set(row.bank_id,row.job_id);
+    // A later click may authorize an earlier complete observation. Relations
+    // already prove revision/account and the new job_accounts snapshot.
+    requirePortable(jobs.has(row.job_id),'invalid_authorization_job');authorizations.set(row.bank_id,row.job_id);
   }
   for await(const row of reader.rows('deliveries')){
     requirePortable(row.state!=='attempting','delivery_not_quiescent');payloadIdentity(row.payload,row.zen_id);

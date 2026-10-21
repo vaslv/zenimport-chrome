@@ -173,7 +173,7 @@ export class RepositorySession{
     requireStorage(proof!==null && interval!==null && bank!==null,'invariant_violation');
     const snapshot=await this.get('job_accounts',[jobId,['text',bank.account_id]]);
     requireStorage(snapshot!==null && proof.revision===textField(table,row,'revision') && interval.state==='complete' &&
-      interval.job_id===textField(table,row,'job_id') && snapshot.settings_version===textField(table,row,'settings_version') &&
+      snapshot.settings_version===textField(table,row,'settings_version') &&
       snapshot.target_id===textField(table,row,'target_id'),'invariant_violation');
   }
 
