@@ -16,3 +16,4 @@ export * from './graph.js';
 export {canonicalDto,canonicalStoredDto} from '../../domain/codec.js';
 export * from '../../domain/python-decimal.js';
 export {decodeJson as decodeGraphJson,ExactDecimal as GraphDecimal} from 'zenmoney-typescript';
+export * from '../../control/participant-wire.js';

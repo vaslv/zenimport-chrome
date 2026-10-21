@@ -624,3 +624,21 @@ No archive validity is presented as financial graph or activation authority.
 - L4 still requires protected active-source export, generation activation and
   irreversible retirement, remaining boundary/crash gates and independent review.
   L5–L12 have not started, and distributed product handlers remain remote-only.
+
+### L4.17 — participant receipt wire prerequisite (L4 in progress)
+
+- Added the protocol-2 integrity preimage/receipt checker. It preserves explicit
+  nulls, exact decimal-string epochs above 2^53, UTF-8 sorted keys, archive bounds
+  and operation/peer bindings. Checked immutable messages do not authenticate a
+  peer or grant activation; authenticated status and participant decisions remain
+  separate. JavaScript-only sparse arrays/symbols/classes cannot enter a preimage.
+- Shared fixtures contain 435 actual Python receipt-verification observations and
+  15 canonical-byte outcomes, recomputed by the source implementation. Receipt
+  field names also match the pinned HTTP schema. The archive producer's five-
+  resource logical contract revision is unchanged by this additional test data.
+- Docker: strict typing and 164 unit/contract cases passed. All 450 observations
+  passed in one installed-worker case per browser (145: 2.23s; 140: 8.08s).
+  Python vector/participant/HTTP checks: 53 passed in 2.24s.
+- This is a prerequisite, not a durable participant implementation. L4 still needs
+  protected active-source export, atomic generation activation/retirement, final
+  crash/boundary gates and independent completion review. Local mode stays disabled.
