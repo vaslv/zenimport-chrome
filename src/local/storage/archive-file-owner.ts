@@ -67,6 +67,12 @@ export class ArchiveFileOwner{
     const row=await this.db.archiveFileChunks.get([v.id,number]);
     requireParticipant(row!==undefined&&row.data instanceof Uint8Array&&row.data.length===Math.min(CHUNK,v.bytes-number*CHUNK)&&digest(row.data)===row.sha256,'migration_incomplete');return row.data;
   });}
+  async chunk(id:string,number:number){
+    requireParticipant(Number.isInteger(number)&&number>=0&&number<256);
+    const value=await this.#unit(false,installationId=>this.#read(id,installationId));
+    requireParticipant(value.phase==='ready'&&number<value.chunks,'migration_incomplete');
+    return this.#part(value,number);
+  }
   async seal(id:string){
     const v=await this.#unit(false,installationId=>this.#read(id,installationId));requireParticipant(['uploading','ready'].includes(v.phase),'migration_paused');
     const hash=sha256.create();for(let i=0;i<v.chunks;i++)hash.update(await this.#part(v,i));

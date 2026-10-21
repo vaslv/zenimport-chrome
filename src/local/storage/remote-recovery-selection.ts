@@ -9,25 +9,34 @@ import {int64,storageFailure} from './types.js';
 import {sameJournal} from '../migration/journal.js';
 import {identity} from '../migration/wire.js';
 import type {PortableIdentity} from '../migration/wire.js';
-import {archiveStatus,recoveryRequest,recoveryWithdrawal} from '../migration/archive-wire.js';
-import type {ArchiveRecoveryRequest,ArchiveStatus,RecoveryWithdrawal} from '../migration/archive-wire.js';
+import {archiveStatus,archivePreview,recoveryRequest,recoveryWithdrawal} from '../migration/archive-wire.js';
+import type {ArchiveRecoveryRequest,ArchiveStatus,RecoveryWithdrawal,ArchivePreview} from '../migration/archive-wire.js';
 
 export interface RemoteRecoveryIntent{
   version:'1';id:string;initialRoot:RuntimeControl;descriptor:RemoteDescriptor;
   request:ArchiveRecoveryRequest;phase:'pending'|'activated'|'cancelled';
   selectedRef:string;selectedContext:string;withdrawal:RecoveryWithdrawal|null;
+  uploaded:number;acceptedPreview:string|null;lastError:string|null;preview:ArchivePreview|null;
+  cancelRequested:boolean;activationPreview:string|null;remoteCleaned:boolean;fileCleaned:boolean;
 }
+export const recoveryErrors=new Set(['backend_unavailable','unauthorized','permission_required','unsupported_migration_version','migration_busy','migration_paused','migration_not_empty','migration_invalid','migration_wrong_account','migration_incomplete','zenmoney_unavailable','validation_error','quota_exceeded','recovery_required','storage_corrupt','stale_context','stale_epoch','dataset_not_writable']);
 const head='remote-recovery-head',scope=(id:string)=>'remote-recovery:'+id;
 const increment=(value:string)=>int64(String(BigInt(value)+1n));
 function checked(input:unknown):RemoteRecoveryIntent{
   requireParticipant(input!==null&&typeof input==='object'&&!Array.isArray(input));const v=input as RemoteRecoveryIntent;
-  requireParticipant(Object.keys(v).sort().join(',')==='descriptor,id,initialRoot,phase,request,selectedContext,selectedRef,version,withdrawal'&&v.version==='1'&&['pending','activated','cancelled'].includes(v.phase));
+  requireParticipant(Object.keys(v).sort().join(',')==='acceptedPreview,activationPreview,cancelRequested,descriptor,fileCleaned,id,initialRoot,lastError,phase,preview,remoteCleaned,request,selectedContext,selectedRef,uploaded,version,withdrawal'&&v.version==='1'&&['pending','activated','cancelled'].includes(v.phase));
   participantUuid(v.id);runtimeControl(v.initialRoot);recoveryRequest(v.request);
   requireParticipant(v.initialRoot.activeMode==='remote'&&v.initialRoot.credentialRef!==null&&v.initialRoot.pendingSwitchId===null&&v.request.id===v.id);
   requireParticipant(v.descriptor!==null&&typeof v.descriptor==='object'&&typeof v.descriptor.url==='string'&&typeof v.descriptor.legacy==='boolean');
   participantUuid(v.descriptor.contextId);participantUuid(v.descriptor.installationId);participantUuid(v.descriptor.datasetId);
   requireParticipant(v.request.installation_id===v.descriptor.installationId);
   participantUuid(v.selectedRef);participantUuid(v.selectedContext);
+  requireParticipant(Number.isSafeInteger(v.uploaded)&&v.uploaded>=0&&v.uploaded<=Math.ceil(Number(v.request.archive_size)/262144));
+  requireParticipant(typeof v.cancelRequested==='boolean'&&typeof v.remoteCleaned==='boolean'&&typeof v.fileCleaned==='boolean'&&(v.phase!=='pending'||!v.remoteCleaned&&!v.fileCleaned));
+  if(v.activationPreview!==null){participantUuid(v.activationPreview);requireParticipant(v.acceptedPreview===v.activationPreview&&v.preview?.id===v.activationPreview);}
+  if(v.preview!==null)archivePreview(v.preview,v.request.archive_sha256);
+  if(v.acceptedPreview!==null)participantUuid(v.acceptedPreview);
+  requireParticipant(v.lastError===null||recoveryErrors.has(v.lastError));
   if(v.withdrawal!==null){requireParticipant(v.phase==='cancelled');recoveryWithdrawal(v.withdrawal,v.request);}
   return structuredClone(v);
 }
@@ -73,11 +82,53 @@ export class RemoteRecoverySelection{
         if(typeof id==='string')requireParticipant(terminal.includes((await this.db.applicationState.get(prefix+id))?.value.phase as never),'migration_busy');}
       const descriptor=await this.db.remoteContexts.get(root.credentialRef);requireParticipant(descriptor!==undefined,'recovery_required');
       const {id:_id,...context}=descriptor;
-      const value=checked({version:'1',id:input.id,initialRoot:root,descriptor:context,request:input,phase:'pending',selectedRef:crypto.randomUUID(),selectedContext:crypto.randomUUID(),withdrawal:null});
+      const value=checked({version:'1',id:input.id,initialRoot:root,descriptor:context,request:input,phase:'pending',selectedRef:crypto.randomUUID(),selectedContext:crypto.randomUUID(),withdrawal:null,uploaded:0,acceptedPreview:null,lastError:null,preview:null,cancelRequested:false,activationPreview:null,remoteCleaned:false,fileCleaned:false});
       await this.#save(value);await this.db.applicationState.put({scope:head,value:{id:value.id}});
       await this.db.runtime.put({...root,pendingSwitchId:value.id,epoch:increment(root.epoch),financialMayHaveStarted:true});return value;
     });
   }
+  async pending(id:string){return this.#unit(false,async root=>{
+    const value=await this.#read(id);if(value.phase==='pending')await this.#held(root,value);return value;
+  });}
+  async uploaded(id:string,number:number){return this.#unit(true,async root=>{
+    const value=await this.#read(id);await this.#held(root,value);
+    requireParticipant(Number.isSafeInteger(number)&&number>=0&&number<Math.ceil(Number(value.request.archive_size)/262144)&&number<=value.uploaded);
+    if(number<value.uploaded)return value;
+    const next={...value,uploaded:number+1,lastError:null};await this.#save(next);return next;
+  });}
+  async showPreview(id:string,input:ArchivePreview){
+    return this.#unit(true,async root=>{const value=await this.#read(id);await this.#held(root,value);
+      const preview=archivePreview(input,value.request.archive_sha256),next={...value,preview,lastError:null};await this.#save(next);return next;});
+  }
+  async previewConsent(id:string,previewId:string|null){
+    if(previewId!==null)participantUuid(previewId);
+    return this.#unit(true,async root=>{const value=await this.#read(id);await this.#held(root,value);
+      requireParticipant(!value.cancelRequested&&value.activationPreview===null,'migration_paused');
+      requireParticipant(previewId===null||value.preview?.id===previewId,'migration_incomplete');
+      const next={...value,acceptedPreview:previewId,preview:previewId===null?null:value.preview,lastError:null};await this.#save(next);return next;});
+  }
+  async failed(id:string,code:string){
+    requireParticipant(recoveryErrors.has(code));
+    return this.#unit(true,async root=>{const value=await this.#read(id);if(value.phase==='pending')await this.#held(root,value);
+      const next={...value,lastError:code};await this.#save(next);return next;});
+  }
+  /** The final grant prevents a stale step from using revoked preview consent. */
+  async dispatchActivation(id:string,previewId:string){
+    participantUuid(previewId);
+    return this.#unit(true,async root=>{const value=await this.#read(id);await this.#held(root,value);
+      requireParticipant(!value.cancelRequested&&value.acceptedPreview===previewId&&value.preview?.id===previewId&&
+        (value.activationPreview===null||value.activationPreview===previewId),'migration_paused');
+      const next={...value,activationPreview:previewId,lastError:null};await this.#save(next);return next;});
+  }
+  /** Cancellation is durable before any HTTP; an already granted send stays uncertain. */
+  async requestCancel(id:string){return this.#unit(true,async root=>{
+    const value=await this.#read(id);if(value.phase!=='pending')return value;await this.#held(root,value);
+    const next={...value,cancelRequested:true,acceptedPreview:value.activationPreview===null?null:value.acceptedPreview,lastError:null};await this.#save(next);return next;
+  });}
+  async cleaned(id:string,side:'remote'|'file'){return this.#unit(true,async()=>{
+    const value=await this.#read(id);requireParticipant(value.phase!=='pending','migration_paused');
+    const next={...value,[side==='remote'?'remoteCleaned':'fileCleaned']:true,lastError:null};await this.#save(next);return next;
+  });}
   #proof(value:RemoteRecoveryIntent,input:ArchiveStatus,peer:PortableIdentity,phase:'activated'|'cancelled'){
     const status=archiveStatus(input,value.id),current=identity(peer),request=value.request;
     requireParticipant(status.kind==='recovery'&&status.phase===phase&&status.installation_id===request.installation_id&&

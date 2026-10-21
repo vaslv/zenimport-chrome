@@ -1,5 +1,8 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
+import {SyncError} from '../../../extension/backend-client.js';
+import {ApplicationRuntime} from '../../application/runtime.js';
+import {RemoteArchiveRecovery} from '../../application/remote-archive-recovery.js';
 import {RemoteRecoverySelection} from './remote-recovery-selection.js';
 import {ArchiveFileOwner} from './archive-file-owner.js';
 import {BackupOwner} from './backup-owner.js';
@@ -83,7 +86,37 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action==='bind-remote'){
+      if(action.startsWith('remote-recovery-')){
+        const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
+        const controller=new RemoteArchiveRecovery({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,
+          fetch:async(input,init)=>{
+            if(args.mode==='fail-withdraw'&&String(input).endsWith('/archives/recoveries/withdraw'))throw Error('synthetic-offline-withdraw');
+            if(args.mode==='fail-finalize'&&String(input).endsWith('/finalize'))throw Error('synthetic-offline-finalize');
+            const reply=await globalThis.fetch(input,init);
+            if(args.mode==='pause-preview-status'&&String(input).endsWith('/archives/'+args.requestId)&&
+              (await reply.clone().json()).phase==='preview'){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}
+            if(args.mode==='lose-activate'&&String(input).endsWith('/activate')){await reply.arrayBuffer();throw Error('synthetic-lost-activation');}
+            if(args.mode==='lose-begin'&&String(input).endsWith('/archives/recoveries')){await reply.arrayBuffer();throw Error('synthetic-lost-recovery-begin');}
+            return reply;},
+          serverPermission:url=>chrome.permissions.contains({origins:[new URL(url).origin+'/*']})});
+        if(action==='remote-recovery-current')value=await controller.current();
+        else if(action==='remote-recovery-step'){
+          const put=IDBObjectStore.prototype.put;
+          if(args.mode==='quota-selection')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='runtime')throw new DOMException('synthetic-recovery-selection-quota','QuotaExceededError');return put.apply(this,values);};
+          try{value=await controller.step(args.requestId!);}finally{IDBObjectStore.prototype.put=put;}
+        }
+        else if(action==='remote-recovery-accept')value=await controller.accept(args.requestId!,args.peerId!);
+        else if(action==='remote-recovery-retry')value=await controller.retry(args.requestId!,['refresh-preview','fail-finalize'].includes(args.mode??''));
+        else if(action==='remote-recovery-cancel')value=await controller.cancel(args.requestId!);
+        else if(action==='remote-recovery-ordinary'){
+          const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name);
+          try{value=await (await runtime.current())!.service.accounts.catalog();}finally{runtime.close();}
+        }else if(action==='remote-recovery-begin'){
+          const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name);
+          try{const app=(await runtime.current())!;value=await controller.begin(app,args.requestId!,{formerWritersRetired:true,acceptPostSnapshotEvidenceLoss:true});}
+          finally{runtime.close();}
+        }else throw Error('unknown_remote_recovery_fixture');
+      }else if(action==='bind-remote'){
         const control=await RemoteControl.open(args.name,port(args.name));
         const data=args.request as {installationId:string;datasetId:string};
         try{value=await control.bindIdentity(await control.read(),data.installationId,data.datasetId);}finally{control.close();}
@@ -399,5 +432,5 @@ export async function run(action:string,args:Arguments){
       }else throw Error('unsupported_private_probe');
     }
     return {ok:true,value};
-  }catch(error){return {ok:false,code:error instanceof ParticipantError||error instanceof PortableError?error.code:storageFailure(error).code};}
+  }catch(error){return {ok:false,code:error instanceof ParticipantError||error instanceof PortableError||error instanceof SyncError?error.code:storageFailure(error).code};}
 }

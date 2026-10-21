@@ -1809,3 +1809,22 @@ No live API/data, push, tags or publication.
 These are internal control prerequisites; HTTP/archive orchestration, popup,
 background alarms and L12 acceptance remain unfinished. No production/live data,
 push, tags or publication.
+
+### L11 remote archive coordinator checkpoint
+
+The trusted coordinator now resumes exact begin/upload/finalize/activation across
+lost replies and Chrome restart. Native final activation grants fence revoked
+preview consent; cancellation is saved before HTTP and resolves an activation
+that already won forward. Permanent withdrawal handles rejected begins, including
+an advanced participant epoch. Remote/file cleanup is bounded and resumable.
+Neither restore orchestration nor cleanup sends financial transactions.
+
+Independent API and adversarial rereads found no remaining confirmed findings;
+see reviews/l11-remote-archive-controller-2026-10-22.md. Docker strict/generated
+checks and 264 unit/contracts passed (1816.92ms); actual isolated Python/native
+proof/selection/controller scenarios: 24 passed (51.31s). Minimum Chrome repeat
+is running and is not yet claimed as passed. Logs:
+/tmp/zenimport-l11-controller-{unit,native,min}.log.
+
+L11 product integration and L12 remain unfinished. No live data/API, push, tags
+or publication.
