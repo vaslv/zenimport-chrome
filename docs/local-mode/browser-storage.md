@@ -2,8 +2,11 @@
 
 The extension's local financial mode is still disabled in product handlers.
 L4 uses actual IndexedDB/Dexie with the 49 typed financial tables and independent
-runtime/dataset/import control. Physical IDB version 5 is independent of financial
-schema 1 and archive version 2. Versions 1–4 are unpublished development layouts.
+runtime/dataset/import control. Physical IDB version 6 is independent of financial
+schema 1 and archive version 2. Versions 1–5 are unpublished development layouts.
+Version 6 adds two nonportable application-control stores for scoped transient
+state and nonsecret remote context descriptors; financial/archive schemas do not
+change. See [the application boundary](application-service.md).
 
 ## Inactive format staging
 

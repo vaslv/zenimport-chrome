@@ -1,5 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
+import {ApplicationRuntime} from '../.local/contracts/application-runtime.mjs';
+import {memoryControl} from './application-support.mjs';
 
 const server='https://fixture.invalid';
 const popupSender={id:'fixture-extension',url:'chrome-extension://fixture-extension/popup.html'};
@@ -32,10 +34,11 @@ async function fixture(t,capture,{fetcher}={}) {
     return fetcher ? fetcher(url,options) : Response.json({api_version:1});
   };
   t.after(()=>{globalThis.chrome=previous.chrome;globalThis.fetch=previous.fetch;});
-  await import('../.local/contracts/background.mjs?fixture='+crypto.randomUUID());
+  const {installBackground}=await import('../.local/contracts/background.mjs?fixture='+crypto.randomUUID());
+  const runtime=new ApplicationRuntime(chrome.storage.local,{},'unit-control',memoryControl());installBackground({runtime});
   const send=(data,sender=popupSender)=>new Promise(resolve=>listener(data,sender,resolve));
   await send({type:'status'}); // Drain initial state restoration before assertions.
-  return {local,session,calls,send};
+  return {local,session,calls,send,setCapture:async value=>(await runtime.current()).state.set({capture:value})};
 }
 
 for(const known of [true,false])test(`paused token repair preserves ${known?'known':'unknown'} job and does not start synchronization`,async t=>{
@@ -139,7 +142,7 @@ test('automatic new connection cannot be attached to another login and a running
   const f=await bankProfiles(t);f.live.account='87654321';
   assert.equal((await f.send({type:'inspect'})).connection.profile_key,'account-v1:87654321');
   assert.deepEqual(await f.send({type:'select-bank-connection',profileKey:'profile-a'}),{ok:false,error:'bank_connection_changed'});
-  f.local.capture.phase='paused';
+  await f.setCapture({...f.local.capture,phase:'paused'});
   assert.deepEqual(await f.send({type:'create-bank-connection',label:'Other'}),{ok:false,error:'account_busy'});
   assert.deepEqual(await f.send({type:'select-bank-connection',profileKey:'profile-a'}),{ok:false,error:'account_busy'});
 });

@@ -21,18 +21,7 @@ import {validateStageGraph} from './graph-validation.js';
 import {discardStage,acknowledgeStageBackup,collectDiscardedStage} from './stage-cleanup.js';
 import {assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
-
-const opening=new Map<string,Promise<void>>();
-
-async function serial<T>(name:string,operation:()=>Promise<T>):Promise<T>{
-  const previous=opening.get(name)??Promise.resolve();
-  let release!:()=>void;
-  const current=new Promise<void>(resolve=>{release=resolve;});
-  opening.set(name,current);
-  await previous;
-  try{return await operation();}
-  finally{release();if(opening.get(name)===current)opening.delete(name);}
-}
+import {serializeOpen} from './bootstrap-lock.js';
 
 /** L4 owns initialization only. Financial write repositories are added separately. */
 export class LocalDatabase{
@@ -42,7 +31,7 @@ export class LocalDatabase{
 
   static async open(name:string,sentinel:SentinelPort,now:string):Promise<LocalDatabase>{
     int64(now);requireStorage(BigInt(now)>=0n,'invalid_row');
-    try{return await serial(name,async()=>{
+    try{return await serializeOpen(name,async()=>{
       let marker=await sentinel.read();
       const exists=await Dexie.exists(name);
       const creating=marker===null && !exists;

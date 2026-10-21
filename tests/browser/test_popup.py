@@ -3,7 +3,7 @@ from uuid import uuid4
 import threading
 import pytest
 from playwright.sync_api import sync_playwright, expect
-from support import PopupBackend, http_server, installed, connect, TOKEN, run_clock
+from support import PopupBackend, http_server, installed, connect, TOKEN, run_clock, seed_application_state
 
 
 def test_popup_setup_keyboard_dates_and_no_bank_ui():
@@ -258,12 +258,10 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
         expect(popup.locator('#last-sync')).to_be_hidden()
-        worker.evaluate("""async()=>{
-          const {view}=await chrome.storage.local.get('view');
-          Date.now=()=>Date.parse('2026-10-16T05:00:00Z');
-          await chrome.storage.local.set({capture:{phase:'complete',connection:view.connection,bank:view.bank,
-            startedAt:'2026-10-16T04:00:00Z',command:{},job:{id:'fixture-job',delivery_state:'waiting'}}});
-        }""")
+        view=worker.evaluate("async()=> (await chrome.storage.local.get('view')).view")
+        worker.evaluate("Date.now=()=>Date.parse('2026-10-16T05:00:00Z')")
+        seed_application_state(worker,{'capture':dict(phase='complete',connection=view['connection'],bank=view['bank'],
+            startedAt='2026-10-16T04:00:00Z',command={},job=dict(id='fixture-job',delivery_state='waiting'))})
         # Fire via real alarm without a long wall-clock wait.
         run_clock(popup,worker)
         expect(popup.locator('#status')).to_contain_text('The server is sending')
@@ -280,10 +278,9 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
         popup.evaluate("Date.now=()=>Date.parse('2026-10-16T07:00:00Z')")
         expect(popup.locator('#last-sync')).to_contain_text('2 hours ago')
         if Path('/results').is_dir():popup.screenshot(path='/results/popup-last-sync.png',clip=popup.locator('main').bounding_box())
-        worker.evaluate("""async()=>{
-          const {capture}=await chrome.storage.local.get('capture');
-          await chrome.storage.local.set({capture:{...capture,completedAt:undefined,phase:'failed',error:'history_incomplete'}});
-        }""")
+        capture=worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
+        capture.pop('completedAt',None);capture.update(phase='failed',error='history_incomplete')
+        seed_application_state(worker,{'capture':capture})
         expect(popup.locator('#status')).to_contain_text('History capture interrupted')
         expect(popup.locator('#last-sync')).to_contain_text('2 hours ago')
         assert worker.evaluate("async()=> (await chrome.storage.local.get('syncHistory')).syncHistory")==saved
@@ -318,14 +315,12 @@ def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
         popup.locator('.account select').select_option('target-vnd')
         popup.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#sync')).to_be_enabled()
-        worker.evaluate("""async()=>{
-          const {view}=await chrome.storage.local.get('view');
-          await chrome.storage.local.set({capture:{phase:'collecting',connection:view.connection,bank:view.bank,tabId:view.tabId,
-            startedAt:'2026-10-16T04:00:00Z',workerId:'fixture-worker',
-            command:{connection_id:view.connection.id,request_id:'fixture-original-command',reimport_from:null},
-            job:{id:'fixture-recoverable-job',capture_state:'collecting',delivery_state:'waiting',accounts:[]},
-            lease:{epoch:1,expires_at:'2099-01-01T00:00:00Z'},driver:null}});
-        }""")
+        view=worker.evaluate("async()=> (await chrome.storage.local.get('view')).view")
+        seed_application_state(worker,{'capture':dict(phase='collecting',connection=view['connection'],bank=view['bank'],tabId=view['tabId'],
+            startedAt='2026-10-16T04:00:00Z',workerId='fixture-worker',
+            command=dict(connection_id=view['connection']['id'],request_id='fixture-original-command',reimport_from=None),
+            job=dict(id='fixture-recoverable-job',capture_state='collecting',delivery_state='waiting',accounts=[]),
+            lease=dict(epoch=1,expires_at='2099-01-01T00:00:00Z'),driver=None)})
         service.token='fixture-rotated-token'
         run_clock(popup,worker)
         popup.wait_for_function("async()=> (await chrome.storage.local.get('capture')).capture?.phase==='paused'")

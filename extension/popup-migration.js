@@ -1,4 +1,6 @@
-import {remoteApplication} from '../src/application/remote-runtime.ts';
+import {ApplicationRuntime} from '../src/application/runtime.ts';
+import {trustedSentinel} from '../src/control/sentinel.ts';
+import {assertMessageContext} from '../src/application/messages.ts';
 
 const $=id=>document.getElementById(id);
 const messages={
@@ -13,6 +15,7 @@ const messages={
 };
 
 export function setupMigration({rpc,refresh,lock,pause}) {
+  const runtime=new ApplicationRuntime(chrome.storage.local,trustedSentinel(chrome.storage.local));
   let state=null,working=false;
   const feedback=(text,tone='neutral')=>{const e=$('migration-status');e.textContent=text;e.dataset.tone=tone;};
   const render=()=>{
@@ -22,10 +25,11 @@ export function setupMigration({rpc,refresh,lock,pause}) {
     $('migration-resume').disabled=working;
     $('migration-file').disabled=working;
   };
-  const client=async()=>{
-    const {config}=await chrome.storage.local.get('config');
-    if(!config)throw Object.assign(Error(),{code:'not_configured'});
-    return remoteApplication(config);
+  const client=async expected=>{
+    const app=await runtime.current();
+    if(!app)throw Object.assign(Error(),{code:'not_configured'});
+    if(expected){const {operation_id,...scope}=expected;assertMessageContext(scope,app.context);}
+    return app.service;
   };
   async function load({keepMessage=false}={}) {
     $('migration-settings').hidden=false;
@@ -53,8 +57,8 @@ export function setupMigration({rpc,refresh,lock,pause}) {
   });
   $('export-data').addEventListener('click',()=>action(async()=>{
     feedback('Stopping capture and preparing a private archive…','loading');
-    await rpc({type:'migration-prepare-export'});
-    const archive=await (await client()).migration.export();
+    const prepared=await rpc({type:'migration-prepare-export'});
+    const archive=await (await client(prepared.context)).migration.export();
     const url=URL.createObjectURL(archive),link=document.createElement('a');
     link.href=url;link.download='zenimport-migration.zip';document.body.append(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000);
@@ -68,7 +72,7 @@ export function setupMigration({rpc,refresh,lock,pause}) {
     action(async()=>{
       if(!file.size || file.size>state.max_archive_bytes)throw Object.assign(Error(),{code:'payload_too_large'});
       feedback('Uploading and verifying the archive. Do not synchronize yet…','loading');
-      await (await client()).migration.import(file);
+      await (await client(state.context)).migration.import(file);
       await rpc({type:'migration-imported'});
       await refresh();
       feedback('Data restored. Click Synchronize when ready. No transactions were sent during import.','success');

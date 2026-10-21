@@ -108,6 +108,20 @@ def connect(popup,bank,url):
     popup.locator('#url').fill(url);popup.locator('#token').fill(TOKEN)
     bank.bring_to_front();popup.locator('#server-form button').click()
 
+
+def seed_application_state(worker,patch):
+    """Fixture-only IDB update; the Chrome keys are a read-only projection."""
+    worker.evaluate('''async patch=>{
+      const {applicationStateContext:scope}=await chrome.storage.local.get('applicationStateContext');
+      const value=await new Promise((resolve,reject)=>{
+        const request=indexedDB.open('zenimport-financial');request.onerror=()=>reject(Error('fixture-db-open'));
+        request.onsuccess=()=>{const db=request.result,tx=db.transaction('application_state','readwrite'),store=tx.objectStore('application_state');
+          const row=store.get(scope);let value;row.onsuccess=()=>{value={...row.result.value,...patch};store.put({scope,value});};
+          tx.oncomplete=()=>{db.close();resolve(value);};tx.onabort=()=>{db.close();reject(Error('fixture-state-write'));};
+        };
+      });await chrome.storage.local.set(value);
+    }''',patch)
+
 def run_clock(popup,worker):
     # Wake the real alarm listener early instead of sleeping for Chrome's 30s
     # minimum. All collection/lease/pump logic remains the production worker.

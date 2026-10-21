@@ -1,3 +1,5 @@
+import {createRpc} from '../src/application/rpc.ts';
+const rpc=createRpc(data=>chrome.runtime.sendMessage(data));
 const $=id=>document.getElementById(id);
 const node=(tag,text,attributes={})=>{const e=document.createElement(tag);if(text)e.textContent=text;Object.assign(e,attributes);return e;};
 let allAccounts=null;
@@ -55,10 +57,11 @@ async function load(refresh=false){
  $('refresh').disabled=true;$('filters').inert=true;$('days').setAttribute('aria-busy','true');
  $('days').replaceChildren();$('summary').textContent='';$('coverage').replaceChildren();$('freshness').textContent='';status('Loading data…');
  try{
-  const result=await chrome.runtime.sendMessage({type:'discrepancies',refresh,from_date:$('from').value,to_date:$('to').value,account_id:$('account').value});
+  const result=await rpc({type:'discrepancies',refresh,from_date:$('from').value,to_date:$('to').value,account_id:$('account').value});
   if(!result?.ok)throw Object.assign(Error(),{code:result?.error});render(result.report);
  }catch(error){
-  const messages={not_configured:'Connect to the server in the extension menu.',unauthorized:'Check the server token in the extension menu.',
+  const messages={stale_context:'The storage connection changed. Reopen this report from the extension menu.',
+   not_configured:'Connect to the server in the extension menu.',unauthorized:'Check the server token in the extension menu.',
    validation_error:'Check the selected period and open this page from the bank menu.',zenmoney_unavailable:'Could not retrieve current ZenMoney data. Try again later.',
    not_found:'The report is unavailable. Update the backend and open this page from the bank menu.',unsupported_api_version:'Update the backend and extension.'};
   status(messages[error.code] || 'Could not retrieve the report. Check the server connection and try again.','error');

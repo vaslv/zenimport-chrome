@@ -2,13 +2,13 @@ import {permissionOrigin} from './backend-client.js';
 import {today,daysAgo,monthsAgo,validDate,syncTime} from './dates.js';
 import {setupMigration} from './popup-migration.js';
 import {setupProfiles} from './popup-profiles.js';
+import {createRpc} from '../src/application/rpc.ts';
 const $ = id => document.getElementById(id);
-const rpc = async data => {
-  const result=await chrome.runtime.sendMessage(data);
-  if(!result?.ok)throw Object.assign(Error(),{code:result?.error || 'backend_unavailable'});
-  return result;
-};
+const rpc=createRpc(data=>chrome.runtime.sendMessage(data));
 const messages={
+  stale_context:'The storage connection changed. Reopen the extension menu.',
+  recovery_required:'Stored connection data needs recovery. Restore a backup or repair the connection.',
+  local_mode_disabled:'Standalone mode is not enabled in this build.',
   invalid_server:'Enter an HTTPS server address or localhost.',unauthorized:'Check the server token.',
   backend_unavailable:'Cannot reach the server. Try again later.',invalid_response:'The server returned an unrecognized response.',
   unsupported_api_version:'The server and extension versions are incompatible.',unsupported_bank:'Open transaction history in a supported bank.',

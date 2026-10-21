@@ -18,6 +18,7 @@ WORKER = """import * as probe from './feasibility.mjs';
 import * as domain from './domain.mjs';globalThis.domain=domain;
 import * as storageProbe from './storage.mjs';globalThis.storageProbe=storageProbe;
 import * as authorityProbe from './authority.mjs';globalThis.authorityProbe=authorityProbe;
+import * as applicationProbe from './application.mjs';globalThis.applicationProbe=applicationProbe;
 import * as portableProbe from './portable.mjs';globalThis.portableProbe=portableProbe;
 globalThis.probe=probe;globalThis.boot=crypto.randomUUID();
 chrome.runtime.onMessage.addListener((data,sender,reply)=>{
@@ -51,6 +52,7 @@ def prepare_extension(path, *, hosts=()):
     shutil.copyfile('/app/.local/probes/domain.mjs',path/'domain.mjs')
     shutil.copyfile('/app/.local/probes/storage.mjs',path/'storage.mjs')
     shutil.copyfile('/app/.local/probes/authority.mjs',path/'authority.mjs')
+    shutil.copyfile('/app/.local/probes/application.mjs',path/'application.mjs')
     shutil.copyfile('/app/.local/probes/portable.mjs',path/'portable.mjs')
 
 

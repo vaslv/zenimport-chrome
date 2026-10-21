@@ -105,7 +105,6 @@ def native_decision(popup, *, allow, screenshot=None):
 
 
 def connect(popup, bank, worker, url, token, *, allow=True, screenshot=None):
-    popup.locator('#settings').evaluate('(e)=>e.open=true')
     popup.locator('#connection-settings').evaluate('(e)=>e.open=true')
     popup.locator('#url').fill(url);popup.locator('#token').fill(token)
     origin=url+'/*';had=worker.evaluate('(origin)=>chrome.permissions.contains({origins:[origin]})',origin)
@@ -254,7 +253,21 @@ class Acceptance:
         deadline=time.monotonic()+15
         while not server.started and time.monotonic()<deadline:time.sleep(.02)
         assert server.started
-        try:yield ('https://localhost:' if cert else 'http://127.0.0.1:')+str(port),app
+        url=('https://localhost:' if cert else 'http://127.0.0.1:')+str(port)
+        try:
+            # This fixture represents one known login with two accounts. A page
+            # showing a single account cannot establish that membership itself;
+            # never weaken automatic login isolation to satisfy this scenario.
+            payload={'bank':'vietinbank','profile_key':'fixture-shared-login','profile_identity':'user_selected',
+                'connector_version':'1.0.0','capabilities':{'timezone':'Asia/Ho_Chi_Minh','currencies':['VND'],
+                    'max_window_days':30,'earliest_date':None,'details':'included'},'accounts_complete':True,
+                'accounts':[{'source_key':source,'identity_scope':'bank','label':'Fixture '+source,
+                    'masked_number':'••'+source[-4:],'currency':'VND','scale':0,'supported':True}
+                    for source in ('12345678','87654321')]}
+            with httpx.Client(verify=ssl.create_default_context(cafile=str(cert/'ca.crt')) if cert else True) as client:
+                response=client.post(url+'/api/v1/connections/discover',headers={'Authorization':'Bearer '+token},json=payload)
+                assert response.status_code==200,response.status_code
+            yield url,app
         finally:server.should_exit=True;thread.join(60);assert not thread.is_alive()
 
     def audit(self,path):
@@ -321,7 +334,7 @@ class Acceptance:
 def settings(popup, bank, plan, *, copied=False):
     for source,target in zip(('12345678','87654321'),plan['accounts']):
         bank.goto(ORIGIN+'/payment-history?accountNo='+source);bank.bring_to_front()
-        popup.locator('#settings').evaluate('(e)=>e.open=true');popup.locator('#refresh-accounts').click()
+        popup.locator('#account-settings').evaluate('(e)=>e.open=true');popup.locator('#refresh-accounts').click()
         expect(popup.locator('.account').filter(has_text=source)).to_have_count(1)
         if copied:continue
         form=popup.locator('.account').filter(has_text=source)
@@ -329,9 +342,9 @@ def settings(popup, bank, plan, *, copied=False):
         form.get_by_role('button',name='Save account',exact=True).click()
         expect(popup.locator('#status')).to_contain_text('Account saved')
     bank.goto(ORIGIN+'/payment-history?accountNo=12345678');bank.bring_to_front()
-    popup.locator('#settings').evaluate('(e)=>e.open=true');popup.locator('#refresh-accounts').click()
+    popup.locator('#account-settings').evaluate('(e)=>e.open=true');popup.locator('#refresh-accounts').click()
     expect(popup.locator('#sync')).to_be_enabled()
-    popup.locator('#reimport').fill(plan['import_start'])
+    popup.locator('#history-settings').evaluate('(e)=>e.open=true');popup.locator('#reimport').fill(plan['import_start'])
 
 
 def security(directory,context,worker,bank,popup,trusted,untrusted):

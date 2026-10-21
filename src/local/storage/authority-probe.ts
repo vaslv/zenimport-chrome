@@ -75,7 +75,7 @@ export async function run(action:string,args:Arguments){
         if(args.mode==='pause-chunk')FinancialDatabase.prototype.transaction=new Proxy(original,{
           apply(target,db,parameters){
             const pending=Reflect.apply(target,db,parameters) as Promise<unknown>;
-            if(parameters[0]!=='rw'||!Array.isArray(parameters[1])||parameters[1].length!==57||intercepted)return pending;
+            if(parameters[0]!=='rw'||!Array.isArray(parameters[1])||!parameters[1].some((table:{name:string})=>table.name==='participant_receipts')||intercepted)return pending;
             return pending.then(async result=>{
               const database=db as FinancialDatabase;
               if(!intercepted&&await database.migrationChunks.count()){
@@ -106,7 +106,7 @@ export async function run(action:string,args:Arguments){
               const callback=parameters[parameters.length-1] as ()=>Promise<unknown>;
               return Reflect.apply(target,db,[...parameters.slice(0,-1),async()=>{await callback();throw new DOMException('synthetic-import-quota','QuotaExceededError');}]);
             }
-            const final=parameters[0]==='rw'&&Array.isArray(parameters[1])&&parameters[1].length===57;
+            const final=parameters[0]==='rw'&&Array.isArray(parameters[1])&&parameters[1].some((table:{name:string})=>table.name==='participant_receipts');
             if(!final)return Reflect.apply(target,db,parameters);
             if(args.mode==='lost-reply')return (Reflect.apply(target,db,parameters) as Promise<unknown>).then(result=>{checkpoint=true;return new Promise(()=>{});});
             const callback=parameters[parameters.length-1] as ()=>Promise<unknown>;

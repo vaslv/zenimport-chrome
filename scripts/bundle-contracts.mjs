@@ -1,5 +1,9 @@
 import {build} from 'esbuild';
-await build({entryPoints:['extension/background.js'],outfile:'.local/contracts/background.mjs',
+await build({entryPoints:['extension/background-runtime.js'],outfile:'.local/contracts/background.mjs',
+  bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+await build({entryPoints:['src/application/runtime.ts'],outfile:'.local/contracts/application-runtime.mjs',
+  bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+for(const name of ['messages','rpc'])await build({entryPoints:['src/application/'+name+'.ts'],outfile:'.local/contracts/application-'+name+'.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/application/remote.ts'],outfile:'.local/contracts/application-remote.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});

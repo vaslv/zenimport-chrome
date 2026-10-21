@@ -18,7 +18,7 @@ def test_native_initialization_has_49_scoped_financial_stores_and_acknowledged_m
         assert snapshot['runtime']['installationId']==snapshot['marker']['installationId']
         assert snapshot['datasets'][0]['participantId']!=snapshot['marker']['installationId']
         assert snapshot['datasets'][0]['datasetId']==snapshot['marker']['datasetId']
-        assert snapshot['tableCount']==57
+        assert snapshot['tableCount']==59
         assert not snapshot['marker']['financialMayHaveStarted']
 
 

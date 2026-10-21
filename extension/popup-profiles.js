@@ -3,7 +3,7 @@ const $=id=>document.getElementById(id);
 const pencil='m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125';
 
 export function setupProfiles({rpc,refresh,lock,feedback,error}) {
-  let view=null,editing=false,locked=false,saving=false,serverUrl='',writes=Promise.resolve();
+  let view=null,editing=false,locked=false,saving=false,serverUrl='',contextId='',writes=Promise.resolve();
   function update(value=locked) {
     locked=value;
     $('profile-name').disabled=locked || saving;
@@ -16,7 +16,7 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
   }
   function draft() {
     if(!view?.connection || !editing)return writes;
-    const value={url:serverUrl,bank:view.bank,signature:accountSignature(view.detectedAccounts),mode:'rename',profileKey:view.connection.profile_key,label:$('profile-name').value};
+    const value={url:serverUrl,contextId,bank:view.bank,signature:accountSignature(view.detectedAccounts),mode:'rename',profileKey:view.connection.profile_key,label:$('profile-name').value};
     writes=writes.catch(()=>{}).then(()=>chrome.storage.session.set({bankProfileDraft:value}));
     return writes;
   }
@@ -51,9 +51,9 @@ export function setupProfiles({rpc,refresh,lock,feedback,error}) {
     $('current-connection').hidden=!view?.connection;
     $('connection-name').textContent=view?.connection?.label || '';
     if(view?.connection) {
-      const [{bankProfileDraft:stored},{url}]=await Promise.all([chrome.storage.session.get('bankProfileDraft'),rpc({type:'status'})]);
-      serverUrl=url;
-      editing=!!(stored && stored.mode==='rename' && stored.url===url && stored.bank===view.bank &&
+      const [{bankProfileDraft:stored},{url,context}]=await Promise.all([chrome.storage.session.get('bankProfileDraft'),rpc({type:'status'})]);
+      serverUrl=url;contextId=context?.dataset_id || '';
+      editing=!!(stored && stored.mode==='rename' && stored.url===url && stored.contextId===contextId && stored.bank===view.bank &&
         stored.signature===accountSignature(view.detectedAccounts) && stored.profileKey===view.connection.profile_key);
       if(editing)$('profile-name').value=stored.label;
     }

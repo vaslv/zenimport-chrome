@@ -785,3 +785,49 @@ enable a local financial send or a mode-switch button.
   passed 170 unit/contract cases and 14 browser cases (2 backend-only modules
   intentionally skipped). Context fencing/bootstrap follows in the next point.
   Declaration files are omitted from distributable ZIPs.
+
+### L5.3–L5.7 — authoritative context and remote compatibility
+
+- Added one privileged Root resolver, remote upgrade bootstrap, validated scoped
+  messages/replies, and a disabled local boundary. IDB version 6 adds only two
+  nonportable control stores (59 native stores total); financial schema 1 and
+  portable format 2 are unchanged. Remote bootstrap leaves all 49 financial
+  stores empty and its anchor inactive. Missing storage never initializes a
+  replacement and an unavailable configured server never selects local mode.
+- Authoritative transient checkpoints now share a transaction owner with Root.
+  Old Chrome keys are compatibility projections, imported once for an upgraded
+  endpoint. Endpoint selection changes context; same-server credential repair
+  preserves unknown request IDs and pending jobs. Nonsecret descriptors retain
+  the context even if a credential key is lost. UI/report/archive replies reject
+  stale context, including status polling after another popup changes endpoint.
+- Manual review found and corrected credential readback property-order reliance,
+  a cross-storage checkpoint race, missing-secret namespace loss and an old
+  popup's silent adoption of another endpoint. No independent L5 reviewer is
+  claimed. See application-service.md for API-v1 identity limitations and later
+  protocol-2 work. No local financial transport or mode-switch UI is enabled.
+
+Executed isolated Docker gates on the final runtime:
+
+| Gate | Result |
+| --- | --- |
+| Strict types/generated checks/unit/domain contracts | 179 passed |
+| Current product browser regression | 14 passed, 2 backend-only modules intentionally skipped |
+| Current browser/backend/SDK integration | 30 passed, one existing dependency deprecation warning |
+| Chromium 145 native application/authority/storage/kernel/validation | 50 passed in 92.09s |
+| Chrome 140 application/authority/storage/validation | 40 passed in 296.42s |
+| Built extension server-switch/HTTPS acceptance | Both copied and empty targets passed all 12 captures; initial/new creates 2/1, all repeats and target-first captures 0 |
+
+Private logs: /tmp/zenimport-l5-scope-final.log,
+/tmp/zenimport-l5-integration-final.log, /tmp/zenimport-l5-native-final.log,
+/tmp/zenimport-l5-minimum.log and /tmp/zenimport-l5-legacy-migration-shared.log.
+The server-switch helper initially searched a long-removed Settings wrapper and
+assumed that visiting two unknown accounts establishes common-login membership.
+It now uses the current peer sections and explicitly seeds the fixture's known
+two-account membership through the authenticated discovery API. Expected write
+counts and identity/ledger comparisons are unchanged; automatic profile
+isolation is not relaxed. The final acceptance uses fresh synthetic data, a
+private CA, real browser permissions/TLS and network-disabled Docker containers.
+
+Status: L5 complete. L6 next implements private read-only SDK mirror and token
+identity; L7–L12 remain pending. Production data/services and live accounts were
+not used. No push, tag or publication.
