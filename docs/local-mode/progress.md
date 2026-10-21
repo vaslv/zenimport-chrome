@@ -1321,3 +1321,21 @@ L9 source (923.66ms test execution); no unit skips or failures.
 L10 remains in progress: durable mode-switch orchestration, verified transfer,
 first-sync gate and archive-only recovery. No product local routing, production
 API/data, push, Git tags or publication.
+
+### L10.2 — detached local credential verification
+
+- Extracted trusted credential candidates from active-mode selection. A candidate
+  can be verified while Root remains remote, acknowledged in protected Chrome
+  storage, and independently reread for a fresh owner proof before migration.
+  No candidate verification changes Root, a financial cursor or writer authority.
+- Existing local token verification still uses the same Root CAS, owner binding,
+  candidate cleanup and rotation fences. Reads now also validate secret shape,
+  timestamp, bounded sorted owner IDs and exact token hash.
+- Independent API/security review is clean. Docker: strict/bundle checks passed;
+  27 native candidate/remote-upgrade/mirror regressions passed in 155.56s (three
+  unchanged large-volume mirror cases explicitly deselected); nine durable
+  delivery-worker regressions passed in 20.38s with the extracted credential path.
+  Logs: /tmp/zenimport-l10-candidates*.log.
+
+L10 remains in progress. Candidate references are not migration activation or
+financial authorization. No product local routing, live API/data or publication.
