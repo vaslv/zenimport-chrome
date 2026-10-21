@@ -1,5 +1,7 @@
+import {sha256} from '@noble/hashes/sha2.js';
+import {bytesToHex} from '@noble/hashes/utils.js';
 /** Archive controls carry snapshot facts, never live peer/handoff authority. */
-import {participantUuid,participantInteger,participantDigest,requireParticipant} from '../../control/participant-wire.js';
+import {participantUuid,participantInteger,participantDigest,requireParticipant,canonicalParticipant} from '../../control/participant-wire.js';
 import {object} from './wire.js';
 export interface ArchiveStatus{
   id:string;kind:'backup'|'recovery';phase:'building'|'ready'|'uploading'|'validating'|'preview'|'activated'|'blocked'|'cancelled'|'cleaned';
@@ -46,5 +48,20 @@ export function archivePreview(input:unknown,checksum:string):ArchivePreview{
   requireParticipant(v.archive_sha256===checksum);participantInteger(v.checked_at,253402300799n,0n);
   for(const n of [v.cursor,v.bank_transactions,v.zen_transactions])participantInteger(n,(1n<<63n)-1n,0n);
   for(const n of [v.missing_bank,v.extra_zen,v.unchecked_accounts])requireParticipant(Number.isSafeInteger(n)&&n>=0);
+  return structuredClone(v);
+}
+
+
+export interface RecoveryWithdrawal{
+  withdrawal_version:'1';decision:'withdrawn';id:string;request_sha256:string;
+  installation_id:string;dataset_id:string;participant_epoch:string;
+}
+export function recoveryWithdrawal(input:unknown,request:ArchiveRecoveryRequest):RecoveryWithdrawal{
+  const v=object(input) as unknown as RecoveryWithdrawal;
+  keys(v,'dataset_id,decision,id,installation_id,participant_epoch,request_sha256,withdrawal_version');
+  requireParticipant(v.withdrawal_version==='1'&&v.decision==='withdrawn'&&v.id===request.id&&v.installation_id===request.installation_id);
+  for(const id of [v.id,v.installation_id,v.dataset_id])participantUuid(id);
+  participantDigest(v.request_sha256);participantInteger(v.participant_epoch);
+  requireParticipant(v.request_sha256===bytesToHex(sha256(canonicalParticipant(recoveryRequest(request)))));
   return structuredClone(v);
 }

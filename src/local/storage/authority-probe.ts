@@ -1,5 +1,6 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
+import {RemoteRecoverySelection} from './remote-recovery-selection.js';
 import {ArchiveFileOwner} from './archive-file-owner.js';
 import {BackupOwner} from './backup-owner.js';
 import {RestoreOwner} from './restore-owner.js';
@@ -82,7 +83,25 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('file-')){
+      if(action==='bind-remote'){
+        const control=await RemoteControl.open(args.name,port(args.name));
+        const data=args.request as {installationId:string;datasetId:string};
+        try{value=await control.bindIdentity(await control.read(),data.installationId,data.datasetId);}finally{control.close();}
+      }else if(action.startsWith('recovery-select-')){
+        const selection=await RemoteRecoverySelection.open(args.name,port(args.name));
+        const input=args.request as Record<string,unknown>,put=IDBObjectStore.prototype.put;
+        if(args.mode==='quota-selection')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){
+          if(this.name==='runtime')throw new DOMException('synthetic-selection-quota','QuotaExceededError');return put.apply(this,values);
+        };
+        try{
+          if(action==='recovery-select-current')value=await selection.current();
+          else if(action==='recovery-select-begin')value=await selection.begin(input.root as Parameters<typeof selection.begin>[0],input.request as Parameters<typeof selection.begin>[1]);
+          else if(action==='recovery-select-activated')value=await selection.activated(args.switchId!,input.status as Parameters<typeof selection.activated>[1],input.identity as Parameters<typeof selection.activated>[2],args.credentialRef!,args.peerId!);
+          else if(action==='recovery-select-withdrawn')value=await selection.withdrawn(args.switchId!,input.proof as Parameters<typeof selection.withdrawn>[1],input.identity as Parameters<typeof selection.withdrawn>[2]);
+          else if(action==='recovery-select-cancelled')value=await selection.cancelled(args.switchId!,input.status as Parameters<typeof selection.cancelled>[1],input.identity as Parameters<typeof selection.cancelled>[2]);
+          else throw Error('unknown_recovery_selection_fixture');
+        }finally{IDBObjectStore.prototype.put=put;selection.close();}
+      }else if(action.startsWith('file-')){
         const marker=port(args.name);let fileReads=0;
         const file=await ArchiveFileOwner.open(args.name,{...marker,async read(){if(args.mode==='pause-file-read'&&++fileReads===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return marker.read();}});
         try{
@@ -137,7 +156,7 @@ export async function run(action:string,args:Arguments){
         }finally{backup.close();}
       }else if(action.startsWith('transfer-')){
         const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
-        const transfer=await ModeTransfers.open({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,clock:()=>Number(args.now??now),
+        const transfer=await ModeTransfers.open({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,clock:()=>Number(args.now??now),...(args.request?{expectedRoot:args.request as Parameters<MigrationOwner['quiesceLocal']>[0]}:{}),
           serverPermission:url=>chrome.permissions.contains({origins:[new URL(url).origin+'/*']}),
           reader:mirrorReader({permission:async()=>true,fetch:async(_url,options)=>{
             const body=JSON.parse(String(options?.body));if(body.transaction||body.deletion)throw Error('fixture_financial_write_forbidden');
@@ -158,7 +177,7 @@ export async function run(action:string,args:Arguments){
           else if(action==='transfer-step'){
             const put=IDBObjectStore.prototype.put;
             if(args.mode==='quota-route')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-join:')&&values[0]?.value?.phase==='complete')throw new DOMException('synthetic-route-quota','QuotaExceededError');return put.apply(this,values);};
-            try{value=await transfer.run();if(args.mode==='drop-join-reply'&&(value as {state:string}).state==='complete')throw new ParticipantError('backend_unavailable');}finally{IDBObjectStore.prototype.put=put;}
+            try{value=await transfer.run(args.switchId);if(args.mode==='drop-join-reply'&&(value as {state:string}).state==='complete')throw new ParticipantError('backend_unavailable');}finally{IDBObjectStore.prototype.put=put;}
           }
           else if(action==='transfer-current')value=await transfer.current();
           else if(action==='transfer-cancel'){

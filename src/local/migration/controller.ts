@@ -12,10 +12,11 @@ import type {JoinConsent} from '../storage/route-selection.js';
 import {ServerCredentials} from './credentials.js';
 import {NativeParticipant,ServerParticipant} from './participants.js';
 import {SwitchRunner} from './runner.js';
+import {sameJournal} from './journal.js';
 import {participantUuid,participantInteger,requireParticipant} from '../../control/participant-wire.js';
 interface TransferOptions{
   name:string;sentinel:SentinelPort;persistent:StorageArea;reader:MirrorReader;
-  serverPermission(url:string):Promise<boolean>;fetch?:typeof fetch;clock?:()=>number;
+  serverPermission(url:string):Promise<boolean>;fetch?:typeof fetch;clock?:()=>number;expectedRoot?:RuntimeControl;
 }
 export class ModeTransfers{
   readonly serverCredentials:ServerCredentials;
@@ -26,8 +27,13 @@ export class ModeTransfers{
     this.localCredentials=new CredentialCandidates(options.persistent,options.reader,this.clock);
   }
   private clock=()=>Math.floor(this.options.clock?.()??Date.now()/1000);
+  #expected(root:RuntimeControl){
+    const expected=this.options.expectedRoot;
+    requireParticipant(!expected||(!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&
+      sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_context');
+  }
   static async open(options:TransferOptions){
-    const self=new ModeTransfers(options);
+    const self=new ModeTransfers({...options,...(options.expectedRoot?{expectedRoot:structuredClone(options.expectedRoot)}:{})});
     self.journal=await SwitchJournalRepository.open(options.name,options.sentinel);
     try{self.routes=await RouteSelection.open(options.name,options.sentinel);self.owner=await MigrationOwner.open(options.name,options.sentinel,{
       verifyOwner:ref=>self.localCredentials.verifyReference(ref),
@@ -45,14 +51,14 @@ export class ModeTransfers{
   async joinServer(id:string,candidateRef:string,consent:JoinConsent){
     participantUuid(id);participantUuid(candidateRef);const previous=await this.routes.current();
     if(previous?.id===id){requireParticipant(previous.credentialRef===candidateRef);return previous;}
-    const {root}=await this.owner.current(),target=await this.serverCredentials.verifiedCandidate(candidateRef),secret=await this.serverCredentials.read(candidateRef);
+    const {root}=await this.owner.current();this.#expected(root);const target=await this.serverCredentials.verifiedCandidate(candidateRef),secret=await this.serverCredentials.read(candidateRef);
     return this.routes.create(root,{id,credentialRef:candidateRef,destination:target,createdAt:String(this.clock()),
       descriptor:{url:secret.url,contextId:secret.contextId,legacy:false,installationId:target.installation_id,datasetId:target.dataset_id}},consent);
   }
   async cancelJoin(id:string){return this.routes.cancel(id);}
   /** Both candidates are freshly checked before the initial Root CAS. */
   async toServer(candidateRef:string){
-    participantUuid(candidateRef);const current=await this.owner.current(),root=current.root;
+    participantUuid(candidateRef);const current=await this.owner.current(),root=current.root;this.#expected(root);
     requireParticipant(root.activeMode==='local'&&root.pendingSwitchId===null&&current.participantId!==null&&root.credentialRef!==null,'migration_paused');
     const local=await this.localCredentials.verifyReference(root.credentialRef),remote=await this.serverCredentials.verifiedCandidate(candidateRef,local.ownerIds);
     participantInteger(remote.participant_epoch,(1n<<63n)-4n);
@@ -70,7 +76,7 @@ export class ModeTransfers{
   /** The UI must explicitly describe the shared-server pause before calling. */
   async toBrowser(candidateRef:string,consent:{pauseSharedServer:boolean;replaceInactiveLocalCopy?:boolean}){
     participantUuid(candidateRef);requireParticipant(consent.pauseSharedServer===true,'migration_paused');
-    const {root}=await this.owner.current();requireParticipant(root.activeMode==='remote'&&root.pendingSwitchId===null&&root.credentialRef!==null,'migration_paused');
+    const {root}=await this.owner.current();this.#expected(root);requireParticipant(root.activeMode==='remote'&&root.pendingSwitchId===null&&root.credentialRef!==null,'migration_paused');
     const descriptor=await this.#selectedServer(root),local=await this.localCredentials.verifyReference(candidateRef),remote=await this.serverCredentials.verifyReference(root.credentialRef,local.ownerIds);
     if(descriptor.installationId!==undefined||descriptor.datasetId!==undefined)requireParticipant(descriptor.installationId===remote.installation_id&&descriptor.datasetId===remote.dataset_id,'migration_invalid');
     participantInteger(remote.participant_epoch,(1n<<63n)-5n);
@@ -88,14 +94,18 @@ export class ModeTransfers{
     }
     return this.journal.requestCancel(id,requestId,observed);
   }
-  async run(){
+  async run(expectedId?:string){
+    this.#expected((await this.owner.current()).root);
+    if(expectedId!==undefined)participantUuid(expectedId);
     const join=await this.routes.current();
     if(join?.phase==='quiescing'){
+      requireParticipant(expectedId===undefined||join.id===expectedId,'stale_context');
       if(!await this.owner.quiesceLocal(join.initialRoot,String(this.clock()),{kind:'join',id:join.id}))return {state:'waiting',phase:'source_quiescing'};
       const target=await this.serverCredentials.verifiedCandidate(join.credentialRef,join.destination.owner_ids);
       await this.routes.select(join.id,target);return {state:'complete',phase:'complete'};
     }
     const value=await this.journal.current();if(!value||['complete','cancelled'].includes(value.phase))return {state:value?.phase??'idle'};
+    requireParticipant(expectedId===undefined||value.plan.id===expectedId,'stale_context');
     const plan=value.plan,localSource=plan.direction==='local-to-remote',remoteId=localSource?plan.destinationId!:plan.sourceId;
     const client=await this.serverCredentials.client(plan.remoteCredentialRef),remote=new ServerParticipant(client,remoteId);
     const native=(id:string)=>new NativeParticipant(this.owner,id,this.clock);

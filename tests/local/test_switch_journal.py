@@ -447,3 +447,13 @@ def test_late_quiescence_cannot_mutate_a_capture_after_same_generation_token_rot
         assert not result['ok'] and result['code']=='stale_epoch',result
         assert worker.evaluate(snapshot)==before
         assert ok(worker,'current')['root']['credentialEpoch']!=initial['credentialEpoch']
+
+
+@pytest.mark.parametrize('rotation',[False,True])
+def test_bound_transfer_step_rejects_stale_root_or_another_intent_before_dispatch(tmp_path,rotation):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        switch,_=start(worker);captured=ok(worker,'current')['root'];before=ok(worker,'journal-current')
+        if rotation:ok(worker,'credential',credentialRef=str(uuid4()))
+        result=call(worker,'transfer-step',request=captured,switchId=switch if rotation else str(uuid4()))
+        assert not result['ok'] and result['code']=='stale_context',result
+        assert ok(worker,'journal-current')==before

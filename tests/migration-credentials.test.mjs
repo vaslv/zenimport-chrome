@@ -56,3 +56,16 @@ test('candidate dataset lineage is bound independently of physical installation'
   f.reply({...base,dataset_id:'00000000-0000-4000-8000-000000000004'});
   await assert.rejects(f.vault.verifiedCandidate(saved.ref),{code:'migration_invalid'});
 });
+
+
+test('restored route credentials are immutable, acknowledged and independently scoped',async()=>{
+ const f=fixture(),saved=await f.vault.verify({url:'https://fixture.invalid',token:'synthetic'});
+ const target=crypto.randomUUID(),context=crypto.randomUUID(),before=await f.vault.read(saved.ref),calls=f.requests.length;
+ await f.vault.cloneContext(saved.ref,target,context);
+ assert.deepEqual(await f.vault.read(saved.ref),before);
+ assert.deepEqual(await f.vault.read(target),{version:1,ref:target,url:before.url,token:before.token,contextId:context,legacy:false});
+ assert.equal(f.requests.length,calls);await f.vault.cloneContext(saved.ref,target,context);
+ await assert.rejects(f.vault.cloneContext(saved.ref,target,crypto.randomUUID()),{code:'recovery_required'});
+ assert.equal((await f.vault.read(target)).contextId,context);
+ const missing=crypto.randomUUID();f.drop();await assert.rejects(f.vault.cloneContext(saved.ref,missing,context),{code:'recovery_required'});
+});

@@ -22,6 +22,15 @@ export class ServerCredentials{
       raw.version===1&&raw.ref===ref&&typeof raw.url==='string'&&serverAddress(raw.url)===raw.url&&typeof raw.token==='string'&&raw.token.length>0&&raw.token.length<=4096&&!/\s/u.test(raw.token)&&typeof raw.legacy==='boolean','recovery_required');
     participantUuid(raw.contextId);return structuredClone(raw);
   }
+  /** Reserve a new immutable route secret without weakening the old binding. */
+  async cloneContext(ref:string,targetRef:string,contextId:string){
+    participantUuid(targetRef);participantUuid(contextId);requireParticipant(ref!==targetRef,'migration_invalid');
+    const source=await this.read(ref),value:ServerSecret={version:1,ref:targetRef,url:source.url,token:source.token,contextId,legacy:false};
+    const previous=(await this.area.get(key(targetRef)))[key(targetRef)];
+    if(previous!==undefined){requireParticipant(same(await this.read(targetRef),value),'recovery_required');return value;}
+    await this.area.set({[key(targetRef)]:value});
+    requireParticipant(same(await this.read(targetRef),value),'recovery_required');return value;
+  }
   async client(ref:string){const secret=await this.read(ref);return new RemoteParticipant(secret,()=>this.permission(secret.url),this.fetcher);}
   async verify(config:{url:string;token:string},expectedOwners:readonly string[]=[]){
     await this.secure;const url=serverAddress(config.url),token=config.token.trim(),client=new RemoteParticipant({url,token},()=>this.permission(url),this.fetcher);

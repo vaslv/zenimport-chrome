@@ -1782,3 +1782,30 @@ No production/live data, push, tags or publication.
 
 L11 popup/mode/archive orchestration and L12 final acceptance remain in progress.
 No live API/data, push, tags or publication.
+
+### L11 control prerequisite — bind trusted decisions and remote archive recovery
+
+- Added a trusted storage-control facade with detached candidates, ordinary
+  context-fence capability verification and explicit transfer/join consent. Native
+  starts and steps bind the captured full Root; steps also name their exact intent.
+- Remote archive recovery freezes the original selected route before HTTP, reserves
+  fresh immutable credential/context IDs and changes the binding only after verified
+  permanent activation and fresh matching server identity. Quota rolls back pointer,
+  descriptor and terminal decision together. Original secrets are not overwritten.
+- A permanent exact-request withdrawal handles a never-accepted or rejected begin.
+  The original physical route can resume after authenticated confirmation; rejected
+  archive owner mismatch cannot trap it. Native withdrawal audit and Root release
+  share one transaction. The paired backend change is committed as f681e42.
+- Independent API and adversarial review are clean after correcting stale-step and
+  rejected-begin defects. See reviews/l11-storage-controls-2026-10-22.md. External
+  cross-model CLI unavailable.
+- Docker strict/generated/bundle checks and 264 unit/contracts passed (1611.75ms).
+  Native selection/bad proof/quota/cancel/withdrawal/step tests: 18 passed, 35
+  deselected (20.53s). Latest minimum Chrome 140 matrix including wrong archive
+  owner withdrawal: nine passed, 45 deselected (65.80s). Logs:
+  /tmp/zenimport-l11-{archive-unit,recovery-native,archive-minimum}.log.
+  The backend's complete paired tree passed 818 tests (55.54s).
+
+These are internal control prerequisites; HTTP/archive orchestration, popup,
+background alarms and L12 acceptance remain unfinished. No production/live data,
+push, tags or publication.

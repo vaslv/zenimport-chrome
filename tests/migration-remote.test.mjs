@@ -88,3 +88,24 @@ test('quiescence replies bind the physical participant and exact observed epoch'
   reply={...reply,participant_epoch:'7',installation_id:id(2)};await assert.rejects(client.quiesce(id(1),'7'),code('migration_invalid'));
   assert.equal(requests,4);
 });
+
+
+test('archive withdrawal is capability-gated and binds its exact permanent command',async()=>{
+ const request={id:id(12),installation_id:id(1),expected_epoch:'1',dataset_id:id(13),archive_sha256:'a'.repeat(64),archive_size:'10',owner_ids:['1'],former_writers_retired:true,accept_post_snapshot_evidence_loss:true};
+ const ordered=value=>JSON.stringify(value,(_key,item)=>item!==null&&typeof item==='object'&&!Array.isArray(item)?Object.fromEntries(Object.entries(item).sort(([a],[b])=>a.localeCompare(b))):item);
+ const proof={withdrawal_version:'1',decision:'withdrawn',id:request.id,request_sha256:createHash('sha256').update(ordered(request)).digest('hex'),installation_id:id(1),dataset_id:id(5),participant_epoch:'1'};
+ let calls=0,corrupt=false;
+ const client=new RemoteParticipant(config,async()=>true,async(url,init)=>{
+  calls++;if(url.endsWith('/archives/capabilities'))return json({archive_control_version:'1',recovery_withdrawal:true});
+  assert.ok(url.endsWith('/archives/recoveries/withdraw'));assert.deepEqual(JSON.parse(init.body),request);
+  return json(corrupt?{...proof,request_sha256:'f'.repeat(64)}:proof);
+ });
+ assert.deepEqual(await client.archiveCapabilities(),{archive_control_version:'1',recovery_withdrawal:true});
+ assert.deepEqual(await client.archiveWithdraw(request),proof);assert.equal(calls,2);
+ corrupt=true;await assert.rejects(client.archiveWithdraw(request),code('migration_invalid'));
+ const old=new RemoteParticipant(config,async()=>true,async()=>json({archive_control_version:'1',recovery_withdrawal:false}));
+ await assert.rejects(old.archiveCapabilities(),code('unsupported_migration_version'));
+ const missing=new RemoteParticipant(config,async()=>true,async()=>new Response(JSON.stringify({error:{code:'not_found'}}),{status:404}));
+ await assert.rejects(missing.archiveCapabilities(),code('unsupported_migration_version'));
+ await assert.rejects(missing.archiveWithdraw(request),code('unsupported_migration_version'));
+});
