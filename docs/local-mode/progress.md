@@ -1853,3 +1853,25 @@ actual-Python scenarios (72.41s): /tmp/zenimport-l11-controller-min.log.
 
 Server backup orchestration, product background/popup and L12 remain unfinished.
 No production/live data, push, tags or publication.
+
+### L11 selected-server snapshot export checkpoint
+
+The remote backup coordinator saves exact begin before HTTP, validates bounded
+chunks and the complete ZIP, requires explicit external-download acknowledgement,
+and resumes acknowledgement/withdrawal/cleanup after lost replies and Chrome
+restart. Snapshot export never changes the selected writer. Same-physical/dataset
+server token repair remains possible while exporting; delayed old-token responses
+are fenced. Native gates prevent concurrent mode/recovery starts and competing
+file writes. Phase-specific permits revoke late download writes during cancellation
+and after cleanup. The backend's new exact backup withdrawal is cea63b8.
+
+Independent API/adversarial review is clean after initial-CAS liveness, late-cache
+and external-cancellation step-shape corrections. See
+reviews/l11-remote-backup-2026-10-22.md. Docker strict/generated checks and 265
+unit/contracts passed (1402.69ms); actual Python/native backup/recovery/local/file:
+28 passed (68.33s); minimum Chrome 140 backup matrix: ten passed (93.48s).
+Logs: /tmp/zenimport-l11-remote-backup-{final-unit,reviewed-native,min}.log.
+Backend complete suite: 826 passed (155.68s), existing warnings only.
+
+Product control dispatch, background/popup and L12 remain unfinished. No live
+services/production data, push, tags or publication.

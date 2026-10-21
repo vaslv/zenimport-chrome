@@ -1,6 +1,7 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
 import {SyncError} from '../../../extension/backend-client.js';
+import {RemoteArchiveBackup} from '../../application/remote-archive-backup.js';
 import {LocalArchives} from '../../application/local-archives.js';
 import {ApplicationRuntime} from '../../application/runtime.js';
 import {RemoteArchiveRecovery} from '../../application/remote-archive-recovery.js';
@@ -88,7 +89,40 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('local-archive-')){
+      if(action.startsWith('remote-backup-')){
+        const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
+        const options={name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,
+          serverPermission:(url:string)=>chrome.permissions.contains({origins:[new URL(url).origin+'/*']}),
+          fetch:async(input:RequestInfo|URL,init?:RequestInit)=>{
+            if(args.mode==='fail-withdraw'&&String(input).endsWith('/backups/withdraw'))throw Error('synthetic-offline-backup-withdraw');
+            if(args.mode==='unsupported'&&String(input).endsWith('/backups/capabilities'))return Response.json({error:{code:'not_found'}},{status:404});
+            const response=await globalThis.fetch(input,init);
+            if(args.mode==='pause-backup-ready-status'&&String(input).endsWith('/archives/'+args.requestId)&&(await response.clone().json()).phase==='ready'){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}
+            if(args.mode==='lose-begin'&&String(input).endsWith('/archives/backups')){await response.arrayBuffer();throw Error('synthetic-lost-backup-begin');}
+            if(args.mode==='lose-ack'&&String(input).endsWith('/acknowledge')){await response.arrayBuffer();throw Error('synthetic-lost-backup-ack');}
+            if(args.mode==='pause-download'&&String(input).includes('/chunks/')){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}
+            return response;
+          }};
+        const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name,undefined,{...options,session:native() as StorageArea,permission:async()=>false});
+        try{const app=(await runtime.current())!,backup=new RemoteArchiveBackup(options,app);
+          if(action==='remote-backup-current')value=await backup.current();
+          else if(action==='remote-backup-begin')value=await backup.begin(args.requestId!);
+          else if(action==='remote-backup-step'){
+            const open=ArchiveFileOwner.open;
+            if(args.mode==='pause-backup-file-begin')ArchiveFileOwner.open=async(...args:Parameters<typeof open>)=>{
+              ArchiveFileOwner.open=open;const owner=await open(...args),begin=owner.begin.bind(owner);
+              owner.begin=async(...values:Parameters<typeof begin>)=>{checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});return begin(...values);};return owner;
+            };
+            try{value=await backup.step(args.requestId!);}finally{ArchiveFileOwner.open=open;}
+          }
+          else if(action==='remote-backup-cancel')value=await backup.cancel(args.requestId!);
+          else if(action==='remote-backup-retry')value=await backup.retry(args.requestId!);
+          else if(action==='remote-backup-ack')value=await backup.acknowledge(args.requestId!,args.checksum!);
+          else if(action==='remote-backup-chunk'){let raw='';for(const byte of await backup.chunk(args.requestId!,args.number!))raw+=String.fromCharCode(byte);value=btoa(raw);}
+          else if(action==='remote-backup-repair'){const selected=await runtime.configure({url:args.url!,token:args.token!},app);value=selected.root;}
+          else throw Error('unknown_remote_backup_fixture');
+        }finally{runtime.close();}
+      }else if(action.startsWith('local-archive-')){
         const options={name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,session:native() as StorageArea,
           permission:async()=>true,serverPermission:async()=>false,clock:()=>Number(args.now??now),
           fetch:async(_input:RequestInfo|URL,init?:RequestInit)=>{

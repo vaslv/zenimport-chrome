@@ -5,7 +5,7 @@ import {SyncError,serverAddress} from '../../../extension/backend-client.js';
 import {participantUuid,participantInteger,participantDigest,requireParticipant,ParticipantError} from '../../control/participant-wire.js';
 import {participantRequest} from '../storage/participant-transition.js';
 import type {ParticipantCommand} from '../storage/participant-model.js';
-import {archiveStatus,archivePreview,recoveryRequest,recoveryWithdrawal} from './archive-wire.js';
+import {archiveStatus,archivePreview,recoveryRequest,recoveryWithdrawal,backupRequest,backupWithdrawal} from './archive-wire.js';
 import type {ArchiveRecoveryRequest} from './archive-wire.js';
 import {capabilities,identity,status,object,receipt,task} from './wire.js';
 const prefix='/api/v1/migration/portable';
@@ -31,7 +31,7 @@ export class RemoteParticipant{
       if(binary&&response.ok){requireParticipant(response.headers.get('content-type')?.split(';')[0]==='application/octet-stream'&&size>0&&bytesToHex(sha256(bytes))===participantDigest(response.headers.get('x-chunk-sha256')));return bytes;}
       const value=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
       const code=(value as {error?:{code?:unknown}})?.error?.code;
-      if(!response.ok&&response.status===404&&(path==='/identity'||archive&&(code!=='not_found'||['/capabilities','/recoveries/withdraw'].includes(path))))throw new SyncError('unsupported_migration_version');
+      if(!response.ok&&response.status===404&&(path==='/identity'||archive&&(code!=='not_found'||['/capabilities','/recoveries/withdraw','/backups/capabilities','/backups/withdraw'].includes(path))))throw new SyncError('unsupported_migration_version');
       if(!response.ok)throw new SyncError(typeof code==='string'&&errors.has(code)?code:'backend_error');
       return value as unknown;
     }catch(error){if(error instanceof SyncError||error instanceof ParticipantError)throw error;throw new SyncError('backend_unavailable',true);}
@@ -77,6 +77,14 @@ export class RemoteParticipant{
   async archiveWithdraw(input:ArchiveRecoveryRequest){
     const request=recoveryRequest(input);
     return recoveryWithdrawal(await this.#request('/recoveries/withdraw','POST',request,false,true),request);
+  }
+  async archiveBackupCapabilities(){
+    const value=object(await this.#request('/backups/capabilities','GET',undefined,false,true));
+    requireParticipant(Object.keys(value).sort().join(',')==='archive_control_version,backup_withdrawal'&&value.archive_control_version==='1'&&value.backup_withdrawal===true,'unsupported_migration_version');
+    return {archive_control_version:'1' as const,backup_withdrawal:true as const};
+  }
+  async archiveBackupWithdraw(input:{id:string;installation_id:string;expected_epoch:string}){
+    const request=backupRequest(input);return backupWithdrawal(await this.#request('/backups/withdraw','POST',request,false,true),request);
   }
   async archiveBackup(input:{id:string;installation_id:string;expected_epoch:string}){
     const request=structuredClone(input);participantUuid(request.id);participantUuid(request.installation_id);participantInteger(request.expected_epoch,(1n<<63n)-3n);

@@ -109,3 +109,23 @@ test('archive withdrawal is capability-gated and binds its exact permanent comma
  await assert.rejects(missing.archiveCapabilities(),code('unsupported_migration_version'));
  await assert.rejects(missing.archiveWithdraw(request),code('unsupported_migration_version'));
 });
+
+test('backup withdrawal uses separate capability discovery and exact canonical request evidence',async()=>{
+ const request={id:id(20),installation_id:id(1),expected_epoch:'9007199254740993'};
+ const canonical=JSON.stringify(Object.fromEntries(Object.entries(request).sort(([a],[b])=>a.localeCompare(b))));
+ const proof={withdrawal_version:'1',decision:'withdrawn',id:request.id,request_sha256:createHash('sha256').update(canonical).digest('hex'),installation_id:id(1),dataset_id:id(5),participant_epoch:'9007199254740995'};
+ let result=proof,calls=0;
+ const client=new RemoteParticipant(config,async()=>true,async(url,init)=>{
+  calls++;if(url.endsWith('/backups/capabilities'))return json({archive_control_version:'1',backup_withdrawal:true});
+  assert.ok(url.endsWith('/backups/withdraw'));assert.deepEqual(JSON.parse(init.body),request);return json(result);
+ });
+ assert.deepEqual(await client.archiveBackupCapabilities(),{archive_control_version:'1',backup_withdrawal:true});
+ assert.deepEqual(await client.archiveBackupWithdraw(request),proof);assert.equal(calls,2);
+ for(const patch of [{id:id(21)},{installation_id:id(2)},{request_sha256:'f'.repeat(64)},{extra:true},{participant_epoch:9007199254740993}]){
+  result={...proof,...patch};await assert.rejects(client.archiveBackupWithdraw(request),code('migration_invalid'));
+ }
+ const count=calls;await assert.rejects(client.archiveBackupWithdraw({...request,extra:true}),code('migration_invalid'));assert.equal(calls,count);
+ const missing=new RemoteParticipant(config,async()=>true,async()=>new Response(JSON.stringify({error:{code:'not_found'}}),{status:404}));
+ await assert.rejects(missing.archiveBackupCapabilities(),code('unsupported_migration_version'));
+ await assert.rejects(missing.archiveBackupWithdraw(request),code('unsupported_migration_version'));
+});

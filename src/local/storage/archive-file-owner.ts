@@ -7,6 +7,7 @@ import {FinancialDatabase} from './database.js';
 import {assertAnchor,readAnchor} from './anchor.js';
 import {storageFailure} from './types.js';
 import {runtimeControl} from '../../control/validation.js';
+import {assertRemoteBackupFile} from './remote-backup-owner.js';
 import {sameJournal} from '../migration/journal.js';
 
 const CHUNK=262144,MAX=67108864;
@@ -24,20 +25,22 @@ function file(input:unknown):ArchiveFile{
     ['uploading','ready','cancelled','cleaned'].includes(v.phase));return structuredClone(v);
 }
 export class ArchiveFileOwner{
-  private constructor(private db:FinancialDatabase,private port:SentinelPort,private expected?:RuntimeControl){}
-  static async open(name:string,port:SentinelPort,expected?:RuntimeControl){
+  private constructor(private db:FinancialDatabase,private port:SentinelPort,private expected?:RuntimeControl,private backupId?:string){}
+  static async open(name:string,port:SentinelPort,expected?:RuntimeControl,backupId?:string){
+    if(backupId!==undefined)participantUuid(backupId);
     const captured=expected?structuredClone(runtimeControl(expected)):undefined;
     const marker=await readAnchor(port),db=new FinancialDatabase(name,false);
-    try{await db.open();await db.transaction('r',db.runtime,db.datasets,async()=>{await assertAnchor(db,marker);});return new ArchiveFileOwner(db,port,captured);}
+    try{await db.open();await db.transaction('r',db.runtime,db.datasets,async()=>{await assertAnchor(db,marker);});return new ArchiveFileOwner(db,port,captured,backupId);}
     catch(error){db.close();throw storageFailure(error);}
   }
   close(){this.db.close();}
-  async #unit<T>(write:boolean,work:(installationId:string)=>Promise<T>){
+  async #unit<T>(write:boolean,work:(installationId:string)=>Promise<T>,cleanup=false){
     const marker=await readAnchor(this.port);
     try{return await this.db.transaction(write?'rw':'r',this.db.runtime,this.db.datasets,this.db.applicationState,this.db.archiveFileChunks,
       async()=>{const root=await assertAnchor(this.db,marker),expected=this.expected;
         requireParticipant(!expected||(!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&
           sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_context');
+        if(write)await assertRemoteBackupFile(this.db,this.backupId,cleanup);
         return work(root.installationId);});}
     catch(error){if(error&&typeof error==='object'&&'code'in error)throw error;throw storageFailure(error);}
   }
@@ -103,11 +106,11 @@ export class ArchiveFileOwner{
   async cancel(id:string){return this.#unit(true,async installationId=>{
     const v=await this.#read(id,installationId);if(['cancelled','cleaned'].includes(v.phase))return v;
     const next={...v,phase:'cancelled' as const,nonce:crypto.randomUUID()};await this.#save(next);return next;
-  });}
+  },true);}
   /** One cached chunk per call; recovery and financial rows are never touched. */
   async clean(id:string){return this.#unit(true,async installationId=>{
     const v=await this.#read(id,installationId);requireParticipant(['cancelled','cleaned'].includes(v.phase),'migration_paused');
     const row=await this.db.archiveFileChunks.where('id').equals(id).first();if(row){await this.db.archiveFileChunks.delete([id,row.number]);return {complete:false};}
     await this.#save({...v,phase:'cleaned'});return {complete:true};
-  });}
+  },true);}
 }

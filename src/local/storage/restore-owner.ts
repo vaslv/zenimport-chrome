@@ -1,3 +1,4 @@
+import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Explicit archive-only recovery. No peer receipt, financial SDK send or fallback. */
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
@@ -75,6 +76,7 @@ export class RestoreOwner{
       const previous=(await this.db.applicationState.get(restoreScope(id)))?.value;
       if(previous){const value=restoreIntent(previous);requireParticipant(value.archiveSha256===archive.archiveSha256&&value.credentialRef===credentialRef);return value;}
       requireParticipant(same(root,initial)&&root.pendingSwitchId===null,'migration_busy');increment(increment(root.epoch));increment(root.credentialEpoch);
+      await assertNoRemoteBackup(this.db);
       for(const [head,prefix,terminal] of [['mode-switch-head','mode-switch:',['complete','cancelled']],['mode-join-head','mode-join:',['complete','cancelled']],
         ['local-backup-head','local-backup:',['ready','cancelled','cleaned']],['archive-restore-head','archive-restore:',['activated','cancelled']]] as const){
         const id=(await this.db.applicationState.get(head))?.value.id;

@@ -1,3 +1,4 @@
+import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Local snapshots carry facts, never peer handoff or financial write authority. */
 import Dexie from 'dexie';
 import {sha256} from '@noble/hashes/sha2.js';
@@ -76,6 +77,7 @@ export class BackupOwner{
       const old=(await this.db.applicationState.get(scope(id)))?.value as unknown as Backup|undefined;
       if(old){requireParticipant(old.generation===generation);return old;}
       requireParticipant(same(root,expected)&&root.pendingSwitchId===null,'migration_busy');
+      await assertNoRemoteBackup(this.db);
       for(const head of ['mode-switch-head','mode-join-head','local-backup-head','archive-restore-head']){
         const key=(await this.db.applicationState.get(head))?.value.id;
         if(typeof key==='string'){

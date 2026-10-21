@@ -8,6 +8,7 @@ export interface ArchiveStatus{
   installation_id:string;initial_epoch:string;dataset_id:string;created_at:string;
   archive_sha256:string|null;archive_size:string|null;chunks:string|null;dataset_digest:string|null;acknowledged_at:string|null;error_code:string|null;
 }
+export interface ArchiveBackupRequest{id:string;installation_id:string;expected_epoch:string}
 export interface ArchiveRecoveryRequest{
   id:string;installation_id:string;expected_epoch:string;dataset_id:string;archive_sha256:string;archive_size:string;owner_ids:string[];
   former_writers_retired:true;accept_post_snapshot_evidence_loss:true;
@@ -31,6 +32,10 @@ export function archiveStatus(input:unknown,id:string):ArchiveStatus{
   if(v.acknowledged_at!==null)requireParticipant(v.archive_sha256!==null&&participantInteger(v.acknowledged_at,253402300799n,0n)>=BigInt(v.created_at));
   requireParticipant(v.error_code===null||['migration_busy','migration_paused','migration_not_empty','migration_invalid','migration_wrong_account','migration_incomplete','zenmoney_unavailable','validation_error'].includes(v.error_code));
   requireParticipant(v.phase!=='blocked'||v.error_code!==null);return structuredClone(v);
+}
+export function backupRequest(input:unknown):ArchiveBackupRequest{
+  const v=object(input) as unknown as ArchiveBackupRequest;keys(v,'expected_epoch,id,installation_id');
+  participantUuid(v.id);participantUuid(v.installation_id);participantInteger(v.expected_epoch,(1n<<63n)-3n);return structuredClone(v);
 }
 export function recoveryRequest(input:unknown):ArchiveRecoveryRequest{
   const v=object(input) as unknown as ArchiveRecoveryRequest;
@@ -64,4 +69,13 @@ export function recoveryWithdrawal(input:unknown,request:ArchiveRecoveryRequest)
   participantDigest(v.request_sha256);participantInteger(v.participant_epoch);
   requireParticipant(v.request_sha256===bytesToHex(sha256(canonicalParticipant(recoveryRequest(request)))));
   return structuredClone(v);
+}
+
+export function backupWithdrawal(input:unknown,request:ArchiveBackupRequest):RecoveryWithdrawal{
+  const v=object(input) as unknown as RecoveryWithdrawal;
+  keys(v,'dataset_id,decision,id,installation_id,participant_epoch,request_sha256,withdrawal_version');
+  requireParticipant(v.withdrawal_version==='1'&&v.decision==='withdrawn'&&v.id===request.id&&v.installation_id===request.installation_id);
+  for(const id of [v.id,v.installation_id,v.dataset_id])participantUuid(id);
+  participantDigest(v.request_sha256);participantInteger(v.participant_epoch);
+  requireParticipant(v.request_sha256===bytesToHex(sha256(canonicalParticipant(backupRequest(request)))));return structuredClone(v);
 }

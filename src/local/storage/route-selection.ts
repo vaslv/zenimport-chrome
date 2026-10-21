@@ -1,3 +1,4 @@
+import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Native-only no-import route decision; it never fabricates peer authority. */
 import Dexie from 'dexie';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
@@ -47,6 +48,7 @@ export class RouteSelection{
     requireParticipant((!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'migration_busy');
   }
   async #available(){
+    await assertNoRemoteBackup(this.db);
     const restore=(await this.db.applicationState.get('archive-restore-head'))?.value;
       if(restore)requireParticipant(['activated','cancelled'].includes((await this.db.applicationState.get('archive-restore:'+restore.id))?.value.phase as string),'migration_busy');
       const backup=(await this.db.applicationState.get('local-backup-head'))?.value;

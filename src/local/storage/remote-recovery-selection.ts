@@ -1,3 +1,4 @@
+import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Native route hold for archive recovery on the currently selected server. */
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
 import {runtimeControl} from '../../control/validation.js';
@@ -74,6 +75,7 @@ export class RemoteRecoverySelection{
       if(previous){const value=checked(previous);requireParticipant(sameJournal(value.request,input),'migration_invalid');return value;}
       this.#same(root,captured);requireParticipant(root.activeMode==='remote'&&root.pendingSwitchId===null&&root.credentialRef!==null,'migration_paused');
       increment(increment(root.epoch));increment(root.credentialEpoch);
+      await assertNoRemoteBackup(this.db);
       for(const [pointer,prefix,terminal] of [
         ['mode-switch-head','mode-switch:',['complete','cancelled']],['mode-join-head','mode-join:',['complete','cancelled']],
         ['local-backup-head','local-backup:',['ready','cancelled','cleaned']],['archive-restore-head','archive-restore:',['activated','cancelled']],
