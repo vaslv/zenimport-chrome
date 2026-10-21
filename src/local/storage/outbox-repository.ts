@@ -1,3 +1,4 @@
+import {finishAttempts} from './outbox-write.js';
 import {DomainError} from '../../domain/errors.js';
 /** Immutable attempts commit before any SDK dispatch; uncertainty never retries. */
 import type {ContextFence,SentinelPort} from '../../control/types.js';
@@ -64,11 +65,7 @@ export class OutboxRepository{
   async dispatch(id:string,now:string){return this.owner.dispatchOutbox(id,now);}
   async finish(id:string,outcome:'response_applied'|'response_superseded'|'write_outcome_unknown',now:string){
     int64(now);await this.owner.finishOutbox(id,async(view,control)=>{
-      for(const item of control.items){
-        const row=await view.get('deliveries',[text(item.zen_id)]);requireStorage(row?.bank_id===item.bank_id&&row.ever_attempted==='1'&&row.payload===item.payload,'invariant_violation');
-        await view.insert('delivery_attempts',{id:crypto.randomUUID(),bank_id:item.bank_id,zen_id:item.zen_id,at:int64(now),outcome,payload:item.payload});
-        if(row.state==='attempting')await view.replace('deliveries',[text(item.zen_id)],{...row,state:'uncertain',updated_at:int64(now)});
-      }
+      await finishAttempts(view,control,outcome,now);
     });
   }
   close(){this.owner.close();}

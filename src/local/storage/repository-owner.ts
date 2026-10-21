@@ -104,7 +104,13 @@ export class RepositoryOwner{
     return this.write(async view=>{
       const control=await readOutbox(this.db,this.fence.generation);
       if(!control||control.id!==id||control.phase==='settled')throw new DeliveryError('delivery_unknown');
-      await work(view,control);await this.db.applicationState.put(outboxValue({...control,phase:'settled'}));
+      await work(view,control);
+      // A failed delivery response may have started a shadow mirror publication.
+      // Its unpublished stage stays collectible; only its own read lease clears.
+      const key='mirror:'+this.fence.generation,mirror=(await this.db.applicationState.get(key))?.value;
+      if(mirror&&typeof mirror.lease==='object'&&mirror.lease!==null&&(mirror.lease as {id?:unknown}).id===id)
+        await this.db.applicationState.put({scope:key,value:{...mirror,lease:null}});
+      await this.db.applicationState.put(outboxValue({...control,phase:'settled'}));
     });
   }
 

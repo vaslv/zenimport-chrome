@@ -1,11 +1,12 @@
-import {readOutbox,outboxActive} from './outbox-control.js';
+import {finishAttempts} from './outbox-write.js';
+import {readOutbox,outboxActive,outboxValue} from './outbox-control.js';
 /** Named mirror repository; all Root, lease, cursor and projection commits are atomic. */
 import Dexie from 'dexie';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
 import {datasetControl,runtimeControl} from '../../control/validation.js';
 import {FinancialDatabase} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
-import {RepositorySession,writeMirrorTransaction} from './kernel.js';
+import {RepositorySession,writeMirrorTransaction,writeTransaction} from './kernel.js';
 import {participantControl} from './participant-validation.js';
 import {int64,requireStorage} from './types.js';
 import type {Scalar} from './types.js';
@@ -73,9 +74,9 @@ export class MirrorRepository{
     return value;
   }
   async #saveControl(root:RuntimeControl,value:MirrorControl){await this.db.applicationState.put({scope:'mirror:'+root.activeGeneration,value:value as unknown as Record<string,unknown>});}
-  async #finance<T>(root:RuntimeControl,operation:(view:RepositorySession)=>Promise<T>){
+  async #finance<T>(root:RuntimeControl,operation:(view:RepositorySession)=>Promise<T>,delivery=false){
     let rejection:LocalZenMoneyError|undefined;
-    try{return await writeMirrorTransaction(this.db,this.sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch},async view=>{
+    try{return await (delivery?writeTransaction:writeMirrorTransaction)(this.db,this.sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch},async view=>{
       // financialMayHaveStarted is monotonic and may be set by the kernel itself.
       const current=runtimeControl(await this.db.runtime.get('runtime'));
       requireStorage(same({...current,financialMayHaveStarted:root.financialMayHaveStarted},root),'stale_epoch');
@@ -124,10 +125,23 @@ export class MirrorRepository{
       await this.#saveControl(root,{...control,forceFull:false,lease});return lease;
     });
   }
-  async apply(root:RuntimeControl,lease:MirrorLease,raw:string,now:string){
+  async applyDelivery(root:RuntimeControl,id:string,raw:string,now:string){
+    const lease=await this.#finance(root,async view=>{
+      const outbox=await readOutbox(this.db,root.activeGeneration!),control=await this.#control(root),state=(await view.get('zen_mirror_state',one))!;
+      requireStorage(outbox?.id===id&&outbox.phase==='dispatching'&&outboxActive(outbox,now)&&control.lease===null&&
+        outbox.source.mirror===JSON.stringify(state)&&outbox.source.mirrorControl===JSON.stringify(control)&&
+        outbox.source.projection===await mirrorScope(this.db,root.activeGeneration!),'stale_epoch');
+      const lease:MirrorLease={id,deadline:String(BigInt(int64(now))+60n),cursor:state.cursor,generation:state.generation,sourceHash:state.source_hash!,full:false};
+      await this.#saveControl(root,{...control,lease});return lease;
+    });
+    return this.#apply(root,lease,raw,now,id);
+  }
+  async apply(root:RuntimeControl,lease:MirrorLease,raw:string,now:string){return this.#apply(root,lease,raw,now);}
+  async #apply(root:RuntimeControl,lease:MirrorLease,raw:string,now:string,deliveryId?:string){
     int64(now);const batch=prepareMirror(raw,lease.cursor,lease.full,lease.id);
     const check=async(view:RepositorySession)=>{
       const control=await this.#control(root),state=(await view.get('zen_mirror_state',one))!;
+      if(deliveryId){const outbox=await readOutbox(this.db,root.activeGeneration!);requireStorage(outbox?.id===deliveryId&&outbox.phase==='dispatching','stale_epoch');}
       requireStorage(control.lease?.id===lease.id&&BigInt(control.lease.deadline)>=BigInt(Math.floor(this.clock()))&&state.generation===lease.generation&&state.source_hash===lease.sourceHash,'stale_epoch');
       const owners=datasetControl(await this.db.datasets.get(root.activeGeneration!)).ownerIds;
       if(batch.owners&&JSON.stringify(batch.owners)!==JSON.stringify(owners)||
@@ -150,7 +164,7 @@ export class MirrorRepository{
       return {scope,control,size,affectedTags};
     });
     const staged=size+source.affectedTags>2000||batch.full&&source.size+size>2000,scope=staged?crypto.randomUUID():source.scope,writes=prepareMirrorWrites(scope,batch);
-    const run={id:lease.id,received_at:int64(now),requested_cursor:int64(lease.cursor),response_cursor:batch.cursor,origin:'read',payload:raw};
+    const run={id:lease.id,received_at:int64(now),requested_cursor:int64(lease.cursor),response_cursor:batch.cursor,origin:deliveryId?'delivery':'read',payload:raw};
     if(staged){
       requireStorage(scope!==root.activeGeneration&&scope!==source.scope,'constraint_violation');
       await this.#finance(root,async view=>{await check(view);requireStorage(await this.db.datasets.get(scope)===undefined,'constraint_violation');
@@ -174,7 +188,12 @@ export class MirrorRepository{
       await view.replace('zen_mirror_state',one,{...state,cursor:batch.cursor,generation:int64(String(BigInt(state.generation)+1n)),needs_full:int64('0'),ready:int64('1'),refreshed_at:int64(now),error_code:null});
       await put(view,'dataset_metadata',[text('zenmoney_refreshed_at')],{key:'zenmoney_refreshed_at',value:now});
       await this.#saveControl(root,initial(staged?scope:source.control.projectionGeneration));
-    });
+      if(deliveryId){
+        const outbox=await readOutbox(this.db,root.activeGeneration!);requireStorage(outbox?.id===deliveryId&&outbox.phase==='dispatching','stale_epoch');
+        await finishAttempts(view,outbox,'response_applied',now);
+        await this.db.applicationState.put(outboxValue({...outbox,phase:'settled'}));
+      }
+    },deliveryId!==undefined);
   }
   async failed(root:RuntimeControl,lease:MirrorLease,code:ZenMoneyCode,now:string){
     int64(now);return this.#finance(root,async view=>{

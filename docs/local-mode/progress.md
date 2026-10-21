@@ -1251,3 +1251,20 @@ publication.
 
 L9 remains in progress. No financial SDK dispatch/product local routing, live
 API/data, push, tags or publication.
+
+### L9.5 — fenced SDK dispatch and atomic response publication
+
+- Added the sole local financial SDK gateway, reusing exact immutable payloads
+  and a single-use native grant immediately before fetch. No write retry exists.
+- Valid replies publish the mirror/cursor, attempt outcome and settled manifest
+  atomically, including bounded shadow projection. Failed replies retain the same
+  UUID for read-only verification; partial absence never proves rejection.
+- Independent review fixed restricted mirror-scope misuse and a competing sender
+  settling another request. Final API/adversarial reviews are clean; see
+  reviews/l9-sender-2026-10-21.md. Docker evidence follows below.
+- Docker: strict/bundle build passed; 221 unit/contracts passed; 33 native SDK/
+  outbox cases passed in 59.57s, including the final simultaneous-sender fixture.
+  Logs: /tmp/zenimport-l9-sender*.log.
+
+L9 remains in progress: durable scheduler, startup/alarm recovery and complete
+independent delivery exit review remain. No live API/data or publication.

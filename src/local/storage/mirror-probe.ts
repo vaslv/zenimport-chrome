@@ -1,3 +1,4 @@
+import {DeliverySender} from '../delivery/sender.js';
 import {OutboxRepository} from './outbox-repository.js';
 import {DeliveryAuthorizationRepository} from './delivery-authorization-repository.js';
 /** Private native fixture. Synthetic responses only; never bundled in product. */
@@ -81,6 +82,20 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       if(args.mode==='quota-outbox-control')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(armed&&this.name==='application_state'&&String(values[0]?.scope).startsWith('outbox:')){armed=false;throw new DOMException('private-outbox-fixture','QuotaExceededError');}return put.apply(this,values);};
       try{
         if(action==='outbox-prepare')result=await repository.prepare(String(now));
+        else if(action==='outbox-send'||action==='outbox-send-two'){
+          const sender=new DeliverySender(repository,store,credentials,{clock:()=>now,permission:async()=>args.permission!==false,timeoutMs:args.delay?Math.min(args.delay,200):20000,
+            fetch:async(_,options)=>{
+              calls++;networkSerial++;
+              const request=JSON.parse(String(options?.body));
+              await storage.set({lastWrite:request});
+              if(args.mode==='pause-write')await new Promise<void>(resolve=>{releaseRead=resolve;});
+              if(args.mode==='timeout-write')await new Promise(resolve=>setTimeout(resolve,1000));
+              const raw=args.raw??JSON.stringify({serverTimestamp:101,transaction:request.transaction});
+              if(args.mode==='quota-response')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(armed&&this.name==='f_delivery_attempts'){armed=false;throw new DOMException('private-response-fixture','QuotaExceededError');}return add.apply(this,values);};
+              return new Response(raw,{status:args.status??200});
+            }});
+          result=action==='outbox-send-two'?await Promise.all([0,1].map(async()=>{try{return await sender.send(args.id!);}catch(error){return {error:(error as {code?:string}).code??'unknown'};}})):await sender.send(args.id!);
+        }
         else if(action==='outbox-status')result=await repository.status();
         else if(action==='outbox-recover')result=await repository.recover(String(now));
         else if(action==='outbox-dispatch')result=await repository.dispatch(args.id!,String(now));
@@ -95,6 +110,7 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       };
       try{result=action==='authorize-job'?await repository.authorize(args.id!,String(now)):action==='authorize-drain'?await repository.drain(String(now)):await repository.pending();}finally{repository.close();RepositoryOwner.prototype.acknowledgeAuthorization=acknowledge;}
     }
+    if(action==='last-write')result=(await storage.get('lastWrite')).lastWrite??null;
     if(action==='outbox-evidence'){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       try{result=await owner.read(async view=>({attempts:await view.rows('delivery_attempts'),deliveries:await view.rows('deliveries'),targets:await view.rows('processing_targets')}));}finally{owner.close();}
