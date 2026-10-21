@@ -1,4 +1,5 @@
-import {Backend, SyncError, serverAddress} from './backend-client.js';
+import {SyncError, serverAddress} from './backend-client.js';
+import {remoteApplication} from '../src/application/remote-runtime.ts';
 import {Coordinator} from './coordinator.js';
 import {connectorFor,connectorById} from './connectors/index.js';
 import {bankName,profileStorageKey,resolveProfile,automaticProfile,canAttach,accountSignature} from './bank-profiles.js';
@@ -25,7 +26,7 @@ async function configuration() {
   if (!config) throw new SyncError('not_configured'); return config;
 }
 async function coordinator() {
-  return new Coordinator({store,backend:new Backend(await configuration()),connector:connectorById});
+  return new Coordinator({store,service:remoteApplication(await configuration()),connector:connectorById});
 }
 async function activeTab() {
   const [tab] = await chrome.tabs.query({active:true,lastFocusedWindow:true});
@@ -42,15 +43,15 @@ async function savedReimport(config,view) {
   return reimportDates[key] || '';
 }
 async function inspect({profileKey=null,label=null}={}) {
-  const config = await configuration(), client = new Backend(config);
+  const config = await configuration(), client = remoteApplication(config);
   await savedReimport(config,(await chrome.storage.local.get('view')).view);
-  await client.info();
+  await client.capabilities();
   const tab = await activeTab(), adapter = connectorFor(tab.url);
   const {profiles={},selectedProfiles={},creatingProfiles={}}=await chrome.storage.local.get(['profiles','selectedProfiles','creatingProfiles']);
   const key=profileStorageKey(config.url,adapter.id);
   const detected=await adapter.inspect(tab,'probe');
   let connections;
-  try {({connections}=await client.request('/connections?bank='+encodeURIComponent(adapter.id)));}
+  try {({connections}=await client.connections.list(adapter.id));}
   catch(error){if(error.code==='not_found')throw new SyncError('unsupported_api_version');throw error;}
   let selected=profileKey ? connections.find(c=>c.profile_key===profileKey) : (resolveProfile(connections,detected.discovery.accounts,selectedProfiles[key] || profiles[key]) || automaticProfile(connections,detected.discovery.accounts,detected.primaryAccount));
   if(profileKey && (!selected || !canAttach(connections,selected,detected.discovery.accounts)))throw new SyncError('bank_connection_changed');
@@ -70,7 +71,7 @@ async function inspect({profileKey=null,label=null}={}) {
   if(selected) {
     const discovery={...detected.discovery,profile_key:selected.profile_key,profile_identity:selected.profile_identity || 'user_selected'};
     if(label!==null || !connections.some(c=>c.profile_key===selected.profile_key))discovery.label=label?.trim() || detected.ownerName?.slice(0,120) || bankName(adapter.id)+' 1';
-    connection=await client.request('/connections/discover','POST',discovery);
+    connection=await client.connections.discover(discovery);
     connections=[...connections.filter(c=>c.id!==connection.id),connection];
     selectedProfiles[key]=connection.profile_key;
     if(creatingProfiles[key]?.profileKey===connection.profile_key) {
@@ -96,7 +97,7 @@ async function requireView(connectionId) {
   return view;
 }
 async function popup(data) {
-  if(data.type==='migration-status')return new Backend(await configuration()).request('/migration/status');
+  if(data.type==='migration-status')return remoteApplication(await configuration()).migration.status();
   if(data.type==='migration-prepare-export'){
     const current=await store.get();
     if(current && ['planned','collecting','paused'].includes(current.phase))await (await coordinator()).stop();
@@ -108,7 +109,7 @@ async function popup(data) {
     await chrome.alarms.clear('capture');
     return {};
   }
-  if(data.type==='migration-resume')return new Backend(await configuration()).request('/migration/resume','POST',{});
+  if(data.type==='migration-resume')return remoteApplication(await configuration()).migration.resume();
   if (data.type === 'status') {
     const {config,view,capture,syncHistory={}} = await chrome.storage.local.get(['config','view','capture','syncHistory']);
     return {configured:!!config,url:config?.url || '',view,capture,reimportFrom:await savedReimport(config,view),
@@ -120,7 +121,7 @@ async function popup(data) {
     const resume = capture?.phase === 'paused' && previous?.url === config.url;
     if (capture && ['collecting','planned','paused'].includes(capture.phase) && !resume) throw new SyncError('account_busy');
     if (!config.token || config.token.length > 4096) throw new SyncError('unauthorized');
-    await new Backend(config).info();
+    await remoteApplication(config).capabilities();
     // A repaired credential must not lose a paused job or an unknown POST ACK.
     // Store both atomically; synchronization still needs the user's next click.
     await chrome.storage.local.set({config,...(resume ? {capture:{...capture,error:null}} : {})});
@@ -144,20 +145,20 @@ async function popup(data) {
   }
   if(data.type==='rename-bank-connection') {
     const view=await requireView(data.connectionId);
-    await new Backend(await configuration()).request(`/connections/${view.connection.id}/label`,'PUT',{label:data.label});
+    await remoteApplication(await configuration()).connections.rename(view.connection.id,{label:data.label});
     return inspect();
   }
   if(data.type==='unlink-bank-account') {
     await requireIdle();const view=await requireView(data.connectionId);
     if(!view.connection.accounts.some(a=>a.id===data.accountId))throw new SyncError('bank_connection_changed');
-    await new Backend(await configuration()).request(`/connections/${view.connection.id}/accounts/${data.accountId}/unlink`,'POST',{});
+    await remoteApplication(await configuration()).connections.unlink(view.connection.id,data.accountId);
     return inspect();
   }
-  if (data.type === 'catalog') return new Backend(await configuration()).request('/zenmoney/accounts');
+  if (data.type === 'catalog') return remoteApplication(await configuration()).accounts.catalog();
   if (data.type === 'settings') {
     const view = await requireView(data.connectionId);
     if (!view.connection.accounts.some(account => account.id === data.accountId)) throw new SyncError('capture_context_changed');
-    const result = await new Backend(await configuration()).request(`/accounts/${data.accountId}/settings`,'PUT',data.settings);
+    const result = await remoteApplication(await configuration()).accounts.configure(data.accountId,data.settings);
     view.connection.accounts = view.connection.accounts.map(account => account.id === result.id ? result : account);
     await chrome.storage.local.set({view}); return {account:result};
   }
@@ -187,11 +188,8 @@ async function discrepancyReport(data,sender) {
   if(data.type!=='discrepancies')throw new SyncError('unauthorized');
   const connection=new URL(sender.url).searchParams.get('connection');
   if(!/^[0-9a-f-]{36}$/i.test(connection || ''))throw new SyncError('validation_error');
-  const query=new URLSearchParams();
-  for(const key of ['from_date','to_date','account_id'])if(data[key])query.set(key,data[key]);
-  if(data.refresh)query.set('refresh','true');
-  const client=new Backend(await configuration());await client.info();
-  return {report:await client.request('/connections/'+connection+'/discrepancies?'+query)};
+  const client=remoteApplication(await configuration());await client.capabilities();
+  return {report:await client.reports.discrepancies(connection,data)};
 }
 async function captured(data,sender) {
   const state = await store.get(), adapter = connectorById(state?.bank);

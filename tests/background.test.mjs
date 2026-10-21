@@ -32,7 +32,7 @@ async function fixture(t,capture,{fetcher}={}) {
     return fetcher ? fetcher(url,options) : Response.json({api_version:1});
   };
   t.after(()=>{globalThis.chrome=previous.chrome;globalThis.fetch=previous.fetch;});
-  await import('../extension/background.js?fixture='+crypto.randomUUID());
+  await import('../.local/contracts/background.mjs?fixture='+crypto.randomUUID());
   const send=(data,sender=popupSender)=>new Promise(resolve=>listener(data,sender,resolve));
   await send({type:'status'}); // Drain initial state restoration before assertions.
   return {local,session,calls,send};

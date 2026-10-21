@@ -1,6 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {Coordinator} from '../extension/coordinator.js';
+import {remoteService} from '../.local/contracts/application-remote.mjs';
 
 function fixture(bank='synthetic-second-bank') {
  let state, count=0, failAck=false, failStartAck=false, running=false;
@@ -31,7 +32,7 @@ function fixture(bank='synthetic-second-bank') {
  const store={get:async()=>structuredClone(state),set:async value=>{state=structuredClone(value);persisted.push(structuredClone(value));}};
  const adapter={running:async()=>running,selectAccount:async(tab,source)=>{events.push({select:source,tabId:tab});return 'document';},
    launch:async()=>{running=true;},abort:async()=>{running=false;},parsePage:async()=>({records:[{external_id:'fixture'}],total:1,size:100,totalPages:1})};
- const create=(options={})=>new Coordinator({store,backend,...options,connector:name=>{assert.equal(name,bank);return adapter;},uuid:()=>`uuid-${++count}`});
+ const create=(options={})=>new Coordinator({store,service:remoteService(backend),...options,connector:name=>{assert.equal(name,bank);return adapter;},uuid:()=>`uuid-${++count}`});
  return {create,store,events,persisted,pages,job,connection,start:{connection,bank,tabId:42},source:{tabId:42,documentId:'document',account:'source-a'},
    loseAck:()=>{failAck=true;},loseStartAck:()=>{failStartAck=true;},stopDriver:()=>{running=false;}};
 }

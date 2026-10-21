@@ -1,4 +1,6 @@
 import {build} from 'esbuild';
+await build({entryPoints:['extension/background.js'],outfile:'.local/contracts/background.mjs',
+  bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/application/remote.ts'],outfile:'.local/contracts/application-remote.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/contracts/runner.ts'],outfile:'.local/contracts/runner.mjs',

@@ -1,4 +1,4 @@
-import {Backend} from './backend-client.js';
+import {remoteApplication} from '../src/application/remote-runtime.ts';
 
 const $=id=>document.getElementById(id);
 const messages={
@@ -25,7 +25,7 @@ export function setupMigration({rpc,refresh,lock,pause}) {
   const client=async()=>{
     const {config}=await chrome.storage.local.get('config');
     if(!config)throw Object.assign(Error(),{code:'not_configured'});
-    return new Backend(config);
+    return remoteApplication(config);
   };
   async function load({keepMessage=false}={}) {
     $('migration-settings').hidden=false;
@@ -54,7 +54,7 @@ export function setupMigration({rpc,refresh,lock,pause}) {
   $('export-data').addEventListener('click',()=>action(async()=>{
     feedback('Stopping capture and preparing a private archive…','loading');
     await rpc({type:'migration-prepare-export'});
-    const archive=await (await client()).transfer('export');
+    const archive=await (await client()).migration.export();
     const url=URL.createObjectURL(archive),link=document.createElement('a');
     link.href=url;link.download='zenimport-migration.zip';document.body.append(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),60000);
@@ -68,7 +68,7 @@ export function setupMigration({rpc,refresh,lock,pause}) {
     action(async()=>{
       if(!file.size || file.size>state.max_archive_bytes)throw Object.assign(Error(),{code:'payload_too_large'});
       feedback('Uploading and verifying the archive. Do not synchronize yet…','loading');
-      await (await client()).transfer('import',file);
+      await (await client()).migration.import(file);
       await rpc({type:'migration-imported'});
       await refresh();
       feedback('Data restored. Click Synchronize when ready. No transactions were sent during import.','success');

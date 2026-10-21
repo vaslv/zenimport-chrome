@@ -770,3 +770,18 @@ enable a local financial send or a mode-switch button.
   opaque archive handling and error propagation. The adapter neither mutates a
   command nor schedules an additional request. Docker typing/generated checks and
   170 unit/contract tests passed. Production and live accounts were not used.
+
+### L5.2 — route existing handlers through named services
+
+- Background, capture coordinator and archive UI now use the named application
+  service. The only product construction of the HTTP transport is the remote
+  runtime factory; API paths no longer occur in these handlers.
+- Capture requests, command IDs, lease/ACK ordering, pause/resume and completion
+  timestamps are unchanged. Existing coordinator tests run through the real remote
+  adapter against their explicit fake transport. Background unit tests load its
+  built bundle so TypeScript imports follow the production build path.
+- Review checked every replaced request and the before/after body/query semantics;
+  no extra HTTP request, automatic sync or financial action was introduced. Docker
+  passed 170 unit/contract cases and 14 browser cases (2 backend-only modules
+  intentionally skipped). Context fencing/bootstrap follows in the next point.
+  Declaration files are omitted from distributable ZIPs.

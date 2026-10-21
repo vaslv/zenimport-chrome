@@ -25,7 +25,7 @@ dist.mkdir(exist_ok=True)
 unpacked = dist / 'extension'
 if unpacked.exists():
     shutil.rmtree(unpacked)
-shutil.copytree(source, unpacked)
+shutil.copytree(source, unpacked, ignore=shutil.ignore_patterns('*.d.ts'))
 for name in entries:
     shutil.copyfile(compiled / name, unpacked / name)
 extra = [(root / name, name) for name in ('LICENSE', 'PRIVACY.md', 'THIRD_PARTY_NOTICES.md') if (root / name).is_file()]
