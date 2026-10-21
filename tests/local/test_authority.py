@@ -276,7 +276,7 @@ def test_native_source_snapshot_requires_quiescent_financial_history(pair,table,
 def test_native_v4_authority_upgrade_never_invents_a_hold_decision(pair,mode):
     pair,_,_=pair;result=ok(pair.worker,'upgrade-authority',mode=mode)
     if mode=='valid':
-        assert result['code'] is None and result['version']==6
+        assert result['code'] is None and result['version']==7
         assert len(result['participants'])==1 and result['participants'][0]['state']=='active'
     else:
         assert result['code']=='storage_corrupt' and result['version']==4

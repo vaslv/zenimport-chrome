@@ -32,6 +32,8 @@ export class SwitchJournalRepository{
     const plan=switchPlan(input),marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant(sameJournal(root,expected)&&root.pendingSwitchId===null,'migration_busy');
+      const backup=(await this.db.applicationState.get('local-backup-head'))?.value;
+      if(backup)requireParticipant((await this.db.applicationState.get('local-backup:'+backup.id))?.value.phase!=='building','migration_busy');
       const join=(await this.db.applicationState.get('mode-join-head'))?.value;
       if(join){const pending=(await this.db.applicationState.get('mode-join:'+participantUuid(join.id)))?.value;requireParticipant(pending!==undefined&&['complete','cancelled'].includes(pending.phase as string),'migration_busy');}
       const pointer=(await this.db.applicationState.get(head))?.value;

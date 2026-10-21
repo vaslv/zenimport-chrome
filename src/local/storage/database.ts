@@ -41,6 +41,7 @@ export class FinancialDatabase extends Dexie{
   readonly migrationChunks:Table<ParticipantChunk,[string,string,number]>;
   readonly switches:Table<ModeSwitch,string>;
   readonly applicationState:Table<{scope:string;value:Record<string,unknown>},string>;
+  readonly backupChunks:Table<{id:string;number:number;data:Uint8Array;sha256:string},[string,number]>;
   readonly remoteContexts:Table<{id:string;url:string;contextId:string;legacy:boolean;installationId?:string;datasetId?:string},string>;
   constructor(name:string,allowCreate:boolean){
     super(name,{autoOpen:false,chromeTransactionDurability:'strict',cache:'disabled'});
@@ -75,12 +76,13 @@ export class FinancialDatabase extends Dexie{
         }
       });
     this.version(6).stores({application_state:'scope',remote_contexts:'id'});
+    this.version(7).stores({local_backup_chunks:'[id+number],id'});
     this.runtime=this.table('runtime');this.datasets=this.table('datasets');
     this.stages=this.table('portable_stages');
     this.participants=this.table('participant_controls');this.migrationOperations=this.table('participant_operations');
     this.migrationReceipts=this.table('participant_receipts');this.migrationChunks=this.table('participant_chunks');this.switches=this.table('mode_switches');
     this.applicationState=this.table('application_state');
-    this.remoteContexts=this.table('remote_contexts');
+    this.remoteContexts=this.table('remote_contexts');this.backupChunks=this.table('local_backup_chunks');
     this.on('versionchange',()=>{this.close();return false;});
     this.on('populate',()=>{if(!allowCreate)throw Error('storage_missing');});
   }

@@ -1508,3 +1508,35 @@ or publication.
 Final minimum Chrome 140 source-lineage/controller gate: five passed in 47.88s
 (one existing Starlette warning), including both journal-to-hold races. Log:
 /tmp/zenimport-l10-route-minimum-lineage.log.
+
+### L10.10 — resumable local backup/export owner
+
+- Native schema v7 adds a separate private backup-chunk store; 49 portable financial
+  tables and archive format 2 remain unchanged. Active export takes an exact Root
+  snapshot hold only with no unfinished capture or unsettled outbox. Existing
+  switch/join/backup intents are mutually exclusive. Retired sources are copied
+  read-only without selecting another writer or changing the active remote Root.
+- A new nonce revokes interrupted builders. Bounded 256 KiB chunks, full graph and
+  final archive hash verification precede atomic readiness/hold release. No peer
+  receipt is fabricated. Quota failure remains paused and resumable; cancellation
+  releases only the same own hold. Download acknowledgement is checksum-bound;
+  cleanup removes one chunk at a time and never deletes financial history.
+- Independent reviews fixed epoch exhaustion before hold acquisition; both hold
+  and release epochs must fit before any change. Final API/adversarial reviews are
+  clean. See reviews/l10-backups-2026-10-21.md. External cross-model CLI unavailable.
+- Final Docker strict/generated/bundle checks and all 248 unit/contracts passed
+  in 1377.87ms. Current native backup gate: eight passed in 14.17s, including full
+  browser restart after chunk/final-commit quota faults, late cancelled builder,
+  exact archive graph preservation and both integer boundaries. Combined earlier
+  backup/native authority/journal gate: 55 passed in 126.90s. Storage/kernel/schema
+  gate: 28 passed before three new test-fixture expectations were corrected; final
+  backup scenarios were then rerun successfully. Logs: /tmp/zenimport-l10-backup-*.
+
+L10 remains in progress: old-copy replacement consent and archive-only restore,
+followed by L11 popup integration and L12 release acceptance. Product local routing
+is disabled. No live API/data, push, tags or publication.
+
+Final backup gate on minimum Chrome 140: eight passed in 60.98s. Final native
+storage/kernel/upgrade regressions: 25 passed in 32.62s. Logs:
+/tmp/zenimport-l10-backup-minimum.log and
+/tmp/zenimport-l10-backup-storage-final.log.

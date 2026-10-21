@@ -47,6 +47,8 @@ export class RouteSelection{
     requireParticipant((!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'migration_busy');
   }
   async #available(){
+    const backup=(await this.db.applicationState.get('local-backup-head'))?.value;
+    if(backup)requireParticipant((await this.db.applicationState.get('local-backup:'+backup.id))?.value.phase!=='building','migration_busy');
     const pointer=(await this.db.applicationState.get('mode-switch-head'))?.value;
     if(pointer){const value=switchJournal((await this.db.applicationState.get('mode-switch:'+participantUuid(pointer.id)))?.value);requireParticipant(['complete','cancelled'].includes(value.phase),'migration_busy');}
   }

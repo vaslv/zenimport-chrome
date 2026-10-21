@@ -1,5 +1,6 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
+import {BackupOwner} from './backup-owner.js';
 import {ModeTransfers} from '../migration/controller.js';
 import {mirrorReader} from '../zenmoney/reader.js';
 import type {StorageArea} from '../../application/state.js';
@@ -78,7 +79,23 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('transfer-')){
+      if(action.startsWith('backup-')){
+        const marker=port(args.name);let count=0;
+        const backup=await BackupOwner.open(args.name,{...marker,async read(){if(args.mode==='pause-backup'&&++count===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return marker.read();}});
+        try{
+          if(action==='backup-begin'){const {root}=await owner.current();value=await backup.begin(args.requestId!,args.generation??root.activeGeneration!,root,args.now??now);}
+          else if(action==='backup-build'){
+            const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put;
+            if(args.mode==='quota')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(this.name==='local_backup_chunks')throw new DOMException('synthetic-backup-quota','QuotaExceededError');return add.apply(this,values);};
+            if(args.mode==='quota-ready')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('local-backup:')&&values[0]?.value?.phase==='ready')throw new DOMException('synthetic-backup-ready-quota','QuotaExceededError');return put.apply(this,values);};
+            try{value=await backup.build(args.requestId!);}finally{IDBObjectStore.prototype.add=add;IDBObjectStore.prototype.put=put;}
+          }else if(action==='backup-cancel')value=await backup.cancel(args.requestId!);
+          else if(action==='backup-list')value=await backup.list();
+          else if(action==='backup-chunk'){const part=await backup.chunk(args.requestId!,args.number!);let raw='';for(const byte of part.data)raw+=String.fromCharCode(byte);value=btoa(raw);}
+          else if(action==='backup-ack')value=await backup.acknowledge(args.requestId!,args.checksum!,args.now??now);
+          else if(action==='backup-clean')value=await backup.clean(args.requestId!);
+        }finally{backup.close();}
+      }else if(action.startsWith('transfer-')){
         const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
         const transfer=await ModeTransfers.open({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,clock:()=>Number(args.now??now),
           serverPermission:url=>chrome.permissions.contains({origins:[new URL(url).origin+'/*']}),
