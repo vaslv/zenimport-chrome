@@ -95,6 +95,12 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
       finally{FinancialDatabase.prototype.transaction=transaction;}
     }
     else if(action==='graph-checkpoint')value=graphCheckpoint;
+    else if(action==='discard-stage'||action==='ack-stage-backup'||action==='collect-stage'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
+      if(action==='discard-stage'){await db.discardStage(args.stageId,args.fence);value=true;}
+      else if(action==='ack-stage-backup'){await db.acknowledgeStageBackup(args.stageId,args.fence,args.now??'1792540800');value=true;}
+      else value=await db.collectDiscardedStage(args.stageId,args.fence,args.now??'1792627200');
+    }
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);
     else if(action==='concurrent')value=await Promise.all([open(args.name),open(args.name)]);

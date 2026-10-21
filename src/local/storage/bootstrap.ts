@@ -18,6 +18,7 @@ import {validateRecords} from '../portable/record-proof.js';
 import {validateFinancialGraph} from '../portable/graph.js';
 import type {GraphSummary} from '../portable/graph.js';
 import {validateStageGraph} from './graph-validation.js';
+import {discardStage,acknowledgeStageBackup,collectDiscardedStage} from './stage-cleanup.js';
 
 const opening=new Map<string,Promise<void>>();
 
@@ -124,6 +125,14 @@ export class LocalDatabase{
 
   async validateStageGraph(id:string,fence:ContextFence,now:string):Promise<StageSummary>{
     return validateStageGraph(this.#db,this.#sentinel,fence,id,now);
+  }
+
+  async discardStage(id:string,fence:ContextFence):Promise<void>{return discardStage(this.#db,this.#sentinel,fence,id);}
+  async acknowledgeStageBackup(id:string,fence:ContextFence,now:string):Promise<void>{
+    return acknowledgeStageBackup(this.#db,this.#sentinel,fence,id,now);
+  }
+  async collectDiscardedStage(id:string,fence:ContextFence,now:string):Promise<{removedRows:string;complete:boolean}>{
+    return collectDiscardedStage(this.#db,this.#sentinel,fence,id,now);
   }
 
   /** Persist outside IDB before the first financial mutation/dispatch claim. */

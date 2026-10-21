@@ -26,8 +26,8 @@ leaves a failed or still-loading inactive generation. Killing the worker leaves 
 durable loading journal; reopening never promotes it or silently initializes a
 replacement active history. A retry creates a separate inactive stage. Financial
 application handlers have no native database handles or arbitrary mutation API.
-No automatic garbage collection, activation or protected handoff is implemented
-by this checkpoint; those remaining L4 gates must be completed before exposure.
+Activation and protected handoff remain unimplemented at this checkpoint and
+must be completed before product exposure.
 
 ## Persistent facts-only validation
 
@@ -46,6 +46,23 @@ Worker death before the final commit retains the original format-valid stage;
 a quota failure inside that commit rolls back both lifecycle and verdict. Stale
 routing or an unavailable sentinel cannot persist a new verdict. No result is
 an activation shortcut; protected handoff and fresh ownership remain separate.
+
+## Abandoned import cleanup
+
+Cleanup applies only to an explicitly discarded, never-active stage. Discarding
+revokes its loading/validation writer before any deletion; it does not imply a
+backup. A separate trusted user acknowledgment records that the original source
+or backup is retained. Collection waits at least 24 hours after both creation and
+that acknowledgment, then removes at most 500 financial rows per transaction.
+The next invocation resumes from persisted rows; the stage and dataset controls
+disappear atomically with the final batch. Retrying an acknowledgment preserves
+its original timestamp.
+
+Every operation checks the current routing fence and sentinel. Active, held,
+armed, retired and pending-switch data are excluded. This does not collect old
+handed-off generations or permanent participant receipts. A missing sentinel is
+never repaired or cleared by cleanup, even after all abandoned imports are gone.
+No background collector or UI invokes these private operations yet.
 
 ## Evidence
 

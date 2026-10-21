@@ -572,3 +572,19 @@ No archive validity is presented as financial graph or activation authority.
 - Full-graph size benchmarks are still running and are not part of this result.
   Protected activation/export/retirement, backup-aware cleanup, full interop and
   independent L4 review remain before L5. No live requests or product sends added.
+
+### L4.14 — backup-aware abandoned import collection (L4 in progress)
+
+- Explicit discard revokes an inactive import writer without deleting data. A
+  separate backup acknowledgment and 24-hour retention are required before a
+  bounded 500-row collection batch. Restart resumes persisted partial cleanup;
+  the final batch removes stage and dataset controls atomically.
+- Active/held/armed/retired generations and pending switches are protected. This
+  path does not collect handed-off history or permanent participant receipts and
+  never resets the independent storage-loss sentinel.
+- Docker: strict typing and 160 unit/contract cases passed. Seven final cleanup
+  cases passed per browser (145: 10.73s; 140: 52.65s). A preceding combined run
+  passed 12 cleanup/validation cases on 145. The first compile caught an invalid
+  variadic transaction call; the corrected table-array call passes strict typing.
+- Collection remains storage-private and is not scheduled by product handlers.
+  Protected activation/export and financial interop/review gates remain open.
