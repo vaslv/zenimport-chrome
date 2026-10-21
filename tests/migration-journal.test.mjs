@@ -40,3 +40,11 @@ test('remote-to-local reservation binds destination identity and generation toge
   const reserved={...value,plan:{...value.plan,destinationId:uuid()},destinationGeneration:uuid()};
   assert.deepEqual(switchJournal(reserved),reserved);
 });
+
+test('a cancelled unused journal is terminal and cannot return to requested',()=>{
+  const value={...journal(),phase:'cancelled'};
+  assert.deepEqual(switchJournal(value),value);
+  rejects(()=>advancePhase(value,'requested'));
+  const request={request_id:uuid(),switch_id:value.plan.id,expected_epoch:'1',peer_id:value.plan.destinationId};
+  rejects(()=>switchJournal({...value,commands:[{side:'source',command:'source_start',request}]}));
+});

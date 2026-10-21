@@ -97,6 +97,7 @@ export class MigrationOwner{
         requireParticipant(existing.role==='destination'&&existing.peerId===peerId&&existing.credentialRef===credentialRef&&existing.state==='pending','migration_invalid');
         const dataset=datasetControl(await this.#db.datasets.get(existing.generation));return {participantId:dataset.participantId,generation:dataset.generation};
       }
+      requireParticipant((await this.#db.applicationState.get('mode-switch:'+switchId))?.value.phase!=='cancelled','migration_paused');
       requireParticipant(root.pendingSwitchId===null,'migration_busy');
       if(root.activeMode==='local'){
         const active=datasetControl(await this.#db.datasets.get(root.activeGeneration!)),control=participantControl(await this.#db.participants.get(active.participantId));
@@ -169,6 +170,7 @@ export class MigrationOwner{
       if(verified)requireParticipant(current.credentialEpoch===credentialEpoch&&(await this.#db.switches.get(request.switch_id as string))?.credentialRef===credentialRef,'migration_busy');
       let updated={...dataset,participantEpoch:int64(next.control.epoch)};
       if(command==='source_start'){
+        requireParticipant((await this.#db.applicationState.get('mode-switch:'+request.switch_id))?.value.phase!=='cancelled','migration_paused');
         const outbox=await readOutbox(this.#db,control.generation);
         // An expired request still needs verification-only recovery before hold.
         requireParticipant(outbox===null||outbox.phase==='settled','migration_busy');

@@ -1410,3 +1410,25 @@ push, tags or publication.
 L10 remains in progress: cancellation/forward recovery, production credential and
 setup ports, used-server joins, backups and archive-only restore. Product local
 routing remains disabled. No live API/data, push, Git tags or publication.
+
+### L10.6 — cancellable transfers and permanent decision recovery
+
+- Cancellation now wins source cancellation, discards destination activation rights,
+  then resumes the original source. A winning unknown handoff recovers forward.
+  Unused aborts fence late native reservation/start inside the final transaction.
+- Fixed independently reviewed cancellation races with background sealing and late
+  destination start/arm. Authenticated continuous receipt chains prove an obsolete
+  CAS was rejected; immutable audit, replacement control request and proof acceptance
+  commit together. Financial write requests are never replaced or retried.
+- Final API/adversarial reviews are clean; external cross-model CLI is unavailable.
+  See reviews/l10-cancellation-2026-10-21.md. Docker strict/generated/bundle checks
+  and all 236 unit/contracts passed. All 24 native cancellation/journal cases passed
+  on minimum Chrome 140 in 183.03s. Final actual Python HTTP, native journal, authority
+  and first-Sync gate: 56 passed in 114.64s, one existing Starlette warning.
+  Includes real reverse transfer into a clean remote-only profile, real import
+  cancellation, dropped replies, worker death and quota audit rollback.
+  Logs: /tmp/zenimport-l10-cancel-*.log. Synthetic isolated services/data only.
+
+L10 remains in progress: production credential/setup ports, used-server joins,
+backups and archive-only restore. Product local routing remains disabled.
+No live API/data, push, Git tags or publication.

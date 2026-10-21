@@ -9,8 +9,8 @@ import {int64} from './types.js';
 import {participantControl} from './participant-validation.js';
 import {switchPlan,switchJournal,sameJournal,advancePhase,commandRequest} from '../migration/journal.js';
 import type {SwitchPlan,SwitchJournal,SwitchPhase,Side,JournalCommand} from '../migration/journal.js';
-import {receipt} from '../migration/wire.js';
-const head='mode-switch-head',scope=(id:string)=>'mode-switch:'+id;
+import {receipt,status as checkedStatus} from '../migration/wire.js';
+const head='mode-switch-head',scope=(id:string)=>'mode-switch:'+id,cancelScope=(id:string)=>'mode-switch-cancel:'+id;
 export interface SwitchLease{id:string;switchId:string}
 const nowText=(now:string)=>participantInteger(now,9223372036854775507n,0n);
 const cloneRecord=(value:SwitchJournal)=>value as unknown as Record<string,unknown>;
@@ -36,7 +36,7 @@ export class SwitchJournalRepository{
       if(pointer){
         const previous=switchJournal((await this.db.applicationState.get(scope(participantUuid(pointer.id))))?.value);
         if(previous.plan.id===plan.id){requireParticipant(sameJournal(previous.plan,plan)&&sameJournal(previous.initialRoot,expected));return previous;}
-        requireParticipant(previous.phase==='complete','migration_busy');
+        requireParticipant(['complete','cancelled'].includes(previous.phase),'migration_busy');
       }
       if(plan.direction==='local-to-remote'){
         requireParticipant(root.activeMode==='local'&&root.activeGeneration!==null&&root.credentialRef===plan.localCredentialRef,'migration_busy');
@@ -80,13 +80,13 @@ export class SwitchJournalRepository{
       const root=await assertAnchor(this.db,marker);requireParticipant((await this.db.applicationState.get(head))?.value.id===id,'migration_busy');
       const value=switchJournal((await this.db.applicationState.get(scope(id)))?.value);
       await this.#root(value,root);
-      if(value.phase==='complete'||value.lease!==null&&BigInt(value.lease.deadline)>at)return null;
+      if(['complete','cancelled'].includes(value.phase)||value.lease!==null&&BigInt(value.lease.deadline)>at)return null;
       const lease={id:crypto.randomUUID(),deadline:String(at+300n)};
       await this.db.applicationState.put({scope:scope(id),value:cloneRecord(switchJournal({...value,revision:String(BigInt(value.revision)+1n),lease}))});
       return {id:lease.id,switchId:id};
     });
   }
-  async #unit<T>(lease:SwitchLease,now:string,work:(value:SwitchJournal,root:RuntimeControl)=>{value:SwitchJournal;result:T}){
+  async #unit<T>(lease:SwitchLease,now:string,work:(value:SwitchJournal,root:RuntimeControl)=>{value:SwitchJournal;result:T}|Promise<{value:SwitchJournal;result:T}>){
     participantUuid(lease.id);participantUuid(lease.switchId);const at=nowText(now),marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant(root.pendingSwitchId===null||root.pendingSwitchId===lease.switchId,'migration_busy');
@@ -94,13 +94,75 @@ export class SwitchJournalRepository{
       const value=switchJournal((await this.db.applicationState.get(scope(lease.switchId)))?.value);
       await this.#root(value,root);
       requireParticipant(value.initialRoot.installationId===root.installationId&&value.lease?.id===lease.id&&BigInt(value.lease.deadline)>at,'migration_busy');
-      const next=work(structuredClone(value),root);
+      const next=await work(structuredClone(value),root);
       const checked=switchJournal({...next.value,revision:String(BigInt(value.revision)+1n)});
       requireParticipant(sameJournal(checked.initialRoot,value.initialRoot)&&checked.plan.id===value.plan.id);
       await this.#root(checked,root);
       await this.db.applicationState.put({scope:scope(lease.switchId),value:cloneRecord(checked)});return structuredClone(next.result);
     });
   }
+  async cancellation(id:string){
+    participantUuid(id);const marker=await readAnchor(this.sentinel);
+    return this.db.transaction('r',this.db.runtime,this.db.datasets,this.db.applicationState,async()=>{
+      await assertAnchor(this.db,marker);const value=(await this.db.applicationState.get(cancelScope(id)))?.value;
+      if(value===undefined)return null;
+      requireParticipant(Object.keys(value).sort().join(',')==='requestId,state'&&['requested','forward','finished'].includes(value.state as string));participantUuid(value.requestId);
+      return value as {requestId:string;state:'requested'|'forward'|'finished'};
+    });
+  }
+  async requestCancel(id:string,requestId:string){
+    participantUuid(id);participantUuid(requestId);const marker=await readAnchor(this.sentinel);
+    return this.db.transaction('rw',this.db.tables,async()=>{
+      const root=await assertAnchor(this.db,marker);requireParticipant((await this.db.applicationState.get(head))?.value.id===id,'migration_busy');
+      const value=switchJournal((await this.db.applicationState.get(scope(id)))?.value);
+      if(['complete','cancelled'].includes(value.phase))return value.phase;
+      const previous=(await this.db.applicationState.get(cancelScope(id)))?.value;
+      if(previous){requireParticipant(['requested','forward','finished'].includes(previous.state as string));return previous.state;}
+      const native=await this.db.switches.get(id),unused=value.commands.length===0&&value.receipts.length===0&&native===undefined&&root.pendingSwitchId!==id;
+      if(!unused)await this.#root(value,root);
+      const forward=value.receipts.some(proof=>proof.command==='source_handoff');
+      const next=switchJournal({...value,phase:unused?'cancelled':value.phase,lease:null,revision:String(BigInt(value.revision)+1n)});
+      await this.db.applicationState.put({scope:scope(id),value:cloneRecord(next)});
+      await this.db.applicationState.put({scope:cancelScope(id),value:{requestId,state:unused?'finished':forward?'forward':'requested'}});
+      return unused?'cancelled':forward?'forward':'requested';
+    });
+  }
+  /** An obsolete CAS is replaceable only after permanent epoch advancement proves
+   * it cannot have committed and can never commit later. Keep its exact audit. */
+  async rebaseRejected(lease:SwitchLease,side:Side,command:'source_cancel'|'destination_discard',input:unknown,now:string){
+    return this.#unit(lease,now,async value=>{
+      const observed=checkedStatus(input,value.plan.id),cancel=(await this.db.applicationState.get(cancelScope(value.plan.id)))?.value;
+      requireParticipant(cancel?.state==='requested'&&(command==='source_cancel'?side==='source':side==='destination'));
+      requireParticipant(observed.installation_id===(side==='source'?value.plan.sourceId:value.plan.destinationId));
+      requireParticipant(side==='source'?observed.state==='export_hold':['import_hold','armed'].includes(observed.state));
+      const old=value.commands.find(row=>row.side===side&&row.command===command);requireParticipant(old!==undefined);
+      requireParticipant(!value.receipts.some(row=>row.command===command)&&!observed.receipts.some(row=>row.request_id===old.request.request_id));
+      const before=BigInt(old.request.expected_epoch as string),after=BigInt(observed.participant_epoch);
+      requireParticipant(after>before&&after-before<=2n);
+      const changes=observed.receipts.filter(proof=>BigInt(proof.participant_epoch)>before&&BigInt(proof.participant_epoch)<=after)
+        .sort((a,b)=>BigInt(a.participant_epoch)<BigInt(b.participant_epoch)?-1:1);
+      const allowed=side==='source'?['source_seal']:['destination_start','destination_arm'];
+      requireParticipant(changes.length===Number(after-before)&&changes.every((proof,index)=>allowed.includes(proof.command)&&BigInt(proof.participant_epoch)===before+BigInt(index)+1n));
+      const proofs=[...value.receipts];
+      for(const proof of changes){const prior=proofs.find(row=>row.command===proof.command);if(prior)requireParticipant(sameJournal(prior,proof));else proofs.push(proof);}
+      const request=commandRequest(side,command,{...old.request,request_id:crypto.randomUUID(),expected_epoch:observed.participant_epoch});
+      await this.db.applicationState.add({scope:'mode-switch-rejected:'+value.plan.id+':'+old.request.request_id,
+        value:{side,command,request:old.request,reason:'superseded_epoch',observedEpoch:observed.participant_epoch,replacementId:request.request_id}});
+      return {value:{...value,receipts:proofs,commands:value.commands.map(row=>row===old?{...row,request}:row)},result:request};
+    });
+  }
+  async finishCancel(lease:SwitchLease,now:string){return this.#unit(lease,now,async value=>{
+    requireParticipant(value.receipts.some(proof=>proof.command==='source_resume'),'migration_incomplete');
+    const cancel=(await this.db.applicationState.get(cancelScope(value.plan.id)))?.value;requireParticipant(cancel?.state==='requested');
+    await this.db.applicationState.put({scope:cancelScope(value.plan.id),value:{...cancel,state:'finished'}});
+    return {value:{...value,phase:'cancelled',error:null},result:true};
+  });}
+  async recoverForward(lease:SwitchLease,now:string){return this.#unit(lease,now,async value=>{
+    requireParticipant(value.receipts.some(proof=>proof.command==='source_handoff'),'migration_incomplete');
+    const cancel=(await this.db.applicationState.get(cancelScope(value.plan.id)))?.value;requireParticipant(cancel?.state==='requested');
+    await this.db.applicationState.put({scope:cancelScope(value.plan.id),value:{...cancel,state:'forward'}});
+    return {value:{...value,phase:'source_handed_off',error:null},result:true};
+  });}
   async reserve(lease:SwitchLease,id:string,generation:string,now:string){
     participantUuid(id);participantUuid(generation);
     return this.#unit(lease,now,(value,root)=>{
@@ -112,7 +174,7 @@ export class SwitchJournalRepository{
       return {value:{...value,plan:{...value.plan,destinationId:id},destinationGeneration:generation},result:true};
     });
   }
-  /** Save once before dispatch; a later peer epoch never creates a fresh request. */
+  /** Save once before dispatch. Only rebaseRejected may retire a proven stale CAS. */
   async command(lease:SwitchLease,side:Side,command:JournalCommand['command'],epoch:string,now:string,peer?:ParticipantReceipt){
     participantInteger(epoch);
     return this.#unit(lease,now,value=>{

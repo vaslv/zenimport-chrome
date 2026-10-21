@@ -4,6 +4,7 @@ import {trustedSentinel} from '../../control/sentinel.js';
 import {MigrationOwner} from './migration-owner.js';
 import type {PeerStatus} from './migration-owner.js';
 import {LocalDatabase} from './bootstrap.js';
+import {RemoteControl} from './remote-control.js';
 import {FinancialDatabase,storeDefinitions} from './database.js';
 import {packRow,unpackRow} from './cells.js';
 import {AccountRepository} from './account-repository.js';
@@ -65,6 +66,8 @@ export async function run(action:string,args:Arguments){
     let value:unknown;const now='1792540800';
     if(action==='create'){
       const db=await LocalDatabase.open(args.name,port(args.name),now);db.close();value=await open(args.name);
+    }else if(action==='create-remote'){
+      const control=await RemoteControl.open(args.name,port(args.name),args.credentialRef!,{url:args.url!,contextId:args.peerId!,legacy:false});control.close();value=await open(args.name);
     }else if(action==='open')value=await open(args.name);
     else if(action==='checkpoint')value=checkpoint;
     else if(action==='release'){release?.();release=undefined;value=true;}
@@ -80,7 +83,8 @@ export async function run(action:string,args:Arguments){
         const identity=await client.identity();remotePeers.set(identity.installation_id,{client,adapter:new ServerParticipant(client,identity.installation_id)});value=identity;
       }else if(action.startsWith('journal-')){
         const journal=await SwitchJournalRepository.open(args.name,port(args.name)),time=args.now??'1000';
-        const put=IDBObjectStore.prototype.put;
+        const put=IDBObjectStore.prototype.put,add=IDBObjectStore.prototype.add;
+        if(args.mode==='quota-rejected')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-switch-rejected:'))throw new DOMException('synthetic-rejected-quota','QuotaExceededError');return add.apply(this,values);};
         if(args.mode==='quota')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){
           if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-switch:'))throw new DOMException('synthetic-journal-quota','QuotaExceededError');
           return put.apply(this,values);
@@ -97,7 +101,11 @@ export async function run(action:string,args:Arguments){
             const decorated=(participant:NativeParticipant)=>{
               const execute=participant.command.bind(participant);
               participant.command=async(command,request)=>{
-                const result=await execute(command,request),drop={source_start:'drop-start',source_handoff:'drop-handoff',destination_activate:'drop-activate'};
+                if(args.mode==='seal-before-cancel'&&command==='source_cancel')await participant.seal(String(request.switch_id));
+                if(args.mode==='arm-before-discard'&&command==='destination_discard'){
+                  const arm=(await journal.current())!.commands.find(row=>row.command==='destination_arm')!;await execute('destination_arm',arm.request);
+                }
+                const result=await execute(command,request),drop={source_start:'drop-start',source_handoff:'drop-handoff',destination_activate:'drop-activate',source_cancel:'drop-cancel',destination_discard:'drop-discard',source_resume:'drop-resume'};
                 if(args.mode&&args.mode===drop[command as keyof typeof drop])throw new ParticipantError('backend_unavailable');
                 if(args.mode==='pause-handoff'&&command==='source_handoff'){checkpoint=true;await new Promise(()=>{});}
                 return result;
@@ -118,11 +126,17 @@ export async function run(action:string,args:Arguments){
           }
           else if(action==='journal-reserve')value=await journal.reserve(args.lease!,args.participantId!,args.generation!,time);
           else if(action==='journal-command')value=await journal.command(args.lease!,args.side??'source',args.journalCommand??'source_start',args.epoch??'1',time);
+          else if(action==='journal-rejected'){
+            const db=new FinancialDatabase(args.name,false);await db.open();
+            try{value=(await db.applicationState.toArray()).filter(row=>row.scope.startsWith('mode-switch-rejected:'+args.switchId+':'));}finally{db.close();}
+          }
+          else if(action==='journal-cancel')value=await journal.requestCancel(args.switchId!,args.requestId!);
+          else if(action==='journal-cancellation')value=await journal.cancellation(args.switchId!);
           else if(action==='journal-accept')value=await journal.accept(args.lease!,args.request,time);
           else if(action==='journal-advance')value=await journal.advance(args.lease!,args.phase!,time);
           else if(action==='journal-release')value=await journal.release(args.lease!,time);
           else throw Error('unknown_journal_fixture');
-        }finally{IDBObjectStore.prototype.put=put;journal.close();}
+        }finally{IDBObjectStore.prototype.put=put;IDBObjectStore.prototype.add=add;journal.close();}
       }else if(action==='reserve'){
         value=await owner.reserveDestination(args.switchId!,args.peerId!,args.credentialRef!,now);
         peers.set((value as {participantId:string}).participantId,owner);

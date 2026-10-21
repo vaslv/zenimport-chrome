@@ -9,7 +9,8 @@ import {receipt} from './wire.js';
 
 export const PHASES=['requested','destination_checked','source_quiescing','source_paused','export_ready','importing',
   'destination_verified','source_handed_off','active_pointer_committed','destination_activated','complete'] as const;
-export type SwitchPhase=typeof PHASES[number];
+export type SwitchPhase=typeof PHASES[number]|'cancelled';
+const phaseIndex=(value:SwitchPhase)=>PHASES.indexOf(value as typeof PHASES[number]);
 export type Side='source'|'destination';
 export interface SwitchPlan{
   id:string;direction:'local-to-remote'|'remote-to-local';sourceId:string;destinationId:string|null;
@@ -51,7 +52,7 @@ export function commandRequest(side:Side,command:JournalCommand['command'],reque
 }
 export function switchJournal(input:unknown):SwitchJournal{
   requireParticipant(input!==null&&typeof input==='object'&&!Array.isArray(input));const value=input as SwitchJournal;
-  requireParticipant(keys(value,'chunks,commands,destinationGeneration,error,initialRoot,lease,phase,plan,receipts,revision,version')&&value.version===1&&PHASES.includes(value.phase));
+  requireParticipant(keys(value,'chunks,commands,destinationGeneration,error,initialRoot,lease,phase,plan,receipts,revision,version')&&value.version===1&&(value.phase==='cancelled'||phaseIndex(value.phase)>=0));
   const plan=switchPlan(value.plan),root=runtimeControl(value.initialRoot);participantInteger(value.revision);
   requireParticipant(root.activeMode===(plan.direction==='local-to-remote'?'local':'remote')&&root.pendingSwitchId===null);
   if(value.destinationGeneration!==null){participantUuid(value.destinationGeneration);requireParticipant(plan.direction==='remote-to-local'&&plan.destinationId!==null);}
@@ -73,21 +74,27 @@ export function switchJournal(input:unknown):SwitchJournal{
       requireParticipant(command!==undefined&&command.request.request_id===proof.request_id&&BigInt(command.request.expected_epoch as string)+1n===BigInt(proof.participant_epoch));
     }
   }
-  for(const [phase,command] of Object.entries(required))if(PHASES.indexOf(value.phase)>=PHASES.indexOf(phase as SwitchPhase))requireParticipant(value.receipts.some(row=>row.command===command));
-  if(PHASES.indexOf(value.phase)>=PHASES.indexOf('source_quiescing'))requireParticipant(plan.destinationId!==null);
+  for(const [phase,command] of Object.entries(required))if(phaseIndex(value.phase)>=phaseIndex(phase as SwitchPhase))requireParticipant(value.receipts.some(row=>row.command===command));
+  if(phaseIndex(value.phase)>=PHASES.indexOf('source_quiescing'))requireParticipant(plan.destinationId!==null);
+  if(value.phase==='cancelled')requireParticipant(value.commands.length===0&&value.receipts.length===0||['source_cancel','destination_discard','source_resume'].every(command=>value.receipts.some(row=>row.command===command)));
   value.chunks.forEach(participantDigest);
+  const cancel=value.receipts.find(row=>row.command==='source_cancel');
+  if(cancel){
+    requireParticipant(!value.receipts.some(row=>row.command==='source_handoff'));
+    for(const proof of value.receipts)if(proof.command!=='source_start')requireParticipant(proof.dataset_id===cancel.dataset_id&&proof.dataset_digest===cancel.dataset_digest&&proof.archive_sha256===cancel.archive_sha256&&proof.archive_size===cancel.archive_size);
+  }
   const seal=value.receipts.find(row=>row.command==='source_seal');
   if(seal){
     const started=value.receipts.find(row=>row.command==='source_start');
     requireParticipant(started!==undefined&&started.dataset_id===seal.dataset_id&&BigInt(seal.participant_epoch)===BigInt(started.participant_epoch)+1n&&seal.dataset_digest!==null&&seal.archive_sha256!==null&&seal.archive_size!==null);
     requireParticipant(value.chunks.length<=Math.ceil(Number(seal.archive_size)/262144));
-    if(PHASES.indexOf(value.phase)>=PHASES.indexOf('destination_verified'))requireParticipant(value.chunks.length===Math.ceil(Number(seal.archive_size)/262144));
+    if(phaseIndex(value.phase)>=PHASES.indexOf('destination_verified'))requireParticipant(value.chunks.length===Math.ceil(Number(seal.archive_size)/262144));
     for(const proof of value.receipts)if(!['source_start','source_seal'].includes(proof.command))requireParticipant(proof.dataset_id===seal.dataset_id&&proof.dataset_digest===seal.dataset_digest&&proof.archive_sha256===seal.archive_sha256&&proof.archive_size===seal.archive_size);
   }else requireParticipant(value.chunks.length===0);
   return structuredClone(value);
 }
 export function advancePhase(journal:SwitchJournal,next:SwitchPhase):SwitchJournal{
-  requireParticipant(PHASES.indexOf(next)===PHASES.indexOf(journal.phase)+1);
+  requireParticipant(phaseIndex(journal.phase)>=0&&phaseIndex(next)===phaseIndex(journal.phase)+1);
   requireParticipant(required[next]===undefined||journal.receipts.some(row=>row.command===required[next]));
   if(next==='source_quiescing')requireParticipant(journal.plan.destinationId!==null);
   return switchJournal({...journal,phase:next,error:null});

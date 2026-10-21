@@ -189,3 +189,135 @@ def test_source_cannot_freeze_an_incomplete_capture_behind_its_hold(pair):
     ok(worker,'capture-for-migration',mode='complete')
     proof=pair.command('source','source_start',request=request)
     assert proof['state']=='export_hold'
+
+
+@pytest.mark.parametrize('phase',['source_paused','export_ready','importing','destination_verified'])
+def test_cancel_discards_activation_before_resuming_only_the_original_source(pair,phase):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    before=ok(worker,'inspect')['rows']
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        if ok(worker,'journal-current')['phase']==phase:break
+        assert ok(worker,'journal-run',now='1792540800')['state']!='blocked'
+    assert ok(worker,'journal-cancel',switchId=pair.switch,requestId=str(uuid4()))=='requested'
+    for _ in range(100):
+        result=ok(worker,'journal-run',now='1792540800');assert result['state'] not in ('blocked','busy'),result
+        if result['state']=='cancelled':break
+    else:raise AssertionError(result)
+    journal=ok(worker,'journal-current')
+    assert journal['phase']=='cancelled' and journal['lease'] is None
+    assert not any(proof['command']=='source_handoff' for proof in journal['receipts'])
+    assert pair.status('source')['state']=='active' and pair.status('source')['operation']['state']=='resumed'
+    assert pair.status('target')['operation']['state']=='discarded'
+    assert ok(worker,'inspect')['rows']==before
+    assert ok(worker,'write') is True
+    assert not call(worker,'write','target',generation=pair.generation)['ok']
+
+
+def test_cancel_unused_journal_revokes_a_lease_and_rejects_late_native_commands(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        switch,plan=start(worker);lease=ok(worker,'journal-claim',switchId=switch)
+        root=ok(worker,'current')['root']
+        assert ok(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()))=='cancelled'
+        assert ok(worker,'current')['root']==root
+        assert call(worker,'journal-command',lease=lease)['code']=='migration_busy'
+        request=dict(request_id=str(uuid4()),switch_id=switch,expected_epoch='1',peer_id=plan['plan']['destinationId'])
+        assert call(worker,'command',participantId=plan['plan']['sourceId'],command='source_start',request=request)['code']=='migration_paused'
+        assert call(worker,'reserve',switchId=switch,peerId=plan['plan']['destinationId'],credentialRef=str(uuid4()))['code']=='migration_paused'
+
+
+def test_cancel_after_a_lost_handoff_reply_recovers_forward_instead_of_resuming_source(pair):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        if ok(worker,'journal-current')['phase']=='destination_verified':break
+        assert ok(worker,'journal-run',now='1792540800')['state']!='blocked'
+    assert ok(worker,'journal-run',now='1792540800',mode='drop-handoff')['state']=='blocked'
+    assert pair.status('source')['state']=='handed_off'
+    assert ok(worker,'journal-cancel',switchId=pair.switch,requestId=str(uuid4()))=='requested'
+    for _ in range(100):
+        result=ok(worker,'journal-run',now='1792540800');assert result['state'] not in ('blocked','busy'),result
+        if result['state']=='complete':break
+    else:raise AssertionError(result)
+    assert pair.status('source')['state']=='handed_off'
+    assert pair.status('target')['state']=='active' and pair.status('target')['awaiting_sync']
+    assert ok(worker,'journal-cancellation',switchId=pair.switch)['state']=='forward'
+    assert not any(proof['command']=='source_resume' for proof in ok(worker,'journal-current')['receipts'])
+
+
+@pytest.mark.parametrize('mode,phase',[('seal-before-cancel','source_paused'),('arm-before-discard','importing')])
+def test_cancel_recovers_a_proven_rejected_cas_after_a_late_participant_transition(pair,mode,phase):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        value=ok(worker,'journal-current')
+        if value['phase']==phase and (mode!='arm-before-discard' or len(value['chunks'])>0):break
+        assert ok(worker,'journal-run',now='1792540800')['state']!='blocked'
+    else:raise AssertionError('race phase not reached')
+    if mode=='arm-before-discard':
+        lease=ok(worker,'journal-claim',switchId=pair.switch,now='1792540800')
+        ok(worker,'journal-command',lease=lease,side='destination',journalCommand='destination_arm',epoch='2',now='1792540800')
+        ok(worker,'journal-release',lease=lease,now='1792540800')
+    assert ok(worker,'journal-cancel',switchId=pair.switch,requestId=str(uuid4()))=='requested'
+    injected=False
+    for _ in range(100):
+        value=ok(worker,'journal-current')
+        inject=not injected and (mode=='seal-before-cancel' or any(proof['command']=='source_cancel' for proof in value['receipts']))
+        result=ok(worker,'journal-run',now='1792540800',mode=mode if inject else None)
+        if inject:injected=True
+        assert result['state'] not in ('blocked','busy'),result
+        if result['state']=='cancelled':break
+    else:raise AssertionError(result)
+    rejected=ok(worker,'journal-rejected',switchId=pair.switch)
+    assert len(rejected)==1,rejected
+    old=rejected[0]['value'];assert old['reason']=='superseded_epoch'
+    assert int(old['observedEpoch'])>int(old['request']['expected_epoch'])
+    replacement=next(row for row in ok(worker,'journal-current')['commands'] if row['command']==old['command'])
+    assert replacement['request']['request_id']==old['replacementId']!=old['request']['request_id']
+    assert pair.status('source')['state']=='active' and pair.status('target')['operation']['state']=='discarded'
+
+
+@pytest.mark.parametrize('mode,command',[('drop-cancel','source_cancel'),('drop-discard','destination_discard'),('drop-resume','source_resume')])
+def test_cancel_recovers_lost_decision_replies_without_repeating_them(pair,mode,command):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        if ok(worker,'journal-current')['phase']=='destination_verified':break
+        assert ok(worker,'journal-run',now='1792540800')['state']!='blocked'
+    ok(worker,'journal-cancel',switchId=pair.switch,requestId=str(uuid4()));dropped=False
+    for _ in range(100):
+        result=ok(worker,'journal-run',now='1792540800',mode=mode if not dropped else None)
+        if result['state']=='blocked':
+            assert not dropped and result['code']=='backend_unavailable',result
+            dropped=True
+        if result['state']=='cancelled':break
+    else:raise AssertionError(result)
+    assert dropped
+    journal=ok(worker,'journal-current')
+    assert len([row for row in journal['commands'] if row['command']==command])==1
+    assert pair.status('source')['state']=='active' and pair.status('target')['operation']['state']=='discarded'
+
+
+def test_rejected_cas_audit_and_replacement_roll_back_together(pair):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        if ok(worker,'journal-current')['phase']=='source_paused':break
+        assert ok(worker,'journal-run',now='1792540800')['state']!='blocked'
+    ok(worker,'journal-cancel',switchId=pair.switch,requestId=str(uuid4()))
+    assert ok(worker,'journal-run',now='1792540800',mode='seal-before-cancel')['state']=='waiting'
+    before=ok(worker,'journal-current')['commands']
+    result=ok(worker,'journal-run',now='1792540800',mode='quota-rejected')
+    assert result['state']=='blocked' and result['code']=='quota_exceeded',result
+    assert ok(worker,'journal-current')['commands']==before
+    assert ok(worker,'journal-rejected',switchId=pair.switch)==[]
+    for _ in range(100):
+        result=ok(worker,'journal-run',now='1792540800');assert result['state'] not in ('blocked','busy'),result
+        if result['state']=='cancelled':break
+    else:raise AssertionError(result)
+    assert len(ok(worker,'journal-rejected',switchId=pair.switch))==1
