@@ -1,4 +1,5 @@
 /** Durable coordinator ownership. This journal never grants financial authority. */
+import {transferBudget} from './transfer-budget.js';
 import {confirmReplacement} from './inactive-replacement.js';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
 import {participantUuid,participantInteger,participantDigest,requireParticipant,checkPeerReceipt} from '../../control/participant-wire.js';
@@ -49,8 +50,10 @@ export class SwitchJournalRepository{
         requireParticipant(root.activeMode==='local'&&root.activeGeneration!==null&&root.credentialRef===plan.localCredentialRef,'migration_busy');
         const dataset=datasetControl(await this.db.datasets.get(root.activeGeneration)),participant=participantControl(await this.db.participants.get(dataset.participantId));
         requireParticipant(dataset.participantId===plan.sourceId&&dataset.lifecycle==='active'&&dataset.holdId===null&&participant.state==='active'&&!participant.awaitingSync&&participant.epoch===dataset.participantEpoch,'migration_paused');
+        participantInteger(participant.epoch,(1n<<63n)-5n);
         requireParticipant(sameJournal(dataset.ownerIds,plan.ownerIds),'migration_wrong_account');
       }else{requireParticipant(root.activeMode==='remote'&&root.credentialRef===plan.remoteCredentialRef,'migration_busy');requireParticipant(plan.destinationId===null);}
+      transferBudget(root);
       const value=switchJournal({version:1,plan,initialRoot:root,phase:'requested',revision:'1',lease:null,destinationGeneration:null,commands:[],receipts:[],chunks:[],error:null});
       if(plan.direction==='remote-to-local')await confirmReplacement(this.db,plan.id,replaceInactiveLocalCopy);
       // add preserves every prior decision if a caller tries reusing an old ID.

@@ -40,3 +40,22 @@ test('no speculative arm or activate is allowed without independently verified f
   assert.throws(()=>step(b,'destination_activate',{peer_receipt:handed},{...ctx,eligible:false}),/migration_not_empty/);
   assert.equal(b.control.state,'armed');
 });
+
+test('participant start reserves every remaining success or cancellation increment',()=>{
+  const max=(1n<<63n)-1n;
+  for(const remaining of [1n,2n,3n]){
+    const a=peer(1),b=peer(2);a.control.epoch=String(max-remaining);
+    assert.throws(()=>step(a,'source_start',{peer_id:b.control.id}),/migration_busy/);assert.equal(a.control.state,'active');
+  }
+  for(const remaining of [1n,2n]){
+    const a=peer(1),b=peer(2);b.control.epoch=String(max-remaining);const proof=seal(a,b);
+    assert.throws(()=>step(b,'destination_start',{peer_receipt:proof}),/migration_busy/);assert.equal(b.control.state,'active');
+  }
+  for(const cancel of [false,true]){
+    const a=peer(1),b=peer(2);a.control.epoch=String(max-4n);b.control.epoch=String(max-3n);
+    const proof=seal(a,b);step(b,'destination_start',{peer_receipt:proof});const armed=step(b,'destination_arm');
+    if(cancel){const stop=step(a,'source_cancel');const discarded=step(b,'destination_discard',{peer_receipt:stop});step(a,'source_resume',{peer_receipt:discarded});assert.equal(a.control.epoch,String(max));}
+    else{const handed=step(a,'source_handoff',{peer_receipt:armed});step(b,'destination_activate',{peer_receipt:handed});assert.ok(b.control.awaitingSync);}
+    assert.equal(b.control.epoch,String(max));assert.equal(b.control.state,'active');
+  }
+});

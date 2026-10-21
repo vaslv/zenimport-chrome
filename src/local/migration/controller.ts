@@ -12,7 +12,7 @@ import type {JoinConsent} from '../storage/route-selection.js';
 import {ServerCredentials} from './credentials.js';
 import {NativeParticipant,ServerParticipant} from './participants.js';
 import {SwitchRunner} from './runner.js';
-import {participantUuid,requireParticipant} from '../../control/participant-wire.js';
+import {participantUuid,participantInteger,requireParticipant} from '../../control/participant-wire.js';
 interface TransferOptions{
   name:string;sentinel:SentinelPort;persistent:StorageArea;reader:MirrorReader;
   serverPermission(url:string):Promise<boolean>;fetch?:typeof fetch;clock?:()=>number;
@@ -55,6 +55,7 @@ export class ModeTransfers{
     participantUuid(candidateRef);const current=await this.owner.current(),root=current.root;
     requireParticipant(root.activeMode==='local'&&root.pendingSwitchId===null&&current.participantId!==null&&root.credentialRef!==null,'migration_paused');
     const local=await this.localCredentials.verifyReference(root.credentialRef),remote=await this.serverCredentials.verifiedCandidate(candidateRef,local.ownerIds);
+    participantInteger(remote.participant_epoch,(1n<<63n)-4n);
     requireParticipant(remote.can_import&&remote.state==='active'&&!remote.awaiting_sync&&remote.legacy_hold===null,'migration_not_empty');
     return this.journal.create(root,{id:crypto.randomUUID(),direction:'local-to-remote',sourceId:current.participantId,destinationId:remote.installation_id,
       remoteCredentialRef:candidateRef,localCredentialRef:root.credentialRef,ownerIds:[...local.ownerIds]});
@@ -72,6 +73,7 @@ export class ModeTransfers{
     const {root}=await this.owner.current();requireParticipant(root.activeMode==='remote'&&root.pendingSwitchId===null&&root.credentialRef!==null,'migration_paused');
     const descriptor=await this.#selectedServer(root),local=await this.localCredentials.verifyReference(candidateRef),remote=await this.serverCredentials.verifyReference(root.credentialRef,local.ownerIds);
     if(descriptor.installationId!==undefined||descriptor.datasetId!==undefined)requireParticipant(descriptor.installationId===remote.installation_id&&descriptor.datasetId===remote.dataset_id,'migration_invalid');
+    participantInteger(remote.participant_epoch,(1n<<63n)-5n);
     requireParticipant(remote.state==='active'&&!remote.awaiting_sync&&remote.legacy_hold===null,'migration_paused');
     const control=await RemoteControl.open(this.options.name,this.options.sentinel);
     try{await control.bindIdentity(root,remote.installation_id,remote.dataset_id);}finally{control.close();}

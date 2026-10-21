@@ -1,3 +1,4 @@
+import {transferBudget} from './transfer-budget.js';
 import {readOutbox} from './outbox-control.js';
 /** Existing-store control owner. Never exposed to bank/page messages. */
 import Dexie from 'dexie';
@@ -136,7 +137,7 @@ export class MigrationOwner{
         requireParticipant(active.lifecycle==='active'&&active.holdId===null&&control.state==='active'&&!control.everActivated&&!control.awaitingSync&&await this.#empty(active.generation),'migration_not_empty');
       }
       if(root.activeMode==='remote')await verifyReplacement(this.#db,switchId);
-      const epoch=increment(root.epoch);
+      transferBudget(root);const epoch=increment(root.epoch);
       await this.#db.datasets.add({generation,datasetId,participantId,participantEpoch:int64('1'),logicalSchemaVersion:'1',lifecycle:'staging',
         ownerIds:[],holdId:switchId,createdAt:stamp,backupAcknowledgedAt:null});
       await this.#db.participants.add({id:participantId,generation,epoch:'1',state:'active',operationId:null,everActivated:false,awaitingSync:false});
@@ -151,6 +152,8 @@ export class MigrationOwner{
       const root=await assertAnchor(this.#db,anchor);
       if(root.pendingSwitchId){
         const transfer=await this.#db.switches.get(root.pendingSwitchId);requireParticipant(transfer?.role==='destination'&&transfer.state==='pending','migration_paused');
+        // Token repair must leave one final increment for destination activation.
+        increment(increment(root.credentialEpoch));
         await this.#db.switches.put({...transfer,credentialRef});await this.#db.runtime.put({...root,credentialEpoch:increment(root.credentialEpoch)});
       }else await this.#db.runtime.put({...root,credentialRef,credentialEpoch:increment(root.credentialEpoch)});
     });
@@ -203,6 +206,7 @@ export class MigrationOwner{
       if(verified)requireParticipant(current.credentialEpoch===credentialEpoch&&(await this.#db.switches.get(request.switch_id as string))?.credentialRef===credentialRef,'migration_busy');
       let updated={...dataset,participantEpoch:int64(next.control.epoch)};
       if(command==='source_start'){
+        transferBudget(current);
         requireParticipant((await this.#db.applicationState.get('mode-switch:'+request.switch_id))?.value.phase!=='cancelled','migration_paused');
         const outbox=await readOutbox(this.#db,control.generation);
         // An expired request still needs verification-only recovery before hold.

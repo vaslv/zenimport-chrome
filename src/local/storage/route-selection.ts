@@ -72,6 +72,7 @@ export class RouteSelection{
       if(pointer){const previous=checked((await this.db.applicationState.get(scope(participantUuid(pointer.id))))?.value);
         if(previous.id===value.id){requireParticipant(sameJournal({...previous,version:'1'},{...value,version:'1',phase:previous.phase}));return previous;}
         requireParticipant(previous.phase!=='quiescing','migration_busy');}
+      int64(String(BigInt(root.epoch)+1n));int64(String(BigInt(root.credentialEpoch)+1n));
       await this.#local(root,value.destination.owner_ids);
       requireParticipant(value.destination.state==='active'&&value.destination.legacy_hold===null,'migration_paused');
       await this.db.applicationState.add({scope:scope(value.id),value:value as unknown as Record<string,unknown>});

@@ -1647,3 +1647,24 @@ routing is disabled. No live API/data, push, tags or publication.
 L10 major-gate review remains to be completed before L11 product integration and
 L12 release acceptance. Local product routing remains disabled. No live API/data,
 push, tags or publication.
+
+### L10 major review correction — reserve complete fence paths
+
+- Reject exhausted routing/credential counters before native hold/journal or
+  source preparation. Reserve Root+2/credential+1 for live transfers, retain one
+  activation credential increment during pending token repair, and reserve join's
+  final increments before quiescing. Source/destination participant paths reserve
+  four/three increments respectively in both Python and TypeScript, with early
+  remote/source preflight checks. Never reset or round a counter.
+- Independent adversarial reread: no remaining budget findings. Other major-gate
+  corrections are still open: native restore TTL and stale initial Root hold race.
+  See reviews/l10-fence-budgets-2026-10-22.md. Cross-model CLI unavailable.
+- Docker strict/generated/bundle and 256 unit/contracts passed in 1313.13ms.
+  Native budgets/authority/journals: 63 passed in 173.14s. Latest minimum Chrome
+  140 complete budget cases: ten passed in 91.87s, including both last-safe
+  terminal paths and credential repair. Python focused participant/live/archive
+  gate: 85 passed in 35.13s; full server runner evidence recorded separately.
+  Logs: /tmp/zenimport-l10-fence-budget-{unit,native,minimum,backend}.log.
+
+Major L10 review and broad browser suite remain in progress. Product local routing
+is disabled. No live API/data, push, tags or publication.

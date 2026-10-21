@@ -35,6 +35,9 @@ export function participantTransition(current:ParticipantControl,original:Partic
     requireParticipant(peer.switch_id===request.switch_id);state='discarded';op=insert('destination',peer.installation_id,peer.dataset_id,state,peer);
   }else if(command==='source_start'||command==='destination_start'){
     requireParticipant(op===null&&current.state==='active'&&!current.awaitingSync,'migration_paused');
+    // Source cancellation may require start, seal, cancel and resume. A
+    // destination may require start, arm and activate/discard. Reserve all now.
+    requireParticipant(epoch<=9223372036854775807n-(command==='source_start'?4n:3n),'migration_busy');
     if(command==='source_start'){
       requireParticipant(!context.legacyHold,'migration_paused');const peer=participantUuid(request.peer_id);
       requireParticipant(peer!==current.id);state='export_hold';op=insert('source',peer,participantUuid(context.datasetId),state);
