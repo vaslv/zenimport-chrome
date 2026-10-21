@@ -683,3 +683,19 @@ No archive validity is presented as financial graph or activation authority.
   header; download of unsealed chunks). Both were fixed with native regressions;
   the reviewer found no further actionable issue on the final implementation pass.
   Product handlers remain remote-only. No live request or production data used.
+
+### L4.19 — actual native/SQLite participant exchange
+
+- Added an explicit offline runner using an installed native MV3 profile persisted
+  across phases and the real Python/SQLite participant/installer. Each direction
+  exchanges seal/arm/handoff receipts, activates once and preserves awaiting-sync.
+  All 49 tables are compared; Python-only normalizations are checked separately,
+  and native activation must retain its sealed financial rows exactly.
+- All seven runner phases passed on Chromium 145 and Chrome 140. The three native
+  phases took 2.55/1.29/0.99s and 7.93/7.53/6.71s respectively. Browser restarts
+  retain pending journals and peer bindings. Transport authentication and owner
+  identity use private offline ports; this is not a live authenticated HTTP test.
+- A focused native replay regression additionally confirms a changed request with
+  an old request ID fails before another owner read (1 passed, 21 deselected, 7.05s).
+  The final independent implementation review is recorded in
+  reviews/l4-authority-2026-10-21.md. Wider final browser gates are still running.

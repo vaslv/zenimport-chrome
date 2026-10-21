@@ -86,6 +86,9 @@ def test_native_transfer_preserves_facts_and_requires_explicit_sync_before_a_wri
     before=ok(worker,'reads','target')
     assert pair.command('target','destination_activate',request=request)==receipt
     assert ok(worker,'reads','target')==before==2
+    assert call(worker,'command','target',participantId=pair.target,command='destination_activate',
+        request=request|{'expected_epoch':'4'})==dict(ok=False,code='migration_invalid')
+    assert ok(worker,'reads','target')==before
     source=ok(worker,'inspect')['rows'];destination=ok(worker,'inspect','target')['rows']
     assert source==destination
     assert not any(row[0]==['text','forbidden-probe-write'] for row in destination['dataset_metadata'])

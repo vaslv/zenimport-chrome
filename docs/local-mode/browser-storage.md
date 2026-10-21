@@ -84,8 +84,65 @@ project back to their original logical key; this does not resume the old hold.
 `copyInactiveStage` only re-exports a fully checked immutable inactive generation.
 Its newly generated archive/session IDs do not authorize a source handoff. The
 test bridge and synthetic owner/participant setup are not product handlers or
-proof of live identity, protected active-source export or local activation. Those
-remaining authority gates must pass before exposing local mode.
+proof of live identity. Protected export and activation are checked separately
+through the participant owner described below; local product mode stays disabled.
+
+## Protected participant owner
+
+`MigrationOwner` opens existing anchored control state, including held or remote
+Root states. It never creates an empty local replacement after storage loss or
+an unreachable remote server. IDB version 5 upgrades only known idle version-4
+development datasets; unknown participant holds abort without inventing authority.
+See [ADR 003](adr-003-generation-participants.md) and
+[ADR 004](adr-004-immutable-recovery-anchor.md).
+
+The destination reserves its fresh generation and participant before source start.
+Reservation pauses ordinary claims through Root's pending switch and routing
+epoch. The source enters export hold before reading any financial table. The
+bounded reader rejects active captures, live capture leases and attempting sends;
+it projects only declared nonportable worker/schema-audit fields. Export streams
+256 KiB chunks with immutable hashes and a stable archive/session identity. A
+partial source snapshot is private and not downloadable. Restart uses a new nonce
+and rebuilds partial chunks before proving and sealing the full financial graph.
+
+The destination commits each exact chunk before ACK. Replaying the same bytes is
+safe; changing a committed chunk fails. Its import permit binds the inactive
+generation, switch, participant, routing epoch and durable writer nonce. Every
+batch, including partial-row cleanup and final header cleanup, repeats those
+checks. Cancellation revokes late importers without deleting its discard evidence.
+
+Arm and activation each rerun the financial graph proof and independently call
+the privileged fresh-owner port. The final transaction checks the credential
+reference/epoch again. Peer receipts require authenticated peer status in addition
+to canonical integrity hashes. `MigrationPorts` is a trusted host boundary; bank
+messages cannot supply their own peer authentication or owner verdict.
+
+Source cancellation and handoff compete through one CAS. Cancellation requires a
+verified durable destination-discard receipt before source resume. If handoff wins,
+source resume is permanently forbidden. Unknown outcomes keep the pending state.
+Replaying an identical request returns its immutable receipt before current epoch
+checks; a changed request under that ID is rejected.
+
+Activation atomically selects the validated generation, retires the old local
+generation, consumes the stage into retained `activated` proof and commits the
+participant and reply. Quota failure or worker death before commit changes none
+of them. Death after commit loses only the reply. Selecting remote never revives
+the retained source; returning from remote reserves a new local generation.
+
+L4 activation preserves the exact imported financial rows. Ordinary repositories
+remain blocked by `awaitingSync`; L4 exposes no way to clear it. L6/L7 must perform
+guarded mirror/context initialization and L9 must add explicit sync release. L5
+still owns first control bootstrap for existing configured remote users without
+IDB. UI routing and the end-to-end authenticated migration workflow belong to
+L5/L10, so the distributed extension still operates only through its backend.
+
+`sh scripts/test-authority-interop.sh ../ZenImportBackend` runs actual native IDB
+and SQLite transitions across persisted browser restarts in both directions.
+`INTEROP_BROWSER=chrome140` selects the supported minimum. Tests compare all 49
+tables, including exact attempt payloads, tombstones and target receipts. Python
+destination normalizations are independently enumerated; the native destination
+must preserve the sealed rows exactly. Peer-status and owner ports are offline
+fixtures, not evidence of live authenticated HTTP or SDK identity verification.
 
 ## Evidence
 
