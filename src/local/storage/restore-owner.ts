@@ -2,7 +2,7 @@
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import type {RuntimeControl,SentinelPort,DatasetSentinel} from '../../control/types.js';
-import {datasetControl} from '../../control/validation.js';
+import {datasetControl,runtimeControl} from '../../control/validation.js';
 import {participantUuid,requireParticipant} from '../../control/participant-wire.js';
 import {readArchive} from '../portable/zip.js';
 import {canonical,parseJson,validateManifest,TABLES} from '../portable/format.js';
@@ -12,6 +12,7 @@ import {int64,storageFailure} from './types.js';
 import {participantControl} from './participant-validation.js';
 import {encodeKey} from './cells.js';
 import {confirmReplacement,verifyReplacement} from './inactive-replacement.js';
+import {sameJournal} from '../migration/journal.js';
 import {restoreIntent,restoreScope,assertRestoreScope} from './restore-control.js';
 import type {RestoreIntent} from './restore-control.js';
 import {stageArchive} from './staging.js';
@@ -32,17 +33,21 @@ export interface RestoreConsent{formerWritersRetired:boolean;acceptPostSnapshotE
 const increment=(value:string)=>int64(String(BigInt(value)+1n));
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 export class RestoreOwner{
-  private constructor(private db:FinancialDatabase,private port:SentinelPort,private ports:RestorePorts,private clock:()=>number){}
-  static async open(name:string,port:SentinelPort,ports:RestorePorts,clock=()=>Date.now()/1000){
+  private constructor(private db:FinancialDatabase,private port:SentinelPort,private ports:RestorePorts,private clock:()=>number,private expected?:RuntimeControl){}
+  static async open(name:string,port:SentinelPort,ports:RestorePorts,clock=()=>Date.now()/1000,expected?:RuntimeControl){
+    const captured=expected?structuredClone(runtimeControl(expected)):undefined;
     const marker=await readAnchor(port),db=new FinancialDatabase(name,false);
-    try{await db.open();await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker));return new RestoreOwner(db,port,ports,clock);}
+    try{await db.open();await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker));return new RestoreOwner(db,port,ports,clock,captured);}
     catch(error){db.close();throw storageFailure(error);}
   }
   close(){this.db.close();}
   #now(){const value=int64(String(Math.floor(this.clock())));requireParticipant(BigInt(value)>=0n&&BigInt(value)<=253402300799n);return value;}
   async #unit<T>(write:boolean,operation:(root:RuntimeControl,marker:DatasetSentinel)=>Promise<T>){
     const marker=await readAnchor(this.port);
-    try{return await this.db.transaction(write?'rw':'r',this.db.tables,async()=>operation(await assertAnchor(this.db,marker),marker));}
+    try{return await this.db.transaction(write?'rw':'r',this.db.tables,async()=>{const root=await assertAnchor(this.db,marker),expected=this.expected;
+      requireParticipant(!expected||(!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&
+        sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_context');
+      return operation(root,marker);});}
     catch(error){if(error&&typeof error==='object'&&'code'in error)throw error;throw storageFailure(error);}
   }
   async #read(id:string){participantUuid(id);return restoreIntent((await this.db.applicationState.get(restoreScope(id)))?.value);}
@@ -118,10 +123,15 @@ export class RestoreOwner{
   }
   async preview(id:string){
     const value=await this.#unit(false,async(_root,marker)=>{const value=await this.#read(id);await this.#guard(value,marker);requireParticipant(['validated','preview'].includes(value.phase),'migration_incomplete');return value;});
-    const proof=await this.ports.verify(value.credentialRef),now=this.#now(),reader=await StageGraphReader.open(this.db,this.port,this.#fence(value),value.generation,this.#permit(value));
+    // Conservative freshness includes the SDK request and all response processing.
+    const now=this.#now(),proof=await this.ports.verify(value.credentialRef),reader=await StageGraphReader.open(this.db,this.port,this.#fence(value),value.generation,this.#permit(value));
     requireParticipant(same(proof.ownerIds,validateManifest(parseJson(new TextEncoder().encode(value.manifest))).zenmoney_identity.owner_ids),'migration_wrong_account');
     const summary=await restorePreview(reader,value,proof.raw,proof.sourceHash,now);
-    return this.#unit(true,async(_root,marker)=>{await this.#guard(value,marker);const next={...await this.#read(id),phase:'preview' as const,preview:summary};await this.#save(next);return next;});
+    return this.#unit(true,async(_root,marker)=>{
+      await this.#guard(value,marker);
+      const fresh=()=>{const current=this.#now();requireParticipant(BigInt(current)>=BigInt(now)&&BigInt(current)-BigInt(now)<=300n,'migration_incomplete');};
+      fresh();const next={...await this.#read(id),phase:'preview' as const,preview:summary};await this.#save(next);fresh();return next;
+    });
   }
   async activate(id:string,previewId:string,acceptSummary:boolean){
     participantUuid(previewId);requireParticipant(acceptSummary===true,'migration_paused');

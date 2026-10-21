@@ -3,7 +3,7 @@ import Dexie from 'dexie';
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
-import {datasetControl} from '../../control/validation.js';
+import {datasetControl,runtimeControl} from '../../control/validation.js';
 import {FinancialDatabase} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
 import {HeldReader} from './held-reader.js';
@@ -12,6 +12,7 @@ import {readOutbox} from './outbox-control.js';
 import {participantControl} from './participant-validation.js';
 import {participantUuid,requireParticipant} from '../../control/participant-wire.js';
 import {int64,storageFailure} from './types.js';
+import {sameJournal} from '../migration/journal.js';
 import {createArchive} from '../portable/zip.js';
 import {validateFinancialGraph} from '../portable/graph.js';
 import type {PortableManifest} from '../portable/format.js';
@@ -26,16 +27,20 @@ const increment=(value:string)=>int64(String(BigInt(value)+1n));
 const same=(a:unknown,b:unknown)=>JSON.stringify(a)===JSON.stringify(b);
 const hash=(data:Uint8Array)=>bytesToHex(sha256(data));
 export class BackupOwner{
-  private constructor(private db:FinancialDatabase,private port:SentinelPort){}
-  static async open(name:string,port:SentinelPort){
+  private constructor(private db:FinancialDatabase,private port:SentinelPort,private expected?:RuntimeControl){}
+  static async open(name:string,port:SentinelPort,expected?:RuntimeControl){
+    const captured=expected?structuredClone(runtimeControl(expected)):undefined;
     const marker=await readAnchor(port),db=new FinancialDatabase(name,false);
-    try{await db.open();await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker));return new BackupOwner(db,port);}
+    try{await db.open();await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker));return new BackupOwner(db,port,captured);}
     catch(error){db.close();throw storageFailure(error);}
   }
   close(){this.db.close();}
   async #unit<T>(write:boolean,work:(root:RuntimeControl)=>Promise<T>){
     const marker=await readAnchor(this.port);
-    try{return await this.db.transaction(write?'rw':'r',this.db.tables,async()=>work(await assertAnchor(this.db,marker)));}
+    try{return await this.db.transaction(write?'rw':'r',this.db.tables,async()=>{const root=await assertAnchor(this.db,marker),expected=this.expected;
+      requireParticipant(!expected||(!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&
+        sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_context');
+      return work(root);});}
     catch(error){if(error&&typeof error==='object'&&'code'in error)throw error;throw storageFailure(error);}
   }
   async #read(id:string){
@@ -51,6 +56,15 @@ export class BackupOwner{
       dataset.lifecycle==='held'&&dataset.holdId===value.id,'migration_paused');
     else requireParticipant(dataset.lifecycle==='retired'&&root.activeGeneration!==value.generation,'migration_paused');
   }
+  async sources(expected:RuntimeControl){return this.#unit(false,async root=>{
+    requireParticipant((!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&
+      sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_context');
+    const rows=await this.db.datasets.toArray();
+    return rows.map(datasetControl).filter(value=>value.ownerIds.length>0&&
+      (value.lifecycle==='retired'||root.activeMode==='local'&&value.generation===root.activeGeneration&&['active','held'].includes(value.lifecycle)))
+      .map(value=>({generation:value.generation,datasetId:value.datasetId,active:root.activeMode==='local'&&root.activeGeneration===value.generation,
+        acknowledged:value.backupAcknowledgedAt!==null}));
+  });}
   async list(){return this.#unit(false,async()=>{
     const rows=await this.db.applicationState.where('scope').startsWith('local-backup:').toArray();
     return rows.map(row=>structuredClone(row.value) as unknown as Backup);

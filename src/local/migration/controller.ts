@@ -45,6 +45,13 @@ export class ModeTransfers{
       },
     });return self;}catch(error){self.routes?.close();self.journal.close();throw error;}
   }
+  /** Stop one capture/recover one expired batch before a separately fenced snapshot. */
+  async backupRoot(){
+    const {root}=await this.owner.current();this.#expected(root);
+    requireParticipant(root.activeMode==='local'&&root.pendingSwitchId===null,'migration_paused');
+    if(!await this.owner.quiesceLocal(root,String(this.clock())))return null;
+    const selected=(await this.owner.current()).root;this.#expected(selected);return selected;
+  }
   async current(){return this.journal.current();}
   async pending(){const value=await this.current();return value!==null&&!['complete','cancelled'].includes(value.phase)||(await this.routes.current())?.phase==='quiescing';}
   async joinCurrent(){return this.routes.current();}

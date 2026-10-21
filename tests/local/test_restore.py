@@ -204,3 +204,46 @@ def test_preview_expiry_during_native_activation_rolls_back_even_after_final_wri
         fresh=ok(worker,'restore-preview','target',requestId=decision['id'],fixture=FIXTURE)
         assert fresh['preview']['id']!=proof['id']
         assert ok(worker,'restore-activate','target',requestId=decision['id'],peerId=fresh['preview']['id'])['phase']=='activated'
+
+
+def test_restore_begin_binds_the_callers_root_before_reading_the_archive(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,page,_):
+        raw,_,_=source_archive(worker);root=ok(worker,'create','target')['root']
+        args=dict(name='target',requestId=str(uuid4()),base64=raw,credentialRef=str(uuid4()),fixture=FIXTURE,
+            request=dict(root=root),mode='pause-restore-begin')
+        worker.evaluate("args=>{globalThis.staleRestore=authorityProbe.run('restore-begin',args);return true;}",args)
+        checkpoint(worker,page);ok(worker,'credential','target',credentialRef=str(uuid4()));ok(worker,'release')
+        assert worker.evaluate('()=>globalThis.staleRestore')['code']=='stale_context'
+        selected=ok(worker,'current','target')['root']
+        assert selected['activeGeneration']==root['activeGeneration'] and selected['pendingSwitchId'] is None
+        assert ok(worker,'restore-current','target') is None
+
+
+def test_preview_request_time_cannot_be_renewed_by_slow_owner_verification(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,_,_):
+        raw,_,_=source_archive(worker);ok(worker,'create','target');decision=begin(worker,raw)
+        ok(worker,'restore-load','target',requestId=decision['id'],base64=raw)
+        before=ok(worker,'current','target')['root']
+        failed=call(worker,'restore-preview','target',requestId=decision['id'],fixture=FIXTURE,mode='expire-during-restore-preview')
+        assert failed['code']=='migration_incomplete'
+        assert ok(worker,'restore-current','target')['phase']=='validated'
+        assert ok(worker,'current','target')['root']==before
+        fresh=ok(worker,'restore-preview','target',requestId=decision['id'],fixture=FIXTURE)
+        assert ok(worker,'restore-activate','target',requestId=decision['id'],peerId=fresh['preview']['id'])['phase']=='activated'
+
+
+@pytest.mark.parametrize('action',['restore-cancel','restore-activate'])
+def test_late_captured_restore_cannot_operate_on_a_newer_held_recovery(tmp_path,action):
+    with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,page,_):
+        raw,_,_=source_archive(worker);ok(worker,'create','target');first=begin(worker,raw)
+        held=ok(worker,'current','target')['root'];next_id=str(uuid4())
+        # The stale facade is suspended after opening, before its first native unit.
+        args=dict(name='target',requestId=next_id,peerId=str(uuid4()),request=dict(root=held),mode='pause-restore-begin')
+        worker.evaluate("data=>{globalThis.oldRestore=authorityProbe.run(data.action,data.args);return true;}",dict(action=action,args=args))
+        checkpoint(worker,page);ok(worker,'restore-cancel','target',requestId=first['id'])
+        second=begin(worker,raw,requestId=next_id);load_preview(worker,raw,second)
+        # Cancellation must not mutate B; activation must reject Root before proof lookup.
+        before=ok(worker,'current','target')['root'];ok(worker,'release')
+        assert worker.evaluate('()=>globalThis.oldRestore')['code']=='stale_context'
+        assert ok(worker,'current','target')['root']==before
+        assert ok(worker,'restore-current','target')['phase']=='preview'

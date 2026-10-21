@@ -1,6 +1,7 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
 import {SyncError} from '../../../extension/backend-client.js';
+import {LocalArchives} from '../../application/local-archives.js';
 import {ApplicationRuntime} from '../../application/runtime.js';
 import {RemoteArchiveRecovery} from '../../application/remote-archive-recovery.js';
 import {RemoteRecoverySelection} from './remote-recovery-selection.js';
@@ -11,6 +12,7 @@ import {fixtureArchive} from './staging-probe.js';
 import {ModeTransfers} from '../migration/controller.js';
 import {mirrorReader} from '../zenmoney/reader.js';
 import type {StorageArea} from '../../application/state.js';
+import type {RuntimeControl} from '../../control/types.js';
 import {trustedSentinel} from '../../control/sentinel.js';
 import {MigrationOwner} from './migration-owner.js';
 import type {PeerStatus} from './migration-owner.js';
@@ -86,7 +88,36 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('remote-recovery-')){
+      if(action.startsWith('local-archive-')){
+        const options={name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,session:native() as StorageArea,
+          permission:async()=>true,serverPermission:async()=>false,clock:()=>Number(args.now??now),
+          fetch:async(_input:RequestInfo|URL,init?:RequestInit)=>{
+            const body=JSON.parse(String(init?.body));if(body.transaction||body.deletion)throw Error('fixture_financial_write_forbidden');
+            const raw=args.fixture?.rows.zen_sync_runs[0].at(-1)?.[1] as string|undefined;
+            return raw?new Response(raw,{headers:{'Content-Type':'application/json'}}):Response.json({serverTimestamp:1792540800,user:[{id:args.mode==='wrong-owner'?2:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
+          }};
+        const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name,undefined,options);
+        try{const app=(await runtime.current())!,files=new LocalArchives(options,app);
+          if(action==='local-archive-status')value=await files.status();
+          else if(action==='local-archive-upload-begin')value=await files.uploadBegin(args.requestId!,args.count!,args.checksum!);
+          else if(action==='local-archive-upload-chunk')value=await files.uploadChunk(args.requestId!,args.peerId!,args.number!,Uint8Array.from(atob(args.base64!),c=>c.charCodeAt(0)));
+          else if(action==='local-archive-upload-seal')value=await files.uploadSeal(args.requestId!);
+          else if(action==='local-archive-discard')value=await files.discardUpload(args.requestId!);
+          else if(action==='local-archive-backup-begin')value=await files.backupBegin(args.requestId!,args.generation!);
+          else if(action==='local-archive-backup-step')value=await files.backupStep(args.requestId!);
+          else if(action==='local-archive-backup-chunk'){let raw='';for(const byte of await files.backupChunk(args.requestId!,args.number!))raw+=String.fromCharCode(byte);value=btoa(raw);}
+          else if(action==='local-archive-backup-ack')value=await files.backupAcknowledge(args.requestId!,args.checksum!);
+          else if(action==='local-archive-backup-clean')value=await files.backupClean(args.requestId!);
+          else if(action==='local-archive-backup-cancel')value=await files.backupCancel(args.requestId!);
+          else if(action==='local-archive-restore-begin')value=await files.restoreBegin(args.requestId!,args.token??null,{formerWritersRetired:true,acceptPostSnapshotEvidenceLoss:true});
+          else if(action==='local-archive-restore-step')value=await files.restoreStep(args.requestId!);
+          else if(action==='local-archive-restore-preview')value=await files.restorePreview(args.requestId!);
+          else if(action==='local-archive-restore-accept')value=await files.restoreAccept(args.requestId!,args.peerId!);
+          else if(action==='local-archive-restore-cancel')value=await files.restoreCancel(args.requestId!);
+          else if(action==='local-archive-restore-clean')value=await files.restoreClean(args.requestId!);
+          else throw Error('unknown_local_archive_fixture');
+        }finally{runtime.close();}
+      }else if(action.startsWith('remote-recovery-')){
         const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
         const controller=new RemoteArchiveRecovery({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,
           fetch:async(input,init)=>{
@@ -136,9 +167,10 @@ export async function run(action:string,args:Arguments){
         }finally{IDBObjectStore.prototype.put=put;selection.close();}
       }else if(action.startsWith('file-')){
         const marker=port(args.name);let fileReads=0;
-        const file=await ArchiveFileOwner.open(args.name,{...marker,async read(){if(args.mode==='pause-file-read'&&++fileReads===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return marker.read();}});
+        const file=await ArchiveFileOwner.open(args.name,{...marker,async read(){if(++fileReads===(args.mode==='pause-bound-file'?2:args.mode==='pause-file-read'?3:-1)){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return marker.read();}},(args.request as {root?:RuntimeControl}|undefined)?.root);
         try{
-          if(action==='file-begin')value=await file.begin(args.requestId!,args.count!,args.checksum!);
+          if(action==='file-current')value=await file.current();
+          else if(action==='file-begin')value=await file.begin(args.requestId!,args.count!,args.checksum!);
           else if(action==='file-status')value=await file.status(args.requestId!);
           else if(action==='file-put'){
             const add=IDBObjectStore.prototype.add;
@@ -153,10 +185,10 @@ export async function run(action:string,args:Arguments){
         const raw=args.fixture?.rows.zen_sync_runs[0].at(-1)?.[1] as string??JSON.stringify({serverTimestamp:1792540800,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
         const proof={ownerIds:args.mode==='wrong-owner'?['2']:['1'],sourceHash:'f'.repeat(64)};
         const restoreMarker=port(args.name);let restoreReads=0;
-        const restore=await RestoreOwner.open(args.name,{...restoreMarker,async read(){if(args.mode==='pause-restore-activate'&&++restoreReads===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return restoreMarker.read();}},{
-          async verify(){if(args.mode==='offline')throw new ParticipantError('zenmoney_unavailable');if(args.mode==='pause-restore-preview'){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return {...proof,raw};},
+        const restore=await RestoreOwner.open(args.name,{...restoreMarker,async read(){if(++restoreReads===(args.mode==='pause-restore-begin'?2:args.mode==='pause-restore-activate'?3:-1)){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return restoreMarker.read();}},{
+          async verify(){if(args.mode==='expire-during-restore-preview')restoreClocks.set(args.name,String(BigInt(restoreClocks.get(args.name)??args.now??now)+301n));if(args.mode==='offline')throw new ParticipantError('zenmoney_unavailable');if(args.mode==='pause-restore-preview'){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return {...proof,raw};},
           async credential(){return proof;},async permission(){return args.mode!=='permission-denied';},
-        },()=>Number(restoreClocks.get(args.name)??args.now??now));
+        },()=>Number(restoreClocks.get(args.name)??args.now??now),(args.request as {root?:RuntimeControl}|undefined)?.root);
         const put=IDBObjectStore.prototype.put;
         if(args.mode==='quota-activate'||args.mode==='quota-validated')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('archive-restore:')&&values[0]?.value?.phase===(args.mode==='quota-activate'?'activated':'validated'))throw new DOMException('synthetic-restore-quota','QuotaExceededError');return put.apply(this,values);};
         if(args.mode==='expire-after-restore-write')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&values[0]?.value?.phase==='activated')restoreClocks.set(args.name,String(BigInt(values[0].value.preview.checkedAt)+301n));return put.apply(this,values);};

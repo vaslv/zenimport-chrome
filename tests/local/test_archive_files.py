@@ -87,3 +87,20 @@ def test_cancel_revokes_late_file_reads_and_never_changes_routing(tmp_path,actio
         assert worker.evaluate('()=>globalThis.lateFile')['code']=='migration_paused'
         assert ok(worker,'file-status',requestId=value['id'])['phase']=='cancelled'
         assert ok(worker,'current')['root']==initial
+
+
+@pytest.mark.parametrize('action',['file-put','file-cancel','file-seal','file-clean'])
+def test_captured_file_mutations_reject_a_rotated_root(tmp_path,action):
+    with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,page,_):
+        root=ok(worker,'create')['root'];value=start(worker)
+        if action=='file-clean':ok(worker,'file-cancel',requestId=value['id'])
+        args=dict(name='source',requestId=value['id'],request=dict(root=root),mode='pause-bound-file',
+            peerId=value['nonce'],number=0,base64=base64.b64encode(DATA[:CHUNK]).decode())
+        before=ok(worker,'file-current')
+        worker.evaluate("data=>{globalThis.staleFile=authorityProbe.run(data.action,data.args);return true;}",dict(action=action,args=args))
+        checkpoint(worker,page);ok(worker,'credential',credentialRef=str(uuid4()));ok(worker,'release')
+        assert worker.evaluate('()=>globalThis.staleFile')['code']=='stale_context'
+        assert ok(worker,'file-current')==before
+        assert ok(worker,'file-status',requestId=value['id'])['received']==[]
+        ok(worker,'file-cancel',requestId=value['id'])
+        assert ok(worker,'file-clean',requestId=value['id'])['complete']

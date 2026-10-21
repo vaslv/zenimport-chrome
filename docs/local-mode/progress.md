@@ -1828,3 +1828,28 @@ is running and is not yet claimed as passed. Logs:
 
 L11 product integration and L12 remain unfinished. No live data/API, push, tags
 or publication.
+
+### L11 local archive facade checkpoint
+
+LocalArchives now provides native resumable file upload, active/retained-copy
+backup, explicit download acknowledgement, separately verified local recovery,
+preview acceptance, cancellation and bounded cleanup. File, backup and recovery
+owners enforce captured full Root inside native units; no stale popup handler can
+mutate a newer held recovery. Preview freshness includes request/processing time
+and is rechecked before/after native publication. Backup quiescence never invents
+complete bank history or sends financial transactions. Cancelled recovery retains
+its original archive and only removes the unactivated staging copy.
+
+API/adversarial reviews are clean after correcting freshness and stale recovery
+handler findings; see reviews/l11-local-archives-2026-10-22.md. Docker: 264
+unit/contracts passed (1938.90ms); native facade/file/backup/restore 37 passed,
+three large cases deselected (136.10s). Preceding complete file/restore run:
+26 passed (190.01s), including 1k/10k/100k restores. Final minimum Chrome 140
+facade/Root/freshness: 11 passed, 21 deselected (124.35s). Logs:
+/tmp/zenimport-l11-{archive-facade-unit,local-archives-native,
+local-archive-facade-native,local-archive-facade-min-final}.log.
+The previous remote archive coordinator also passed all seven minimum-browser
+actual-Python scenarios (72.41s): /tmp/zenimport-l11-controller-min.log.
+
+Server backup orchestration, product background/popup and L12 remain unfinished.
+No production/live data, push, tags or publication.

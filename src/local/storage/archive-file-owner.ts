@@ -1,11 +1,13 @@
 /** Private bounded file upload cache. Files never grant financial write authority. */
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
-import type {SentinelPort} from '../../control/types.js';
+import type {RuntimeControl,SentinelPort} from '../../control/types.js';
 import {participantUuid,participantDigest,requireParticipant} from '../../control/participant-wire.js';
 import {FinancialDatabase} from './database.js';
 import {assertAnchor,readAnchor} from './anchor.js';
 import {storageFailure} from './types.js';
+import {runtimeControl} from '../../control/validation.js';
+import {sameJournal} from '../migration/journal.js';
 
 const CHUNK=262144,MAX=67108864;
 const scope=(id:string)=>'archive-file:'+id;
@@ -22,17 +24,21 @@ function file(input:unknown):ArchiveFile{
     ['uploading','ready','cancelled','cleaned'].includes(v.phase));return structuredClone(v);
 }
 export class ArchiveFileOwner{
-  private constructor(private db:FinancialDatabase,private port:SentinelPort){}
-  static async open(name:string,port:SentinelPort){
+  private constructor(private db:FinancialDatabase,private port:SentinelPort,private expected?:RuntimeControl){}
+  static async open(name:string,port:SentinelPort,expected?:RuntimeControl){
+    const captured=expected?structuredClone(runtimeControl(expected)):undefined;
     const marker=await readAnchor(port),db=new FinancialDatabase(name,false);
-    try{await db.open();await db.transaction('r',db.runtime,db.datasets,async()=>{await assertAnchor(db,marker);});return new ArchiveFileOwner(db,port);}
+    try{await db.open();await db.transaction('r',db.runtime,db.datasets,async()=>{await assertAnchor(db,marker);});return new ArchiveFileOwner(db,port,captured);}
     catch(error){db.close();throw storageFailure(error);}
   }
   close(){this.db.close();}
   async #unit<T>(write:boolean,work:(installationId:string)=>Promise<T>){
     const marker=await readAnchor(this.port);
     try{return await this.db.transaction(write?'rw':'r',this.db.runtime,this.db.datasets,this.db.applicationState,this.db.archiveFileChunks,
-      async()=>work((await assertAnchor(this.db,marker)).installationId));}
+      async()=>{const root=await assertAnchor(this.db,marker),expected=this.expected;
+        requireParticipant(!expected||(!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&
+          sameJournal({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_context');
+        return work(root.installationId);});}
     catch(error){if(error&&typeof error==='object'&&'code'in error)throw error;throw storageFailure(error);}
   }
   async #read(id:string,installationId:string){participantUuid(id);const v=file((await this.db.applicationState.get(scope(id)))?.value);requireParticipant(v.id===id&&v.installationId===installationId);return v;}
@@ -47,6 +53,10 @@ export class ArchiveFileOwner{
       await this.#save(v);await this.db.applicationState.put({scope:'archive-file-head',value:{id}});return v;
     });
   }
+  async current(){return this.#unit(false,async installationId=>{
+    const id=(await this.db.applicationState.get('archive-file-head'))?.value.id;
+    return id===undefined?null:this.#read(participantUuid(id),installationId);
+  });}
   async status(id:string){return this.#unit(false,async installationId=>{
     const v=await this.#read(id,installationId),keys=await this.db.archiveFileChunks.where('id').equals(id).primaryKeys();
     const received=keys.map(key=>key[1]).sort((a,b)=>a-b);requireParticipant(received.length<=v.chunks&&received.every(n=>Number.isInteger(n)&&n>=0&&n<v.chunks));return {...v,received};
