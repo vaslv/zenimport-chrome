@@ -1725,3 +1725,18 @@ No live API/data, push, tags or publication.
   suite is running in disposable bounded batches; it is not yet counted as passed.
 
 No live bank/API/data, push, tags or publication.
+
+### L10 complete — independent control-engine major gate
+
+All confirmed API/adversarial major-review findings are corrected and final
+focused rereads are clean. See reviews/l10-major-gate-2026-10-22.md for invariants,
+commit/evidence references and the unavailable external CLI limitation. L10's live
+and archive control engine is complete; product routing remains disabled pending
+L11 integration and L12 acceptance. Consolidated full-browser verification is
+continuing in bounded disposable batches (first two: 110 and 66 passed, one
+separate interprocess scenario skipped). It is not yet claimed as a full pass.
+
+L11 has begun with a separately committed backend ordinary-context fence
+(e2b07ff, 74 focused Docker tests passed). The gated Chrome local facade is under
+implementation/review; no product routing has been enabled. No live data, push,
+tags or publication.
