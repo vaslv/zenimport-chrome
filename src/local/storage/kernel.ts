@@ -12,6 +12,7 @@ import type {Scalar,TaggedRow} from './types.js';
 import type {FinancialDatabase,FinancialEnvelope} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
+import {advanceFinancialRevision,isDerivedCache} from './revisions.js';
 import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 
 const immutableUpdate=new Set<TableName>(['bank_versions','capture_pages','captured_records','delivery_attempts',
@@ -29,12 +30,18 @@ export class RepositorySession{
   #live=true;
   #mirrorGeneration:string;
   #mirrorOnly:boolean;
+  #revisionAdvanced=false;
   constructor(db:FinancialDatabase,generation:string,owner:Transaction,mirrorGeneration=generation,mirrorOnly=false){this.#db=db;this.#generation=generation;this.#owner=owner;this.#mirrorGeneration=mirrorGeneration;this.#mirrorOnly=mirrorOnly;}
   #scope(table:TableName){return isMirrorTable(table)?this.#mirrorGeneration:this.#generation;}
   #writeScope(table:TableName,key?:readonly Scalar[]){
     if(!this.#mirrorOnly)return;
     requireStorage(isMirrorTable(table)||table==='zen_mirror_state'||table==='category_predictions'||
       table==='dataset_metadata'&&key?.[0]?.[0]==='text'&&key[0][1]==='zenmoney_refreshed_at','dataset_not_writable');
+  }
+
+  async #changed(table:TableName){
+    if(this.#revisionAdvanced||isDerivedCache(table))return;
+    await advanceFinancialRevision(this.#db,this.#generation);this.#revisionAdvanced=true;
   }
 
   close():void{this.#live=false;}
@@ -79,9 +86,9 @@ export class RepositorySession{
     return this.#guard(async()=>{
       requireStorage(!this.#mirrorOnly&&bankIds.length<=500,'dataset_not_writable');
       const rows=await this.findMany('deliveries',['bank_id'],bankIds.map(id=>[['text',id]]));
-      const values=rows.filter((row):row is RowByTable['deliveries']=>row!==null&&row.state==='prepared'&&row.ever_attempted==='0')
+      const values=rows.filter((row):row is RowByTable['deliveries']=>row!==null&&row.state==='prepared'&&row.ever_attempted==='0'&&(row.needs_rebuild!=='1'||row.authorized_job_id!==null))
         .map(row=>envelope(this.#generation,'deliveries',packRow('deliveries',{...row,needs_rebuild:'1' as RowByTable['deliveries']['needs_rebuild'],authorized_job_id:null})));
-      if(values.length)await this.#db.financial('deliveries').bulkPut(values);
+      if(values.length){await this.#changed('deliveries');await this.#db.financial('deliveries').bulkPut(values);}
     });
   }
 
@@ -95,6 +102,15 @@ export class RepositorySession{
       return values.map(value=>unpackRow(table,this.#checked(table,value)!));
     });
   }
+  /** Bounded primary-key page for private optimistic snapshot readers. */
+  async page<K extends TableName>(table:K,after:string|null=null){
+    return this.#guard(async()=>{
+      const scope=this.#scope(table),values=await this.#db.financial(table).where('[generation+key]')
+        .between([scope,after??Dexie.minKey],[scope,Dexie.maxKey],after===null,true).limit(500).toArray();
+      return {after:values.at(-1)?.key??null,rows:values.map(value=>unpackRow(table,this.#checked(table,value)!))};
+    });
+  }
+
   async count(table:TableName,prefix:readonly Scalar[]=[]):Promise<number>{
     return this.#guard(async()=>{
       requireStorage(prefix.length<=SCHEMA[table].primary.length,'schema_unsupported');const key=prefix.length?encodeKey(prefix):null,whole=prefix.length===SCHEMA[table].primary.length;
@@ -112,7 +128,7 @@ export class RepositorySession{
         if(!checked.has(key)){const snapshot=await this.get('job_accounts',[['text',row.job_id],['text',row.account_id]]);requireStorage(snapshot!==null&&snapshot.settings_version===row.settings_version,'invariant_violation');checked.add(key);}
         values.push(envelope(this.#generation,'capture_intervals',packRow('capture_intervals',row)));
       }
-      if(values.length)await this.#db.financial('capture_intervals').bulkAdd(values);
+      if(values.length){await this.#changed('capture_intervals');await this.#db.financial('capture_intervals').bulkAdd(values);}
     });
   }
 
@@ -208,7 +224,7 @@ export class RepositorySession{
       this.#writeScope(table,table==='dataset_metadata'?[['text',(fields as RowByTable['dataset_metadata']).key]]:undefined);
       const value=envelope(this.#scope(table),table,packRow(table,fields));
       await this.#foreignKeys(table,value.row);await this.#inserting(table,value.row);
-      this.#assert();await this.#db.financial(table).add(value);
+      await this.#changed(table);this.#assert();await this.#db.financial(table).add(value);
     });
   }
 
@@ -220,7 +236,8 @@ export class RepositorySession{
       const old=this.#checked(table,await this.#db.financial(table).get([this.#scope(table),value.key]));
       requireStorage(old!==null,'constraint_violation');
       await this.#changing(table,old,value.row);await this.#foreignKeys(table,value.row);
-      this.#assert();await this.#db.financial(table).put(value);
+      if(JSON.stringify(old)===JSON.stringify(value.row))return;
+      await this.#changed(table);this.#assert();await this.#db.financial(table).put(value);
     });
   }
 
@@ -245,7 +262,7 @@ export class RepositorySession{
           }else requireStorage(await dependants.first()===undefined,'constraint_violation');
         }
       }
-      this.#assert();await this.#db.financial(table).delete([this.#scope(table),key]);
+      await this.#changed(table);this.#assert();await this.#db.financial(table).delete([this.#scope(table),key]);
     });
   }
 }

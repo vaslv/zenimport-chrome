@@ -1072,3 +1072,24 @@ no remaining finding. Durable browser application remains a later L8 point.
 L8 still needs revision-fenced repository snapshots/application, persisted derived
 caches and complete-bank-coverage report assembly. L9–L12 remain pending. Local
 product routing and financial SDK dispatch are disabled; no push/tags/publication.
+
+### L8.4 — bounded revision-fenced source snapshots
+
+- Added a generation-private mutation revision, atomic with every actual financial
+  Session mutation. Immutable/FK checks precede no-op elision; all account-settings
+  paths use the same hook. Corrupt, negative or exhausted counters fail closed.
+- Added 500-row source pages, stable source/mirror/credential/participant stamps
+  and exclusive revalidation before derived application. Derived caches do not
+  mutate source revisions and cannot be read through the paged source API.
+- Both independent storage/API and adversarial reviews reported no findings; see
+  reviews/l8-snapshots-2026-10-21.md. This is a consistency foundation, not yet the
+  reconciler/cache publisher or an enabled local financial writer.
+- Docker: strict types/generated contracts +207 unit checks; 44 native regression
+  cases in 140.66s including 100k account settings; expanded current-browser
+  snapshots plus mirror regressions 36 passed in 234.97s; minimum Chrome 140
+  snapshots 11 passed in 75.32s. Covers restart, competing commits, settings/new
+  capture invalidation, quota rollback, rotation, bounded scans and corrupt/max
+  counters. Logs: /tmp/zenimport-l8-snapshot-*.log.
+
+Persisted reconciliation, cache publication and report assembly remain in L8;
+L9–L12 remain pending. No live API/data, push, tags or publication.

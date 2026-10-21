@@ -20,6 +20,8 @@ import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
 import {AccountRepository} from './account-repository.js';
+import {RepositoryOwner} from './repository-owner.js';
+import type {FinancialSnapshot} from './repository-owner.js';
 import {CaptureRepository} from './capture-repository.js';
 let paused=false;
 export const checkpoint=()=>paused;
@@ -55,6 +57,24 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action.startsWith('snapshot-')){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      const input=args.data as {stamp:FinancialSnapshot;table:TableName;after?:string|null};const put=IDBObjectStore.prototype.put;let armed=true;
+      if(args.mode==='quota-snapshot')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(armed&&this.name==='f_bank_accounts'){armed=false;throw new DOMException('private-snapshot-fixture','QuotaExceededError');}return put.apply(this,values);};
+      try{
+        if(action==='snapshot-begin')result=await owner.snapshot();
+        else if(action==='snapshot-scan')result=await owner.scan(input.table,input.stamp,input.after??null);
+        else if(action==='snapshot-check'){await owner.check(input.stamp);result=true;}
+        else if(action==='snapshot-write')result=await owner.apply(input.stamp,async view=>{
+          const row=await view.get('bank_accounts',[['text',args.id!]]);if(!row)throw Error('fixture_account');
+          await view.replace('bank_accounts',[['text',args.id!]],{...row,label:args.label??row.label});return true;
+        });
+        else if(action==='snapshot-cache')result=await owner.apply(input.stamp,async view=>{
+          const bank=await view.get('bank_transactions',[['text',args.id!]]),state=await view.get('zen_mirror_state',[['integer',int64('1')]]);if(!bank||!state)throw Error('fixture_record');
+          await view.insert('category_predictions',{bank_id:bank.id,bank_revision:bank.revision,category_id:null,source:'unknown',reason:'fixture',candidates_json:'[]',mirror_generation:state.generation,updated_at:int64(String(now))});return true;
+        });
+      }finally{owner.close();IDBObjectStore.prototype.put=put;}
+    }
     if(action.startsWith('capture-')&&action!=='capture-state'){
       const {root}=await store.context(),capture=await CaptureRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put;let armed=true;
