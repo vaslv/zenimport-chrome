@@ -1598,3 +1598,26 @@ local routing is disabled. No live API/data, push, tags or publication.
 Final latest-source minimum Chrome 140 recovery gate: 11 passed in 94.39s,
 three large resource cases covered on current Chromium above. Log:
 /tmp/zenimport-l10-restore-minimum-timed.log.
+
+### L10.13 — bounded resumable file cache and cancelled recovery cleanup
+
+- Private native schema v8 adds an upload cache separate from backup chunks and
+  portable financial facts. At most one non-cleaned file, 64 MiB/256 chunks.
+  Immutable exact retries, full durable digest, fresh nonce/phase at final read,
+  bounded explicit cleanup and no Root/writer changes. Restart and quota faults
+  preserve received chunk progress; cancellation fences late seal/Blob results.
+- Explicit cancelled-stage cleanup retains source/archive evidence and removes at
+  most 500 rows from the fresh never-active discarded generation per call. It
+  rejects active/anchor/activated/peer-authorized data and never resumes a source.
+- Independent API/adversarial reviews: no findings. External cross-model CLI
+  unavailable. See reviews/l10-archive-files-2026-10-22.md.
+- Latest Docker strict/generated/bundle and all 249 unit/contracts passed in
+  951.55ms. Current Chromium storage/kernel/upgrade/authority/files/recovery:
+  63 passed in 131.18s (three already-covered large recovery cases deselected).
+  Minimum Chrome 140 files/recovery: 16 passed in 156.77s (three large deselected).
+  Logs: /tmp/zenimport-l10-files-final-unit.log,
+  /tmp/zenimport-l10-files-regression.log, /tmp/zenimport-l10-files-minimum.log.
+
+L10 remains in progress: server archive backup/recovery, then major-gate review.
+L11 product integration and L12 full acceptance remain pending. Product local
+routing is disabled. No live API/data, push, tags or publication.

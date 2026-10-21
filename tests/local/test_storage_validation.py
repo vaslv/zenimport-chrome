@@ -69,7 +69,7 @@ def test_native_stage_upgrade_adds_no_proof_and_malformed_upgrade_rolls_back(tmp
             value=result['value'];old=value['stages'][0]
             assert old['id']==stage['id'] and old['state']=='format_valid'
             if mode=='upgrade-stage-v3':
-                assert value['code'] is None and value['version']==7
+                assert value['code'] is None and value['version']==8
                 assert all(old[key] is None for key in ('graphVersion','graphDigest','graphVerifiedAt'))
             else:
                 assert value['code']=='storage_corrupt' and value['version']==3

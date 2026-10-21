@@ -1,5 +1,6 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
+import {ArchiveFileOwner} from './archive-file-owner.js';
 import {BackupOwner} from './backup-owner.js';
 import {RestoreOwner} from './restore-owner.js';
 import {fixtureArchive} from './staging-probe.js';
@@ -81,7 +82,22 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('restore-')){
+      if(action.startsWith('file-')){
+        const marker=port(args.name);let fileReads=0;
+        const file=await ArchiveFileOwner.open(args.name,{...marker,async read(){if(args.mode==='pause-file-read'&&++fileReads===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return marker.read();}});
+        try{
+          if(action==='file-begin')value=await file.begin(args.requestId!,args.count!,args.checksum!);
+          else if(action==='file-status')value=await file.status(args.requestId!);
+          else if(action==='file-put'){
+            const add=IDBObjectStore.prototype.add;
+            if(args.mode==='quota')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(this.name==='archive_file_chunks')throw new DOMException('synthetic-file-quota','QuotaExceededError');return add.apply(this,values);};
+            try{value=await file.put(args.requestId!,args.peerId!,args.number!,Uint8Array.from(atob(args.base64!),c=>c.charCodeAt(0)));}finally{IDBObjectStore.prototype.add=add;}
+          }else if(action==='file-seal')value=await file.seal(args.requestId!);
+          else if(action==='file-blob'){const blob=await file.blob(args.requestId!);value={bytes:blob.size,checksum:await crypto.subtle.digest('SHA-256',await blob.arrayBuffer()).then(bytes=>Array.from(new Uint8Array(bytes),n=>n.toString(16).padStart(2,'0')).join(''))};}
+          else if(action==='file-cancel')value=await file.cancel(args.requestId!);
+          else if(action==='file-clean')value=await file.clean(args.requestId!);
+        }finally{file.close();}
+      }else if(action.startsWith('restore-')){
         const raw=args.fixture?.rows.zen_sync_runs[0].at(-1)?.[1] as string??JSON.stringify({serverTimestamp:1792540800,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
         const proof={ownerIds:args.mode==='wrong-owner'?['2']:['1'],sourceHash:'f'.repeat(64)};
         const restore=await RestoreOwner.open(args.name,port(args.name),{
@@ -98,6 +114,7 @@ export async function run(action:string,args:Arguments){
           else if(action==='restore-preview')value=await restore.preview(args.requestId!);
           else if(action==='restore-activate')value=await restore.activate(args.requestId!,args.peerId!,args.mode!=='no-summary');
           else if(action==='restore-cancel')value=await restore.cancel(args.requestId!);
+          else if(action==='restore-clean')value=await restore.cleanCancelled(args.requestId!,args.mode!=='no-retention');
         }finally{IDBObjectStore.prototype.put=put;restore.close();}
       }else if(action.startsWith('backup-')){
         const marker=port(args.name);let count=0;

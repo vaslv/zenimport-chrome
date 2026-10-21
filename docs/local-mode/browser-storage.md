@@ -2,7 +2,7 @@
 
 The extension's local financial mode is still disabled in product handlers.
 L4 uses actual IndexedDB/Dexie with the 49 typed financial tables and independent
-runtime/dataset/import control. Physical IDB version 7 is independent of financial
+runtime/dataset/import control. Physical IDB version 8 is independent of financial
 schema 1 and archive version 2. Versions 1–5 are unpublished development layouts.
 Version 6 adds two nonportable application-control stores for scoped transient
 state and nonsecret remote context descriptors; financial/archive schemas do not
@@ -181,3 +181,10 @@ unsigned data descriptors are supported; their size, rather than an ambiguous CR
 value, determines whether the optional signature is present. Compression yields
 outside database transactions so large inputs do not monopolize message handling.
 Nested native quota/BulkError/AbortError outcomes are redacted to stable codes.
+
+Physical version 8 adds `archive_file_chunks` (61 native stores total) for one
+private resumable archive upload. It is excluded from portable financial data.
+Uploads are limited to 64 MiB and 256 immutable 256 KiB chunks. Metadata and byte
+hashes are verified again before readiness and Blob assembly. Cancellation revokes
+in-flight readers; cleanup removes one cached chunk per call. File uploads never
+change routing, credentials, financial rows or writer authority.

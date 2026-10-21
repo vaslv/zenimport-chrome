@@ -168,3 +168,20 @@ def test_changed_manifest_text_never_reuses_cached_identity_or_activation_proof(
         assert not call(worker,'restore-preview','target',requestId=decision['id'],fixture=FIXTURE)['ok']
         assert not call(worker,'restore-activate','target',requestId=decision['id'],peerId=preview['preview']['id'])['ok']
         assert ok(worker,'current','target')['root']==before
+
+
+def test_cancelled_stage_cleanup_requires_retaining_archive_and_never_touches_source(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,_,_):
+        raw,source_rows,_=source_archive(worker);ok(worker,'create','target');decision=begin(worker,raw)
+        load_preview(worker,raw,decision)
+        assert call(worker,'restore-clean','target',requestId=decision['id'])['code']=='migration_paused'
+        ok(worker,'restore-cancel','target',requestId=decision['id']);root=ok(worker,'current','target')['root']
+        assert call(worker,'restore-clean','target',requestId=decision['id'],mode='no-retention')['code']=='migration_paused'
+        calls=0
+        while not ok(worker,'restore-clean','target',requestId=decision['id'])['complete']:
+            calls+=1;assert calls<100
+        assert calls>0 and ok(worker,'restore-clean','target',requestId=decision['id'])['complete']
+        assert ok(worker,'current','target')['root']==root
+        assert ok(worker,'inspect')['rows']==source_rows
+        assert not call(worker,'restore-load','target',requestId=decision['id'],base64=raw)['ok']
+        assert begin(worker,raw)['phase']=='loading'

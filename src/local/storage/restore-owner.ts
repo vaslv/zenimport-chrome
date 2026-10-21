@@ -151,4 +151,24 @@ export class RestoreOwner{
     await this.db.runtime.put({...root,pendingSwitchId:null,epoch:increment(root.epoch)});
     const next={...value,phase:'cancelled' as const,nonce:crypto.randomUUID()};await this.#save(next);return next;
   });}
+  /** Explicit discard of an aborted, never-active copy; original archive retained. */
+  async cleanCancelled(id:string,retainOriginalArchive:boolean){
+    requireParticipant(retainOriginalArchive===true,'migration_paused');
+    return this.#unit(true,async(root,marker)=>{
+      const value=await this.#read(id);requireParticipant(value.phase==='cancelled'&&root.activeGeneration!==value.generation&&marker.generation!==value.generation,'migration_paused');
+      const dataset=datasetControl(await this.db.datasets.get(value.generation)),control=participantControl(await this.db.participants.get(value.participantId));
+      requireParticipant(dataset.lifecycle==='discarded'&&dataset.holdId===null&&dataset.participantId===value.participantId&&
+        control.generation===value.generation&&!control.everActivated&&!control.awaitingSync&&control.operationId===null,'migration_paused');
+      requireParticipant(await this.db.migrationOperations.where('switchId').equals(id).count()===0&&
+        await this.db.migrationReceipts.where('[participantId+switchId]').equals([value.participantId,id]).count()===0,'migration_paused');
+      const audit='archive-restore-cleanup:'+id;
+      await this.db.applicationState.put({scope:audit,value:{archiveSha256:value.archiveSha256,retainOriginalArchive:true}});
+      for(const table of TABLES){
+        const keys=await this.db.financial(table).where('generation').equals(value.generation).limit(500).primaryKeys();
+        if(keys.length){await this.db.financial(table).bulkDelete(keys);return {complete:false};}
+      }
+      await this.db.stages.delete(value.generation);return {complete:true};
+    });
+  }
+
 }
