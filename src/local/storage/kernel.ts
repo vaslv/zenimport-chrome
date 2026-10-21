@@ -78,6 +78,19 @@ export class RepositorySession{
     requireStorage(index!==undefined,'schema_unsupported');
     return this.#checked(table,await this.#db.financial(table).where('[generation+'+index.key+']').equals([this.#scope(table),key]).first());
   }
+  async find<K extends TableName>(table:K,columns:readonly string[],values:readonly Scalar[]):Promise<RowByTable[K]|null>{
+    return this.#guard(async()=>{requireStorage(columns.length===values.length,'schema_unsupported');const row=await this.#lookup(table,columns,values);return row===null?null:unpackRow(table,row);});
+  }
+  async related<K extends TableName>(table:K,columns:readonly string[],values:readonly Scalar[]):Promise<RowByTable[K][]>{
+    return this.#guard(async()=>{
+      requireStorage(columns.length===values.length,'schema_unsupported');const definition=SCHEMA[table];
+      const foreign=definition.foreignKeys.findIndex(key=>same(key.columns,columns));
+      const index=definition.indexes.find(key=>!key.partial&&same(key.columns,columns));
+      requireStorage(foreign>=0||index!==undefined,'schema_unsupported');
+      const rows=await this.#db.financial(table).where('[generation+'+(foreign>=0?'fk'+foreign:index!.key)+']').equals([this.#scope(table),encodeKey(values)]).toArray();
+      return rows.map(value=>unpackRow(table,this.#checked(table,value)!));
+    });
+  }
 
   async #foreignKeys(table:TableName,row:TaggedRow):Promise<void>{
     const definition=SCHEMA[table];

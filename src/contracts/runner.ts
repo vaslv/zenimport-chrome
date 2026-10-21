@@ -6,6 +6,8 @@ import {calendarDate, localDay, shiftMonths} from '../domain/dates.js';
 import {canonicalDto, dtoDigest, moneyFromWire, rawRoundtrip} from '../domain/codec.js';
 import {ExactDecimal} from 'zenmoney-typescript';
 import {FixtureContext} from './context.js';
+import {plannedRanges,frontier,mergeRanges,chunks,subtractRange} from '../domain/periods.js';
+import type {DayRange} from '../domain/periods.js';
 
 export interface Scenario {
   contract_version: number; id: string; implemented_by_stage: string; clock: string;
@@ -45,6 +47,11 @@ export async function execute(operation: string, input: Record<string, unknown>)
     case 'dates.calendar': return calendarDate(text(input.value));
     case 'dates.localDay': return localDay(text(input.value), text(input.timezone));
     case 'dates.months': return shiftMonths(text(input.value), input.delta as number);
+    case 'capture.periods': {
+      const start=text(input.start),end=text(input.end),coverage=input.coverage as DayRange[],forced=input.forced===null?null:text(input.forced);
+      const planned=plannedRanges(start,end,coverage,forced),merged=mergeRanges([...planned,...(input.outstanding as DayRange[])]);
+      return {frontier:frontier(start,coverage),planned,merged,chunks:chunks(merged,input.days as number),remaining:subtractRange(input.outstanding as DayRange[],start,end)};
+    }
     case 'wire.canonical': return canonicalDto(input.value);
     case 'wire.digest': return dtoDigest(input.value);
     case 'wire.roundtrip': return rawRoundtrip(text(input.value));

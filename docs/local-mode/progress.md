@@ -887,3 +887,33 @@ the independent specialist/adversarial agents did complete.
 L7 is next: local connection/account settings and complete bank capture. L8–L12
 remain pending. No live account or production service was touched. No push, tag
 or publication was performed.
+
+## L7 — local accounts and bank capture (in progress)
+
+### L7.1 and period-policy foundation
+
+- Added a named local connection owner for discover/list/get/rename/unlink.
+  Physical bank accounts use the same canonical identity as Python, while
+  profile-scoped accounts remain separate. Complete absence, partial discovery,
+  unsupported observations and unlink affect only the appropriate connection;
+  historic membership and financial IDs are retained.
+- Added strict frozen-contract setup validation, exact internal version text,
+  Python-compatible name trimming and indexed private lookup/FK relations.
+  Account operations share Root/epoch/participant/hold guards; imported
+  awaiting-sync state still cannot trigger ordinary financial mutations.
+- Ported the pure calendar coverage planner: contiguous frontier, 14-day overlap,
+  forced periods, outstanding obligations, inclusive merging/chunking/subtraction.
+  The installed browser agreed with the actual Python planner on 250 seeded
+  gap/overlap/forced-range cases. Calendar-month presets remain in the existing
+  shared date/UI path. Initial period precedence is unchanged.
+- Independent API/domain review compared the new owner to accounts.py and
+  capture.py and found no confirmed issue in this point. Docker strict types and
+  186 unit/contracts passed; 13 native connection/kernel checks passed (3+10),
+  plus the actual Python/browser planner parity test. Logs:
+  /tmp/zenimport-l7-connections.log, /tmp/zenimport-l7-unit.log,
+  /tmp/zenimport-l7-parity.log. A follow-up native run covers rollback after a
+  valid first account and a conflicting later observation.
+
+Not yet complete: L7 account settings/catalog proof, immutable capture jobs,
+leases/pages/completion and complete captured-fact parity. The product remains
+remote-only. L8–L12 remain pending; no release or publication is implied.

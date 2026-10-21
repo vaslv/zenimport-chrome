@@ -18,6 +18,7 @@ import type {RuntimeControl} from '../../control/types.js';
 import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
+import {AccountRepository} from './account-repository.js';
 let paused=false;
 export const checkpoint=()=>paused;
 let networkSerial=0,releaseRead:(()=>void)|undefined;
@@ -33,7 +34,7 @@ function area(name:string,session=false):StorageArea{
     remove:keys=>source.remove((typeof keys==='string'?[keys]:keys).map(key=>prefix+key)),
   };
 }
-export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number}){
+export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number;data?:unknown;id?:string;accountId?:string;label?:string}){
   const storage=area(args.name),sentinel=trustedSentinel(storage),now=args.now??1000;let store:MirrorRepository|undefined,calls=0,maxTransactionMs=0;
   const nativeTransaction=IDBDatabase.prototype.transaction;
   IDBDatabase.prototype.transaction=function(...values:Parameters<IDBDatabase['transaction']>){
@@ -52,6 +53,16 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action.startsWith('connections-')){
+      const {root}=await store.context(),accounts=await AccountRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{
+        if(action==='connections-discover')result=await accounts.discover(args.data,String(now));
+        else if(action==='connections-list')result=await accounts.list(args.id??'bidv');
+        else if(action==='connections-get')result=await accounts.get(args.id!);
+        else if(action==='connections-rename')result=await accounts.rename(args.id!,args.label);
+        else if(action==='connections-unlink')result=await accounts.unlink(args.id!,args.accountId!,String(now));
+      }finally{accounts.close();}
+    }
     if(action==='verify'){
       const original=MirrorRepository.prototype.adopt;
       if(args.mode==='pause-adopt')MirrorRepository.prototype.adopt=new Proxy(original,{apply(){paused=true;return new Promise(()=>{});}});
