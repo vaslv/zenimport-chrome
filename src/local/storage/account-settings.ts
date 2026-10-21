@@ -71,7 +71,7 @@ export class AccountSettingsOwner{
     requireCapture(start<=today&&(caps.earliest_date==null||start>=caps.earliest_date));
     const root=runtimeControl(await this.db.runtime.get('runtime')),control=(await this.db.applicationState.get('mirror:'+this.fence.generation))?.value;
     const state=await view.get('zen_mirror_state',[['integer',int64('1')]]);
-    requireCapture(root.credentialRef!==null&&control?.forceFull!==true&&control?.lease==null&&state?.ready==='1'&&state.needs_full==='0'&&state.refreshed_at!==null&&
+    requireCapture(root.credentialRef!==null&&control!==undefined&&control.forceFull!==true&&control?.lease==null&&state?.ready==='1'&&state.needs_full==='0'&&state.refreshed_at!==null&&
       BigInt(now)>=BigInt(state.refreshed_at)&&BigInt(now)-BigInt(state.refreshed_at)<=300n,'zenmoney_unavailable');
     const entity=await view.get('zen_entities',[text('account'),text(data.zenmoney_account_id!)]),target=entity?decodeJson(entity.data) as JsonObject:null,instrumentId=target?.instrument;
     const instrument=instrumentId==null?null:await view.get('zen_entities',[text('instrument'),text(String(instrumentId))]),currency=instrument?decodeJson(instrument.data) as JsonObject:null;

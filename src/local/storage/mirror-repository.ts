@@ -56,7 +56,8 @@ export class MirrorRepository{
   async context(){return this.#transaction(undefined,async(_,root)=>({root,owners:[...datasetControl(await this.db.datasets.get(root.activeGeneration!)).ownerIds]}));}
   async #control(root:RuntimeControl){
     const value=(await this.db.applicationState.get('mirror:'+root.activeGeneration))?.value as unknown as MirrorControl|undefined;
-    if(value===undefined)return initial();
+    // Portable financial readiness is not a local confirmation for this generation.
+    if(value===undefined)return initial(null,true);
     requireStorage(value!==null&&typeof value==='object'&&Object.keys(value).sort().join(',')==='error,failures,forceFull,lease,nextAt,projectionGeneration'&&typeof value.forceFull==='boolean','storage_corrupt');
     requireStorage(value.projectionGeneration===null||typeof value.projectionGeneration==='string','storage_corrupt');
     requireStorage(BigInt(int64(value.failures))>=0n&&BigInt(int64(value.nextAt))>=0n,'storage_corrupt');

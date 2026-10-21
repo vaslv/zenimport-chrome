@@ -20,6 +20,8 @@ import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
 import {AccountRepository} from './account-repository.js';
+import {ReportRepository} from './report-repository.js';
+import type {ReportRequest} from '../reports/build.js';
 import {readSource} from '../reconciliation/source.js';
 import {sourceFacts} from '../reconciliation/facts.js';
 import {RepositoryOwner} from './repository-owner.js';
@@ -59,6 +61,10 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action==='report-build'){
+      const {root}=await store.context(),reports=await ReportRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{result=await reports.build(args.data as ReportRequest,String(now));}finally{reports.close();}
+    }
     if(action==='source-facts'){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       try{const source=await readSource(owner),facts=sourceFacts(source);result={stamp:source.stamp,banks:[...facts.banks],revisions:[...facts.revisions],transactions:[...facts.transactions],blockingTransactions:[...facts.blockingTransactions],reviewed:[...facts.reviewed],tags:[...facts.tags],instruments:[...facts.instruments]};}finally{owner.close();}

@@ -1111,3 +1111,22 @@ L9–L12 remain pending. No live API/data, push, tags or publication.
 L8 still needs persisted reconciliation/cache publication and report assembly.
 This checkpoint does not enable local routing or a financial SDK writer. No live
 API/data, push, tags or publication.
+
+### L8.6 — delivery-independent discrepancy reports
+
+- Implemented the read-only named report repository on a revalidated source
+  snapshot. It shows both unmatched sides and exact daily totals, even if totals
+  balance or sending is blocked; only complete bank coverage/versions are used.
+- Reports use current connection-scoped discovery/support/title, current mobile
+  operation legs (including FX/transfers/debt), multiplicity and bounded splits.
+- Fixed archived mirror readiness without local generation confirmation. Same-token
+  restored data requires an actual full read before reports/catalog readiness;
+  enabled account settings also enforce the local confirmation gate.
+- Both final independent reviews are clean; see reviews/l8-reports-2026-10-21.md.
+  Docker: 211 unit checks; 18 native/actual Python report cases in 31.62s; 36
+  mirror/snapshot regressions in 254.94s; minimum Chrome 140 six report cases in
+  39.58s. Logs: /tmp/zenimport-l8-reports-*.log.
+
+L8 still needs persisted reconciliation and category cache publication. Reports
+remain internal until the L11 privileged facade/UI integration. No product local
+financial routing/writer, live data/API, push, tags or publication.

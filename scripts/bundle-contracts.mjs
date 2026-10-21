@@ -27,3 +27,4 @@ await build({entryPoints:['src/local/storage/participant-transition.ts'],outfile
 for(const name of ['sentinel','validation','participant-wire'])await build({entryPoints:['src/control/'+name+'.ts'],outfile:'.local/contracts/control-'+name+'.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/local/reconciliation/facts.ts'],outfile:'.local/contracts/source-facts.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+await build({entryPoints:['src/local/reports/build.ts'],outfile:'.local/contracts/discrepancy-report.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
