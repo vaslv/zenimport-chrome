@@ -20,6 +20,8 @@ import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
 import {AccountRepository} from './account-repository.js';
+import {readSource} from '../reconciliation/source.js';
+import {sourceFacts} from '../reconciliation/facts.js';
 import {RepositoryOwner} from './repository-owner.js';
 import type {FinancialSnapshot} from './repository-owner.js';
 import {CaptureRepository} from './capture-repository.js';
@@ -57,6 +59,10 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action==='source-facts'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{const source=await readSource(owner),facts=sourceFacts(source);result={stamp:source.stamp,banks:[...facts.banks],revisions:[...facts.revisions],transactions:[...facts.transactions],blockingTransactions:[...facts.blockingTransactions],reviewed:[...facts.reviewed],tags:[...facts.tags],instruments:[...facts.instruments]};}finally{owner.close();}
+    }
     if(action.startsWith('snapshot-')){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       const input=args.data as {stamp:FinancialSnapshot;table:TableName;after?:string|null};const put=IDBObjectStore.prototype.put;let armed=true;

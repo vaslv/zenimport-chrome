@@ -1093,3 +1093,21 @@ product routing and financial SDK dispatch are disabled; no push/tags/publicatio
 
 Persisted reconciliation, cache publication and report assembly remain in L8;
 L9–L12 remain pending. No live API/data, push, tags or publication.
+
+### L8.5 — exact repository/domain source boundary
+
+- Added a named bounded source reader over the revision-fenced 25 required tables.
+  Every 500-row page and final result checks the same source/authority stamp.
+- Added exact SDK/raw amount conversion, original-quantum learning flags, current
+  and historical bank versions including legacy signed units, and separate
+  tombstone-aware matching/training vs blocking transaction maps.
+- Fixed decimal-zero category direction and falsey legacy-detail boundaries found
+  during review; both independent final reviews are clean. See
+  reviews/l8-source-facts-2026-10-21.md.
+- Docker: 211 unit/contracts plus strict types/generated checks passed; 2 actual
+  Python/native browser source checks passed in 2.78s. Logs:
+  /tmp/zenimport-l8-facts-unit*.log, /tmp/zenimport-l8-facts-parity*.log.
+
+L8 still needs persisted reconciliation/cache publication and report assembly.
+This checkpoint does not enable local routing or a financial SDK writer. No live
+API/data, push, tags or publication.
