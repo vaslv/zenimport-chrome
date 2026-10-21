@@ -699,3 +699,15 @@ No archive validity is presented as financial graph or activation authority.
   an old request ID fails before another owner read (1 passed, 21 deselected, 7.05s).
   The final independent implementation review is recorded in
   reviews/l4-authority-2026-10-21.md. Wider final browser gates are still running.
+
+### L4.20 — correct the historical upgrade fixture
+
+- The broad Docker suite exposed an obsolete test-only v3 builder: it enumerated
+  all current stores, including new authority tables absent from the old layout.
+  It now enumerates the actual old layout and copies the corresponding current
+  records. No runtime upgrade, financial invariant or authority check is relaxed.
+- Before correction, the full Chromium 145 run passed 111 cases, including all
+  large-dataset cases, and failed this one setup helper; four explicit offline
+  interop cases were skipped because they require their separate runners. Both
+  successful/failed v3-upgrade assertions remain, and independent review confirmed
+  the fixture correction preserves their scope. Final regression runs follow.

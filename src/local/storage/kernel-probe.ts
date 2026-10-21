@@ -44,8 +44,9 @@ export async function kernelProbe(args:KernelArguments,sentinel:SentinelPort):Pr
       const old=new Dexie(name,{autoOpen:false});
       old.version(3).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'});await old.open();
       try{
-        for(const table of db.tables){
-          const values=await table.toArray();
+        // Copy the old layout only; new authority stores did not exist in v3.
+        for(const table of old.tables){
+          const values=await db.table(table.name).toArray();
           if(table.name==='portable_stages')for(const value of values){
             delete value.graphVersion;delete value.graphDigest;delete value.graphVerifiedAt;
             if(args.mode==='failed-upgrade-stage-v3')value.unexpected='reject';
