@@ -111,7 +111,7 @@ export async function run(action:string,args:Arguments){
           }else if(action==='transfer-candidate'){const candidate=await transfer.serverCredentials.verify({url:args.url!,token:args.token!},['1']);value={...candidate,contextId:(await transfer.serverCredentials.read(candidate.ref)).contextId};}
           else if(action==='transfer-to-server')value=await transfer.toServer(args.credentialRef!);
           else if(action==='transfer-to-browser'){
-            const candidate=await transfer.localCredentials.verifyToken('synthetic-local-sdk-token');value=await transfer.toBrowser(candidate.ref,{pauseSharedServer:args.mode!=='no-consent'});
+            const candidate=await transfer.localCredentials.verifyToken('synthetic-local-sdk-token');value=await transfer.toBrowser(candidate.ref,{pauseSharedServer:args.mode!=='no-consent',replaceInactiveLocalCopy:args.mode==='replace-copy'});
           }else if(action==='transfer-join')value=await transfer.joinServer(args.requestId!,args.credentialRef!,{retainLocalCopy:args.mode!=='no-consent',withoutImport:true,acceptMissingDedupEvidence:true});
           else if(action==='transfer-join-current')value=await transfer.joinCurrent();
           else if(action==='transfer-join-cancel')value=await transfer.cancelJoin(args.requestId!);
@@ -147,8 +147,8 @@ export async function run(action:string,args:Arguments){
         };
         try{
           if(action==='journal-create'){
-            const current=await owner.current(),local=args.mode==='remote-to-local';
-            value=await journal.create(current.root,{id:args.switchId!,direction:local?'remote-to-local':'local-to-remote',sourceId:local?args.peerId!:current.participantId!,destinationId:local?null:args.peerId!,remoteCredentialRef:local?current.root.credentialRef!:args.credentialRef!,localCredentialRef:local?args.credentialRef!:current.root.credentialRef!,ownerIds:['1']});
+            const current=await owner.current(),local=args.mode?.startsWith('remote-to-local')===true;
+            value=await journal.create(current.root,{id:args.switchId!,direction:local?'remote-to-local':'local-to-remote',sourceId:local?args.peerId!:current.participantId!,destinationId:local?null:args.peerId!,remoteCredentialRef:local?current.root.credentialRef!:args.credentialRef!,localCredentialRef:local?args.credentialRef!:current.root.credentialRef!,ownerIds:['1']},args.mode==='remote-to-local-replace');
           }else if(action==='journal-current')value=await journal.current();
           else if(action==='journal-claim')value=await journal.claim(args.switchId!,time);
           else if(action==='journal-run'){

@@ -96,7 +96,17 @@ def test_remote_reservation_rejects_the_wrong_pair_without_poisoning_recovery(pa
     pair.command('target','destination_activate',peer_receipt=handed)
     ok(worker,'select-remote',participantId=pair.source,switchId=pair.switch,credentialRef=str(uuid4()))
     switch,credential=str(uuid4()),str(uuid4())
-    ok(worker,'journal-create',switchId=switch,peerId=pair.target,credentialRef=credential,mode='remote-to-local')
+    from test_backup import acknowledged_inactive_backup
+    acknowledged_inactive_backup(worker)
+    # An earlier-sorted, later-acknowledged export cannot revoke the exact
+    # backup evidence already accepted by the replacement decision.
+    later='00000000-0000-4000-8000-000000000001'
+    ok(worker,'backup-begin',requestId=later,generation=ok(worker,'current')['anchorGeneration'])
+    ready=ok(worker,'backup-build',requestId=later)
+    ok(worker,'journal-create',switchId=switch,peerId=pair.target,credentialRef=credential,mode='remote-to-local-replace')
+    from test_backup import archive
+    archive(worker,later)
+    ok(worker,'backup-ack',requestId=later,checksum=ready['sha256'])
     lease=ok(worker,'journal-claim',switchId=switch)
     reserved=ok(worker,'reserve',switchId=switch,peerId=pair.target,credentialRef=credential)
     before=ok(worker,'journal-current')
@@ -338,7 +348,9 @@ def test_unused_remote_destination_abort_fences_late_coordinator(pair,acknowledg
     pair,_,_=pair;worker=pair.worker;proof=pair.handoff();pair.command('target','destination_activate',peer_receipt=proof)
     ok(worker,'select-remote',participantId=pair.source,switchId=pair.switch,credentialRef=str(uuid4()))
     before=ok(worker,'current')['root'];switch,credential=str(uuid4()),str(uuid4())
-    ok(worker,'journal-create',switchId=switch,peerId=pair.target,credentialRef=credential,mode='remote-to-local')
+    from test_backup import acknowledged_inactive_backup
+    acknowledged_inactive_backup(worker)
+    ok(worker,'journal-create',switchId=switch,peerId=pair.target,credentialRef=credential,mode='remote-to-local-replace')
     lease=ok(worker,'journal-claim',switchId=switch)
     slot=ok(worker,'reserve',switchId=switch,peerId=pair.target,credentialRef=credential)
     if acknowledged:ok(worker,'journal-reserve',lease=lease,participantId=slot['participantId'],generation=slot['generation'])
@@ -352,3 +364,22 @@ def test_unused_remote_destination_abort_fences_late_coordinator(pair,acknowledg
     assert call(worker,'journal-command',lease=lease)['code']=='migration_busy'
     assert call(worker,'reserve',switchId=switch,peerId=pair.target,credentialRef=credential)['code']=='migration_invalid'
     assert pair.status('target')['state']=='active' and pair.status('source')['state']=='handed_off'
+
+
+@pytest.mark.parametrize('field,value',[('acknowledgedAt','invalid'),('sha256','x'),('version','2'),('manifest.dataset_id','00000000-0000-4000-8000-000000000001')])
+def test_replacement_rejects_corrupted_backup_evidence_before_reserving_a_writer(pair,field,value):
+    pair,_,_=pair;worker=pair.worker;proof=pair.handoff();pair.command('target','destination_activate',peer_receipt=proof)
+    ok(worker,'select-remote',participantId=pair.source,switchId=pair.switch,credentialRef=str(uuid4()))
+    from test_backup import acknowledged_inactive_backup
+    id=acknowledged_inactive_backup(worker);before=ok(worker,'current')['root']
+    worker.evaluate("""args=>new Promise((resolve,reject)=>{
+      const request=indexedDB.open('source');request.onsuccess=()=>{
+        const db=request.result,tx=db.transaction('application_state','readwrite'),store=tx.objectStore('application_state'),read=store.get('local-backup:'+args.id);
+        read.onsuccess=()=>{const item=read.result;if(args.field.startsWith('manifest.'))item.value.manifest[args.field.slice(9)]=args.value;else item.value[args.field]=args.value;store.put(item);};
+        tx.oncomplete=()=>{db.close();resolve(true);};tx.onabort=()=>reject(Error('fixture-write'));
+      };
+    })""",dict(id=id,field=field,value=value))
+    result=call(worker,'journal-create',switchId=str(uuid4()),peerId=pair.target,credentialRef=str(uuid4()),mode='remote-to-local-replace')
+    assert not result['ok'],result
+    assert ok(worker,'current')['root']==before
+    assert ok(worker,'journal-current') is None

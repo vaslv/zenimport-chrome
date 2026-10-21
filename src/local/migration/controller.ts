@@ -67,7 +67,7 @@ export class ModeTransfers{
     }finally{control.close();}
   }
   /** The UI must explicitly describe the shared-server pause before calling. */
-  async toBrowser(candidateRef:string,consent:{pauseSharedServer:boolean}){
+  async toBrowser(candidateRef:string,consent:{pauseSharedServer:boolean;replaceInactiveLocalCopy?:boolean}){
     participantUuid(candidateRef);requireParticipant(consent.pauseSharedServer===true,'migration_paused');
     const {root}=await this.owner.current();requireParticipant(root.activeMode==='remote'&&root.pendingSwitchId===null&&root.credentialRef!==null,'migration_paused');
     const descriptor=await this.#selectedServer(root),local=await this.localCredentials.verifyReference(candidateRef),remote=await this.serverCredentials.verifyReference(root.credentialRef,local.ownerIds);
@@ -76,7 +76,7 @@ export class ModeTransfers{
     const control=await RemoteControl.open(this.options.name,this.options.sentinel);
     try{await control.bindIdentity(root,remote.installation_id,remote.dataset_id);}finally{control.close();}
     return this.journal.create(root,{id:crypto.randomUUID(),direction:'remote-to-local',sourceId:remote.installation_id,destinationId:null,
-      remoteCredentialRef:root.credentialRef,localCredentialRef:candidateRef,ownerIds:[...local.ownerIds]});
+      remoteCredentialRef:root.credentialRef,localCredentialRef:candidateRef,ownerIds:[...local.ownerIds]},consent.replaceInactiveLocalCopy===true);
   }
   async cancel(id:string,requestId:string){
     participantUuid(id);participantUuid(requestId);const value=await this.journal.current();requireParticipant(value?.plan.id===id,'migration_invalid');

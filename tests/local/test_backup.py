@@ -119,3 +119,12 @@ def test_backup_reserves_both_root_epochs_before_taking_a_hold(tmp_path,epoch,al
             assert result['code']=='invalid_row'
             assert ok(worker,'current')['root']['pendingSwitchId'] is None
             assert ok(worker,'current')['root']['epoch']==epoch
+
+
+def acknowledged_inactive_backup(worker,generation=None):
+    id=str(uuid4());generation=generation or ok(worker,'current')['anchorGeneration']
+    ok(worker,'backup-begin',requestId=id,generation=generation)
+    ready=ok(worker,'backup-build',requestId=id)
+    archive(worker,id)
+    ok(worker,'backup-ack',requestId=id,checksum=ready['sha256'])
+    return id

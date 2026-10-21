@@ -174,7 +174,17 @@ def test_production_mode_controller_transfers_with_verified_candidates_and_atomi
                 connection=db.execute('SELECT id FROM connections LIMIT 1').fetchone()[0]
             sync=harness.start(connection);assert sync.status_code==202,sync.text
             # Preparation stops that capture; it never calls the financial worker.
-            second=ok(worker,'transfer-to-browser')
+            # The retained prior local dataset must be exported and acknowledged
+            # before it can be replaced by a fresh generation.
+            assert authority_call(worker,'transfer-to-browser')['code']=='migration_paused'
+            assert authority_call(worker,'transfer-to-browser',mode='replace-copy')['code']=='migration_incomplete'
+            backup=str(__import__('uuid').uuid4());ok(worker,'backup-begin',requestId=backup,generation=before['activeGeneration'])
+            ready=ok(worker,'backup-build',requestId=backup)
+            from test_backup import archive
+            archive(worker,backup)
+            ok(worker,'backup-ack',requestId=backup,checksum=ready['sha256'])
+            assert authority_call(worker,'transfer-to-browser')['code']=='migration_paused'
+            second=ok(worker,'transfer-to-browser',mode='replace-copy')
             assert second['plan']['sourceId']==candidate['identity']['installation_id']
             for _ in range(400):
                 result=ok(worker,'transfer-step')

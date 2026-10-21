@@ -1,6 +1,7 @@
 import {readOutbox} from './outbox-control.js';
 /** Existing-store control owner. Never exposed to bank/page messages. */
 import Dexie from 'dexie';
+import {verifyReplacement} from './inactive-replacement.js';
 import {stopJob} from './capture-policy.js';
 import {writeTransaction} from './kernel.js';
 import {OutboxRepository} from './outbox-repository.js';
@@ -134,6 +135,7 @@ export class MigrationOwner{
         const active=datasetControl(await this.#db.datasets.get(root.activeGeneration!)),control=participantControl(await this.#db.participants.get(active.participantId));
         requireParticipant(active.lifecycle==='active'&&active.holdId===null&&control.state==='active'&&!control.everActivated&&!control.awaitingSync&&await this.#empty(active.generation),'migration_not_empty');
       }
+      if(root.activeMode==='remote')await verifyReplacement(this.#db,switchId);
       const epoch=increment(root.epoch);
       await this.#db.datasets.add({generation,datasetId,participantId,participantEpoch:int64('1'),logicalSchemaVersion:'1',lifecycle:'staging',
         ownerIds:[],holdId:switchId,createdAt:stamp,backupAcknowledgedAt:null});

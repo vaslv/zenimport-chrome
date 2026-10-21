@@ -1,4 +1,5 @@
 /** Durable coordinator ownership. This journal never grants financial authority. */
+import {confirmReplacement} from './inactive-replacement.js';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
 import {participantUuid,participantInteger,participantDigest,requireParticipant,checkPeerReceipt} from '../../control/participant-wire.js';
 import type {ParticipantReceipt} from '../../control/participant-wire.js';
@@ -28,7 +29,7 @@ export class SwitchJournalRepository{
       const journal=switchJournal((await this.db.applicationState.get(scope(id)))?.value);requireParticipant(journal.plan.id===id);return journal;
     });
   }
-  async create(expected:RuntimeControl,input:SwitchPlan){
+  async create(expected:RuntimeControl,input:SwitchPlan,replaceInactiveLocalCopy=false){
     const plan=switchPlan(input),marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant(sameJournal(root,expected)&&root.pendingSwitchId===null,'migration_busy');
@@ -49,6 +50,7 @@ export class SwitchJournalRepository{
         requireParticipant(sameJournal(dataset.ownerIds,plan.ownerIds),'migration_wrong_account');
       }else{requireParticipant(root.activeMode==='remote'&&root.credentialRef===plan.remoteCredentialRef,'migration_busy');requireParticipant(plan.destinationId===null);}
       const value=switchJournal({version:1,plan,initialRoot:root,phase:'requested',revision:'1',lease:null,destinationGeneration:null,commands:[],receipts:[],chunks:[],error:null});
+      if(plan.direction==='remote-to-local')await confirmReplacement(this.db,plan.id,replaceInactiveLocalCopy);
       // add preserves every prior decision if a caller tries reusing an old ID.
       await this.db.applicationState.add({scope:scope(plan.id),value:cloneRecord(value)});
       await this.db.applicationState.put({scope:head,value:{id:plan.id}});return value;

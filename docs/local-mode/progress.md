@@ -1540,3 +1540,27 @@ Final backup gate on minimum Chrome 140: eight passed in 60.98s. Final native
 storage/kernel/upgrade regressions: 25 passed in 32.62s. Logs:
 /tmp/zenimport-l10-backup-minimum.log and
 /tmp/zenimport-l10-backup-storage-final.log.
+
+### L10.11 — explicit replacement of inactive local history
+
+- Reverse transfer requires a verified downloaded backup of every inactive local
+  financial generation and explicit replacement consent. The accepted exact backup
+  identities/hashes are durable alongside the journal and rechecked inside native
+  reservation before Root changes. Old local history remains read-only.
+- Strict backup-evidence validation blocks corrupt metadata. A later backup
+  acknowledgement does not revoke a previously accepted proof. Both issues were
+  found by independent review and have native regressions. Final reviews are clean;
+  see reviews/l10-inactive-replacement-2026-10-21.md. External cross-model CLI
+  unavailable.
+- Final Docker strict/generated/bundle checks and all 248 unit/contracts passed
+  in 1668.16ms. Actual Python HTTP/native journal gate: 49 passed in 125.06s,
+  one existing Starlette warning. Includes real browser→server→browser roundtrip,
+  missing-consent/missing-backup rejection, changing backup evidence and four
+  corrupted-evidence cases. Logs: /tmp/zenimport-l10-replacement-*.
+
+L10 remains in progress: separate archive-only disaster recovery, then major-gate
+review. L11 popup and L12 release acceptance follow. Product local routing remains
+disabled. No live API/data, push, tags or publication.
+
+Final minimum Chrome 140 replacement/corruption gate: eight passed in 78.22s,
+one existing Starlette warning. Log: /tmp/zenimport-l10-replacement-minimum.log.
