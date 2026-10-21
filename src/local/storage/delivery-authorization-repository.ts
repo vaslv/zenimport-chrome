@@ -23,5 +23,11 @@ export class DeliveryAuthorizationRepository{
     });
     return {authorized:rows.length};
   }
+  async pending(){return this.owner.pendingAuthorizations();}
+  async drain(now:string){
+    const tasks=await this.owner.pendingAuthorizations();
+    for(const task of tasks){await this.authorize(task.jobId,now);await this.owner.acknowledgeAuthorization(task);}
+    return {processed:tasks.length};
+  }
   close(){this.owner.close();}
 }

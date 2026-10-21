@@ -1,3 +1,5 @@
+import {queueAuthorization,pendingAuthorizations,acknowledgeAuthorization} from './authorization-queue.js';
+import type {AuthorizationTask} from './authorization-queue.js';
 /** Internal transaction owner for named local repositories, never a UI service. */
 import Dexie from 'dexie';
 import type {ContextFence,DatasetSentinel,SentinelPort} from '../../control/types.js';
@@ -57,6 +59,14 @@ export class RepositoryOwner{
   async apply<T>(stamp:FinancialSnapshot,operation:(view:RepositorySession)=>Promise<T>){
     return this.write(async view=>{await this.#unchanged(view,stamp);const result=await operation(view);return {result,stamp:await this.#stamp(view)};});
   }
+
+  /** Called within the same command transaction that accepts a click/page end. */
+  async queueAuthorization(view:RepositorySession,jobId:string,now:string){
+    requireStorage(await view.get('capture_jobs',[['text',jobId]])!==null,'invariant_violation');
+    await queueAuthorization(this.db,this.fence.generation,jobId,now);
+  }
+  async pendingAuthorizations(){return this.read(()=>pendingAuthorizations(this.db,this.fence.generation));}
+  async acknowledgeAuthorization(task:AuthorizationTask){return this.write(()=>acknowledgeAuthorization(this.db,this.fence.generation,task));}
 
   async categoriesReady(stamp:FinancialSnapshot){
     return this.read(async view=>{await this.#unchanged(view,stamp);return categoriesReady(this.db,stamp);});

@@ -31,6 +31,8 @@ import {sourceFacts} from '../reconciliation/facts.js';
 import {RepositoryOwner} from './repository-owner.js';
 import type {FinancialSnapshot} from './repository-owner.js';
 import {CaptureRepository} from './capture-repository.js';
+let releaseAuthorization:(()=>void)|undefined;
+export const resumeAuthorization=()=>{releaseAuthorization?.();releaseAuthorization=undefined;};
 let releaseCategories:(()=>void)|undefined;
 export const resumeCategories=()=>{releaseCategories?.();releaseCategories=undefined;};
 let paused=false,releaseKnown:(()=>void)|undefined;
@@ -68,9 +70,13 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
-    if(action==='authorize-job'){
+    if(['authorize-job','authorize-drain','authorize-pending'].includes(action)){
       const {root}=await store.context(),repository=await DeliveryAuthorizationRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
-      try{result=await repository.authorize(args.id!,String(now));}finally{repository.close();}
+      const acknowledge=RepositoryOwner.prototype.acknowledgeAuthorization;
+      if(args.mode==='pause-authorization-ack')RepositoryOwner.prototype.acknowledgeAuthorization=async function(task){
+        if(!paused){paused=true;await new Promise<void>(resolve=>{releaseAuthorization=resolve;});}return acknowledge.call(this,task);
+      };
+      try{result=action==='authorize-job'?await repository.authorize(args.id!,String(now)):action==='authorize-drain'?await repository.drain(String(now)):await repository.pending();}finally{repository.close();RepositoryOwner.prototype.acknowledgeAuthorization=acknowledge;}
     }
     if(action==='authorization-state'){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
@@ -149,6 +155,7 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
     if(action.startsWith('capture-')&&action!=='capture-state'){
       const {root}=await store.context(),capture=await CaptureRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put;let armed=true;
+      if(args.mode==='quota-authorization-queue')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(armed&&this.name==='application_state'&&String(values[0]?.scope).startsWith('authorize-job:')){armed=false;throw new DOMException('private-queue-fixture','QuotaExceededError');}return put.apply(this,values);};
       if(args.mode==='quota-capture')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(armed&&this.name==='f_captured_records'){armed=false;throw new DOMException('private-capture-fixture','QuotaExceededError');}return add.apply(this,values);};
       if(args.mode==='quota-complete')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(armed&&this.name==='f_bank_accounts'){armed=false;throw new DOMException('private-capture-fixture','QuotaExceededError');}return put.apply(this,values);};
       try{

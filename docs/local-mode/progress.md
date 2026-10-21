@@ -1196,3 +1196,22 @@ data/API, push, tags or publication.
 
 L9 remains in progress. Local product routing and financial SDK dispatch remain
 unavailable. No live API/data, push, tags or publication.
+
+
+### L9.2 — atomic accepted-work queue
+
+- Explicit/repeated clicks and committed interval completion now enqueue unique
+  private tasks in the same native transaction. Queue quota failure rolls back
+  the command/coverage; real browser shutdown preserves acknowledged work.
+- Draining reads at most 20 indexed tasks. Compare-and-delete ACK retains a new
+  same-job click even if an older authorization finishes later. Portable capture
+  and authorization rows remain financial proof; private queue rows are not
+  migration authority or a substitute for destination synchronization.
+- Independent adversarial final review is clean; see reviews/l9-queue-2026-10-21.md.
+  Docker: 218 unit/contracts with strict/generated checks; 25 native queue/capture/
+  authorization cases passed in 40.10s; actual Python/native capture parity passed
+  in 3.46s. Logs: /tmp/zenimport-l9-queue-*.log.
+
+L9 remains in progress: immutable write intents, fenced SDK dispatch, verification
+and durable scheduling are next. Local product routing/writer remains disabled.
+No live API/data, push, tags or publication.

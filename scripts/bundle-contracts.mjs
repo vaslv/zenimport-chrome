@@ -32,3 +32,5 @@ await build({entryPoints:['src/local/reconciliation/plan.ts'],outfile:'.local/co
 await build({entryPoints:['src/local/reconciliation/known.ts'],outfile:'.local/contracts/reconciliation-known.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 
 await build({entryPoints:['src/local/storage/category-control.ts'],outfile:'.local/contracts/category-control.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+
+await build({entryPoints:['src/local/storage/authorization-queue.ts'],outfile:'.local/contracts/authorization-queue.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});

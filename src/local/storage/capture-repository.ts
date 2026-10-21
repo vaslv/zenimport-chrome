@@ -71,7 +71,7 @@ export class CaptureRepository{
     const data=startCommand(input),body=canonicalDto(data);int64(now);
     return this.owner.command(async view=>{
       const known=await view.get('job_requests',[text(data.request_id)]);
-      if(known){requireCapture(known.request_json===body,'idempotency_conflict');return this.#jobView(view,known.job_id,now);}
+      if(known){requireCapture(known.request_json===body,'idempotency_conflict');await this.owner.queueAuthorization(view,known.job_id,now);return this.#jobView(view,known.job_id,now);}
       const connection=await get(view,'connections',data.connection_id);requireCapture(connection.timezone!==null,'capture_context_changed');
       const caps=connectionCapabilities(connection),end=localDay(new Date(Number(now)*1000).toISOString(),connection.timezone);
       requireCapture(data.reimport_from===null||data.reimport_from<=end&&(caps.earliest_date==null||data.reimport_from>=caps.earliest_date));
@@ -79,7 +79,7 @@ export class CaptureRepository{
       if(active){
         const original=JSON.parse(active.request_json);requireCapture(original.reimport_from===data.reimport_from,'account_busy');
         await this.#expire(view,active.id,now);await this.#resume(view,active.id);
-        await view.insert('job_requests',{request_id:data.request_id,job_id:active.id,request_json:body});return this.#jobView(view,active.id,now);
+        await view.insert('job_requests',{request_id:data.request_id,job_id:active.id,request_json:body});await this.owner.queueAuthorization(view,active.id,now);return this.#jobView(view,active.id,now);
       }
       const discovered=(await connectionView(view,connection.id)).accounts,selected=[];
       for(const row of discovered)if(row.selection==='enabled'&&row.supported)selected.push(await get(view,'bank_accounts',row.id));
@@ -89,6 +89,7 @@ export class CaptureRepository{
       await view.insert('capture_jobs',{id,connection_id:connection.id,request_id:data.request_id,request_json:body,end_date:end,capture_state:'planned',delivery_state:'waiting',worker_id:null,lease_epoch:int64('0'),lease_expires_at:null,created_at:int64(now)});
       await view.insert('job_requests',{request_id:data.request_id,job_id:id,request_json:body});
       await view.insert('job_context',{job_id:id,connector_version:connection.connector_version,timezone:connection.timezone,capabilities_json:connection.capabilities_json});
+      await this.owner.queueAuthorization(view,id,now);
       for(const account of selected){
         requireCapture(account.import_start!==null&&account.zenmoney_account_id!==null,'account_unconfigured');
         const coverage=(await view.rows('coverage',[text(account.id)])).map(row=>[row.start_date,row.end_date] as DayRange);
@@ -163,7 +164,7 @@ export class CaptureRepository{
     jobId=uuid(jobId);id=uuid(id);const data=completeCommand(input);int64(now);
     return this.owner.command(async view=>{
       let interval=await get(view,'capture_intervals',id);requireCapture(interval.job_id===jobId,'not_found');
-      if(interval.state==='complete'){requireCapture(interval.total_pages===String(data.total_pages)&&interval.total_records===String(data.total_records),'idempotency_conflict');return this.#intervalView(view,interval);}
+      if(interval.state==='complete'){requireCapture(interval.total_pages===String(data.total_pages)&&interval.total_records===String(data.total_records),'idempotency_conflict');await this.owner.queueAuthorization(view,jobId,now);return this.#intervalView(view,interval);}
       const checked=await this.#intervalGuard(view,jobId,id);interval=checked.interval;await this.#guard(view,jobId,data,now);
       if(interval.total_pages!==null&&(interval.total_pages!==String(data.total_pages)||interval.total_records!==String(data.total_records)))return this.#fail(view,interval,'history_incomplete',now);
       // Page numbers are unique and constrained to 1..total_pages; each page and
@@ -179,7 +180,7 @@ export class CaptureRepository{
       }
       const ranges=(await view.rows('coverage',[text(interval.account_id)])).map(row=>[row.start_date,row.end_date] as DayRange);
       const end=checked.account.import_start?frontier(checked.account.import_start,ranges):null;
-      await view.replace('bank_accounts',[text(checked.account.id)],{...checked.account,last_complete_end:end});await refreshJob(view,jobId);return this.#intervalView(view,interval);
+      await view.replace('bank_accounts',[text(checked.account.id)],{...checked.account,last_complete_end:end});await refreshJob(view,jobId);await this.owner.queueAuthorization(view,jobId,now);return this.#intervalView(view,interval);
     });
   }
   async pause(id:string,input:unknown,now:string){
