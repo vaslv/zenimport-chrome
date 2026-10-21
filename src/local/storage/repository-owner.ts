@@ -14,7 +14,7 @@ import {runtimeControl,datasetControl} from '../../control/validation.js';
 import {FinancialDatabase} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
-import {RepositorySession,writeTransaction} from './kernel.js';
+import {RepositorySession,writeTransaction,writeSetupTransaction} from './kernel.js';
 import {mirrorScope} from './mirror-scope.js';
 import {requireStorage} from './types.js';
 import {isDerivedCache} from './revisions.js';
@@ -214,6 +214,12 @@ export class RepositoryOwner{
     return this.write(async view=>{await this.#unchanged(view,stamp);await this.db.applicationState.put({scope:'known-mirror:'+stamp.generation,value:{projection:stamp.projection,mirror:stamp.mirror,revision:stamp.revision}});});
   }
 
+  async setup<T>(operation:(view:RepositorySession)=>Promise<T>){
+    let rejection:CaptureError|undefined;
+    try{return await writeSetupTransaction(this.db,this.sentinel,this.fence,async view=>{
+      try{return await operation(view);}catch(error){if(error instanceof CaptureError)rejection=error;throw error;}
+    });}catch(error){throw rejection??error;}
+  }
   async write<T>(operation:(view:RepositorySession)=>Promise<T>){
     let rejection:CaptureError|DeliveryError|undefined;
     try{return await writeTransaction(this.db,this.sentinel,this.fence,async view=>{

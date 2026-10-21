@@ -1,3 +1,4 @@
+import {assertSetup} from './setup-permit.js';
 /** Resumable account settings under an exclusive, durable local dataset hold. */
 import Dexie from 'dexie';
 import type {ContextFence,SentinelPort} from '../../control/types.js';
@@ -49,11 +50,12 @@ export class AccountSettingsOwner{
       const root=runtimeControl(await assertAnchor(this.db,marker)),fence=this.fence;
       requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&root.pendingSwitchId===null,'stale_epoch');
       const dataset=datasetControl(await this.db.datasets.get(fence.generation)),participant=participantControl(await this.db.participants.get(dataset.participantId));
-      requireStorage(dataset.lifecycle==='active'&&participant.state==='active'&&!participant.awaitingSync&&participant.generation===dataset.generation&&participant.epoch===dataset.participantEpoch,'dataset_not_writable');
+      requireStorage(dataset.lifecycle==='active'&&participant.state==='active'&&participant.generation===dataset.generation&&participant.epoch===dataset.participantEpoch,'dataset_not_writable');
+      if(participant.awaitingSync)await assertSetup(this.db,root,dataset.holdId!==null);
       if(expected==='existing'&&dataset.holdId!==null)operation((await this.db.applicationState.get(scope(dataset.holdId)))?.value,dataset.holdId,fence.generation);
       else requireStorage(expected==='existing'||dataset.holdId===expected,'dataset_not_writable');
       await this.db.runtime.put({...root,financialMayHaveStarted:true});
-      const view=new Session(this.db,fence.generation,Dexie.currentTransaction!,await mirrorScope(this.db,fence.generation));
+      const view=new Session(this.db,fence.generation,Dexie.currentTransaction!,await mirrorScope(this.db,fence.generation),false,participant.awaitingSync);
       try{return await work(view,dataset);}finally{view.close();}
     });}catch(error){if(error instanceof CaptureError)throw error;throw storageFailure(error);}
   }

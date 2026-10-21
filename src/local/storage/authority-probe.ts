@@ -5,7 +5,8 @@ import {MigrationOwner} from './migration-owner.js';
 import type {PeerStatus} from './migration-owner.js';
 import {LocalDatabase} from './bootstrap.js';
 import {FinancialDatabase,storeDefinitions} from './database.js';
-import {packRow} from './cells.js';
+import {packRow,unpackRow} from './cells.js';
+import {AccountRepository} from './account-repository.js';
 import {envelope} from './envelope.js';
 import {TABLES,PortableError} from '../portable/format.js';
 import type {TableName} from './schema.generated.js';
@@ -13,7 +14,9 @@ import type {TaggedRow} from './types.js';
 import {storageFailure} from './types.js';
 import {ParticipantError} from '../../control/participant-wire.js';
 import type {ParticipantCommand} from './participant-model.js';
-import {writeTransaction} from './kernel.js';
+import {writeTransaction,writeSetupTransaction} from './kernel.js';
+import {FirstSyncOwner} from './first-sync-owner.js';
+import {MirrorRepository} from './mirror-repository.js';
 
 type Area=Parameters<typeof trustedSentinel>[0];
 const native=()=> (globalThis as unknown as {chrome:{storage:{local:Area&{remove(keys:string[]):Promise<void>}}}}).chrome.storage.local;
@@ -48,7 +51,7 @@ interface Arguments{
   name:string;participantId?:string;switchId?:string;peerId?:string;credentialRef?:string;command?:ParticipantCommand;request?:unknown;
   number?:number;base64?:string;checksum?:string;epoch?:string;mode?:string;generation?:string;
   fixture?:{rows:Record<TableName,TaggedRow[]>};count?:number;
-  peerStatus?:PeerStatus;
+  peerStatus?:PeerStatus;requestId?:string;
 }
 export async function run(action:string,args:Arguments){
   try{
@@ -125,6 +128,37 @@ export async function run(action:string,args:Arguments){
           await writeTransaction(db,port(args.name),{installationId:current.root.installationId,generation:args.generation??current.root.activeGeneration!,epoch:current.root.epoch},
             async session=>{await session.insert('dataset_metadata',{key:'forbidden-probe-write',value:'never'});});value=true;
         }finally{db.close();}
+      }else if(action==='refresh-for-setup'){
+        const time=Math.floor(Date.now()/1000)-(args.mode==='stale'?301:0),mirror=await MirrorRepository.open(args.name,port(args.name),()=>time);
+        try{const {root}=await mirror.context(),lease=await mirror.claim(root,args.mode==='wrong-token'?'e'.repeat(64):'f'.repeat(64),String(time),true);
+          value=await mirror.apply(root,lease!,JSON.stringify({serverTimestamp:time,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[{id:'a',title:'Fixture',type:'checking',user:1,instrument:2}],tag:[],transaction:[]}),String(time));
+        }finally{mirror.close();}
+      }else if(action==='rotate-for-setup'){
+        const mirror=await MirrorRepository.open(args.name,port(args.name));
+        try{const {root}=await mirror.context();value=await mirror.adopt(root,args.credentialRef!,['1']);}finally{mirror.close();}
+      }else if(action==='prepare-setup'||action==='first-sync'){
+        const setup=await FirstSyncOwner.open(args.name,port(args.name),async()=>({ownerIds:args.mode==='wrong-owner'?['2']:['1'],sourceHash:'f'.repeat(64)}));
+        const put=IDBObjectStore.prototype.put;
+        if(args.mode==='quota')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){
+          if(this.name==='application_state'&&String(values[0]?.scope).startsWith('local-first-sync:'))throw new DOMException('synthetic-first-sync-quota','QuotaExceededError');
+          return put.apply(this,values);
+        };
+        try{value=action==='prepare-setup'?await setup.prepare():await setup.acknowledge(args.requestId!);}
+        finally{IDBObjectStore.prototype.put=put;setup.close();}
+      }else if(action==='setup-configure'){
+        const current=await owner.current(),db=new FinancialDatabase(args.name,false);await db.open();
+        let account:ReturnType<typeof unpackRow<'bank_accounts'>>;
+        try{account=unpackRow('bank_accounts',(await db.financial('bank_accounts').where('generation').equals(current.root.activeGeneration!).first())!.row);}finally{db.close();}
+        const repository=await AccountRepository.open(args.name,port(args.name),{installationId:current.root.installationId,generation:current.root.activeGeneration!,epoch:current.root.epoch});
+        try{value=await repository.configure(account!.id,{expected_version:account!.settings_version,selection:'ignored',zenmoney_account_id:null,import_start:null},String(Math.floor(Date.now()/1000)));}finally{repository.close();}
+      }else if(action==='setup-write'){
+        const current=await owner.current(),db=new FinancialDatabase(args.name,false);await db.open();
+        try{await writeSetupTransaction(db,port(args.name),{installationId:current.root.installationId,generation:current.root.activeGeneration!,epoch:current.root.epoch},async session=>{
+          if(args.mode==='forbidden')await session.insert('dataset_metadata',{key:'forbidden-probe-write',value:'never'});
+          else{const connection=(await session.rows('connections'))[0],key=[['text',connection.id]] as const;
+            if(await session.get('connection_labels',key))await session.replace('connection_labels',key,{connection_id:connection.id,label:'Imported setup'});
+            else await session.insert('connection_labels',{connection_id:connection.id,label:'Imported setup'});}
+        });value=true;}finally{db.close();}
       }else if(action==='inspect'){
         const current=await owner.current(),db=new FinancialDatabase(args.name,false);await db.open();
         try{

@@ -22,7 +22,7 @@ export class AccountRepository{
   }
   async get(id:string){return this.owner.read(view=>connectionView(view,validText(id)));}
   async rename(id:string,label:unknown){
-    const cleaned=name(label);validText(id);return this.owner.write(async view=>{
+    const cleaned=name(label);validText(id);return this.owner.setup(async view=>{
       await get(view,'connections',id);const key=[text(id)],row={connection_id:id,label:cleaned};
       if(await view.get('connection_labels',key))await view.replace('connection_labels',key,row);else await view.insert('connection_labels',row);
       return connectionView(view,id);
@@ -30,7 +30,7 @@ export class AccountRepository{
   }
   async discover(input:unknown,now:string){
     const data=discovery(input),stamp=int64(now);requireCapture(BigInt(stamp)>=0n);
-    return this.owner.write(async view=>this.#discover(view,data,stamp));
+    return this.owner.setup(async view=>this.#discover(view,data,stamp));
   }
   async #discover(view:RepositorySession,data:DiscoverConnection,now:string){
     const caps=canonicalDto(data.capabilities),old=await view.find('connections',['bank','profile_key'],[text(data.bank),text(data.profile_key)]),id=old?.id??crypto.randomUUID();
@@ -65,7 +65,7 @@ export class AccountRepository{
     await canonicalSupport(view);return connectionView(view,id);
   }
   async unlink(id:string,accountId:string,now:string){
-    validText(id);validText(accountId);int64(now);return this.owner.write(async view=>{
+    validText(id);validText(accountId);int64(now);return this.owner.setup(async view=>{
       await get(view,'connections',id);if(!await view.get('connection_accounts',[text(id),text(accountId)]))throw new CaptureError('not_found');
       const discovered=await view.get('connection_discovery',[text(id),text(accountId)]);
       if(discovered)await view.replace('connection_discovery',[text(id),text(accountId)],{...discovered,present:int64('0')});

@@ -1,3 +1,4 @@
+import {assertSetup} from './setup-permit.js';
 import {markJobRefresh} from './job-refresh.js';
 /** Internal repository transaction owner. Never import from application handlers. */
 import Dexie from 'dexie';
@@ -31,11 +32,13 @@ export class RepositorySession{
   #live=true;
   #mirrorGeneration:string;
   #mirrorOnly:boolean;
+  #setupOnly:boolean;
   #revisionAdvanced=false;
   #jobsQueued=false;
-  constructor(db:FinancialDatabase,generation:string,owner:Transaction,mirrorGeneration=generation,mirrorOnly=false){this.#db=db;this.#generation=generation;this.#owner=owner;this.#mirrorGeneration=mirrorGeneration;this.#mirrorOnly=mirrorOnly;}
+  constructor(db:FinancialDatabase,generation:string,owner:Transaction,mirrorGeneration=generation,mirrorOnly=false,setupOnly=false){this.#setupOnly=setupOnly;this.#db=db;this.#generation=generation;this.#owner=owner;this.#mirrorGeneration=mirrorGeneration;this.#mirrorOnly=mirrorOnly;}
   #scope(table:TableName){return isMirrorTable(table)?this.#mirrorGeneration:this.#generation;}
   #writeScope(table:TableName,key?:readonly Scalar[]){
+    if(this.#setupOnly)requireStorage(['connections','connection_labels','connection_accounts','connection_discovery','bank_accounts','account_bindings','capture_intervals','capture_jobs','capture_errors','source_capture_leases'].includes(table),'dataset_not_writable');
     if(!this.#mirrorOnly)return;
     requireStorage(isMirrorTable(table)||table==='zen_mirror_state'||table==='category_predictions'||
       table==='dataset_metadata'&&key?.[0]?.[0]==='text'&&key[0][1]==='zenmoney_refreshed_at','dataset_not_writable');
@@ -89,6 +92,8 @@ export class RepositorySession{
   /** Fixed derived-context invalidation, with no attempted/terminal mutation. */
   async invalidatePrepared(bankIds:readonly string[]){
     return this.#guard(async()=>{
+      // Account setup may invalidate an unattempted intent, never alter its UUID,
+      // payload or attempt facts. This specialized path is narrower than replace.
       requireStorage(!this.#mirrorOnly&&bankIds.length<=500,'dataset_not_writable');
       const rows=await this.findMany('deliveries',['bank_id'],bankIds.map(id=>[['text',id]]));
       const values=rows.filter((row):row is RowByTable['deliveries']=>row!==null&&row.state==='prepared'&&row.ever_attempted==='0'&&(row.needs_rebuild!=='1'||row.authorized_job_id!==null))
@@ -127,7 +132,7 @@ export class RepositorySession{
   /** Fixed planned intervals reference immutable snapshots proved once per account. */
   async insertCapturePlan(rows:readonly RowByTable['capture_intervals'][]){
     return this.#guard(async()=>{
-      requireStorage(!this.#mirrorOnly&&rows.length<=500,'dataset_not_writable');const checked=new Set<string>(),values:FinancialEnvelope[]=[];
+      requireStorage(!this.#mirrorOnly&&!this.#setupOnly&&rows.length<=500,'dataset_not_writable');const checked=new Set<string>(),values:FinancialEnvelope[]=[];
       for(const row of rows){
         requireStorage(row.state==='planned'&&row.total_pages===null&&row.total_records===null,'invariant_violation');
         const key=JSON.stringify([row.job_id,row.account_id,row.settings_version]);
@@ -275,17 +280,22 @@ export class RepositorySession{
 
 /** Only typed storage repositories may call this callback-based internal API. */
 export async function writeTransaction<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>):Promise<T>{
-  return transact(db,sentinel,fence,operation,false);
+  return transact(db,sentinel,fence,operation,false,false);
 }
 
 /** Read-mirror initialization is allowed while awaiting explicit sending consent.
  * The session cannot mutate bank/delivery facts or release the participant fence.
  */
 export async function writeMirrorTransaction<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>):Promise<T>{
-  return transact(db,sentinel,fence,operation,true);
+  return transact(db,sentinel,fence,operation,true,false);
 }
 
-async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>,mirrorOnly:boolean):Promise<T>{
+/** Only named account repositories may enter imported setup, after fresh identity. */
+export async function writeSetupTransaction<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>):Promise<T>{
+  return transact(db,sentinel,fence,operation,false,true);
+}
+
+async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>,mirrorOnly:boolean,setup:boolean):Promise<T>{
   const scope={...fence};
   try{
     await sentinel.markFinancialActivity(scope.installationId);
@@ -298,10 +308,11 @@ async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:Cont
       requireStorage(dataset.lifecycle==='active' && dataset.holdId===null,'dataset_not_writable');
       const authority=participantControl(await db.participants.get(dataset.participantId));
       requireStorage(authority.generation===scope.generation&&authority.epoch===dataset.participantEpoch&&
-        authority.state==='active'&&(mirrorOnly||!authority.awaitingSync),'dataset_not_writable');
+        authority.state==='active'&&(mirrorOnly||setup||!authority.awaitingSync),'dataset_not_writable');
+      if(setup&&authority.awaitingSync)await assertSetup(db,runtime);
       await db.runtime.put({...runtime,financialMayHaveStarted:true});
       const owner=Dexie.currentTransaction;requireStorage(owner!==undefined,'storage_corrupt');
-      const view=new RepositorySession(db,scope.generation,owner,await mirrorScope(db,scope.generation),mirrorOnly);
+      const view=new RepositorySession(db,scope.generation,owner,await mirrorScope(db,scope.generation),mirrorOnly,setup&&authority.awaitingSync);
       try{return await operation(view);}finally{view.close();}
     });
   }catch(error){throw storageFailure(error);}

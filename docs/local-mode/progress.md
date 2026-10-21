@@ -1339,3 +1339,24 @@ API/data, push, Git tags or publication.
 
 L10 remains in progress. Candidate references are not migration activation or
 financial authorization. No product local routing, live API/data or publication.
+
+### L10.3 — imported setup without implicit sending consent
+
+- Added a protected, credential/owner/hash/epoch/mirror-bound setup permit after
+  a real fresh mirror publication. Imported readiness alone remains insufficient.
+  Named account discovery/configuration can run while awaiting explicit Sync.
+- Generic writes, new capture plans, delivery authorization and sending remain
+  blocked. Setup can invalidate only stale never-attempted prepared intents,
+  preserving their UUID/payload and every attempt/receipt fact. A resumable owned
+  settings hold retains the accepted proof after its freshness window expires.
+- Added explicit first-Sync acknowledgment with atomic participant/audit commit;
+  token rotation revokes setup readiness. No product caller is enabled before L11.
+- Independent API/adversarial reviews are clean; see
+  reviews/l10-first-sync-2026-10-21.md. Docker strict/bundle build passed; 27 native
+  authority/first-sync cases passed in 53.33s; six final first-sync/setup cases
+  passed in 66.60s, including actual imported account configuration; 36 existing
+  account/capture/kernel regressions passed in 280.05s, including 100k settings
+  invalidation. Logs: /tmp/zenimport-l10-first-sync-*.log.
+
+L10 remains in progress: durable coordinator, transfer/recovery, used-server join
+and archive-only restore. No product local routing, live API/data or publication.
