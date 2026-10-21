@@ -19,7 +19,7 @@ export class DeliverySender{
     let fenceError:unknown,client:ZenMoneyClient|undefined,ownsDispatch=false;
     try{
       if(!await permission())throw new LocalZenMoneyError('zenmoney_permission');
-      client=new ZenMoneyClient({token:credential.token,clock:this.options.clock,timeoutMs:this.options.timeoutMs??20000,maxResponseBytes:this.options.maxResponseBytes??32*1024*1024,
+      client=new ZenMoneyClient({token:credential.token,clock:()=>Math.floor(this.options.clock()),timeoutMs:this.options.timeoutMs??20000,maxResponseBytes:this.options.maxResponseBytes??32*1024*1024,
         fetch:async(input,options)=>{
           try{
             if(!await permission())throw new LocalZenMoneyError('zenmoney_permission');

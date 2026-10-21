@@ -97,7 +97,7 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
         if(write&&['partial-400','lost-service-reply'].includes(args.mode??''))return new Response('{}',{status:args.mode==='partial-400'?400:500});
         return new Response(JSON.stringify({serverTimestamp:service.cursor,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[{id:'a',title:'Fixture',type:'checking',user:args.mode==='invalid-catalog'?null:1,instrument:2}],tag:[],transaction:service.transactions}),{status:200});
       };
-      const direct=mirrorReader({clock:()=>now,permission:async()=>args.permission!==false,fetch:network}),localMirror=new LocalMirror(store,credentials,direct,()=>now),sender=new DeliverySender(outbox,store,credentials,{clock:()=>now,permission:async()=>args.permission!==false,fetch:network});
+      const direct=mirrorReader({clock:()=>now,permission:async()=>args.permission!==false,fetch:network}),localMirror=new LocalMirror(store,credentials,direct,()=>now),sender=new DeliverySender(outbox,store,credentials,{clock:()=>now+.875,permission:async()=>args.permission!==false,fetch:network});
       const worker=new DeliveryWorker(authorization,schedule,outbox,localMirror,reconciliation,capture,sender,()=>now);
       try{
         if(action==='delivery-alarm'){
@@ -118,13 +118,14 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       try{
         if(action==='outbox-prepare')result=await repository.prepare(String(now));
         else if(action==='outbox-send'||action==='outbox-send-two'){
-          const sender=new DeliverySender(repository,store,credentials,{clock:()=>now,permission:async()=>args.permission!==false,timeoutMs:args.delay?Math.min(args.delay,200):20000,
+          const sender=new DeliverySender(repository,store,credentials,{clock:()=>now+.875,permission:async()=>args.permission!==false,timeoutMs:args.delay?Math.min(args.delay,5000):20000,
             fetch:async(_,options)=>{
               calls++;networkSerial++;
               const request=JSON.parse(String(options?.body));
               await storage.set({lastWrite:request});
               if(args.mode==='pause-write')await new Promise<void>(resolve=>{releaseRead=resolve;});
-              if(args.mode==='timeout-write')await new Promise(resolve=>setTimeout(resolve,1000));
+              // Keep the response unknown until the SDK's own deadline, regardless of host load.
+              if(args.mode==='timeout-write')await new Promise<never>(()=>{});
               const raw=args.raw??JSON.stringify({serverTimestamp:101,transaction:request.transaction});
               if(args.mode==='quota-response')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(armed&&this.name==='f_delivery_attempts'){armed=false;throw new DOMException('private-response-fixture','QuotaExceededError');}return add.apply(this,values);};
               return new Response(raw,{status:args.status??200});

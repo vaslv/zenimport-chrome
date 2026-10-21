@@ -17,6 +17,7 @@ def test_native_sdk_response_publication_and_journal_commit_atomically(tmp_path)
         assert evidence['deliveries'][0]['state']=='uncertain'
         request=call(worker,'last-write')['result'];assert request['transaction']==[json.loads(batch['items'][0]['payload'])] and request['serverTimestamp']==100
         assert request['transaction'][0]['viewed'] is False
+        assert request['currentClientTimestamp']==NOW  # Fractional gateway clock is normalized only at SDK boundary.
         assert call(worker,'outbox-status')['result']['phase']=='settled'
         assert call(worker,'outbox-send',id=batch['id'],now=NOW)['calls']==0
         assert prepare(worker)['result'] is None
@@ -31,7 +32,7 @@ def test_native_sdk_response_publication_and_journal_commit_atomically(tmp_path)
 def test_native_unknown_sdk_outcome_never_repeats_original_create(tmp_path,status,raw,mode,error):
     with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
         prepared_history(worker);batch=prepare(worker)['result'];before=call(worker,'status')['tables']['zen_sync_runs']
-        reply=call(worker,'outbox-send',id=batch['id'],now=NOW,status=status,raw=raw,mode=mode,delay=30 if mode=='timeout-write' else None)
+        reply=call(worker,'outbox-send',id=batch['id'],now=NOW,status=status,raw=raw,mode=mode,delay=3000 if mode=='timeout-write' else None)
         assert reply['calls']==1,reply
         assert (reply.get('result') or {}).get('error',reply.get('code'))==error,reply
         after=call(worker,'status');assert after['tables']['zen_sync_runs']==before

@@ -1740,3 +1740,45 @@ L11 has begun with a separately committed backend ordinary-context fence
 (e2b07ff, 74 focused Docker tests passed). The gated Chrome local facade is under
 implementation/review; no product routing has been enabled. No live data, push,
 tags or publication.
+
+### Consolidated L10 native/actual-Python verification
+
+After the fixture clock correction, the complete current-browser suite ran in
+five fresh disposable containers with the real isolated Python reference present:
+110 passed/one skipped (510.01s), 66 passed (329.54s), 103 passed (357.95s),
+88 passed/three skipped (427.21s), 69 passed (156.50s). Total: 436 passed, four
+specialized scenarios skipped; only existing third-party warnings. This includes
+complete large native restore/staging and the corrected connector cases. The
+skip-dependent runners/minimum matrix remain separately accounted acceptance
+work. Logs: /tmp/zenimport-l10-major-batch-{1,2,3,4,5}.log.
+
+No production/live data, push, tags or publication.
+
+### L11 prerequisite complete — named local facade and selected-context fencing
+
+- Fresh profiles can opt into a fully named local facade; old remote configuration
+  never silently falls back to an empty browser writer. Production background is
+  still unchanged. Bound context selection, token repair and optional permission
+  guards retain paused commands and reject changed physical server/dataset IDs.
+- Exact DTO counters remain decimal text. Local setup/discovery, reports and the
+  durable delivery worker use their existing repositories; no generic financial
+  database handle escapes storage. Reports do not invoke delivery.
+- Imported first Sync accepts the job and releases its sending barrier atomically,
+  with trusted setup freshness rechecked after native writes. Invalid commands,
+  quota and time advancement leave no job/first-sync receipt/barrier release.
+- Same-generation credential epochs fence delayed metadata and quiescence work.
+  SDK gateways normalize fractional seconds only at their integer-clock boundary.
+- Independent API and adversarial reviews are clean after corrections; see
+  reviews/l11-application-facade-2026-10-22.md. External cross-model CLI unavailable.
+- Docker strict/generated checks and 262 unit/contracts passed (2311.75ms).
+  Native standalone/application/kernel: 23 passed (34.86s). Minimum Chrome 140
+  standalone/sender: 25 passed (264.23s). Journal/sender broad repeat: 49 passed,
+  one timeout fixture failed before dispatch under load. After repairing only that
+  fixture, all seven response/unknown-outcome cases passed (19.89s). The native
+  stale-quiescence regression passed in the broad run and separately on minimum
+  Chrome (one passed, 34 deselected, 7.86s). No confirmed product test failure remains
+  in this prerequisite. Logs: /tmp/zenimport-l11-{prerequisite-unit,final-native,
+  final-minimum,facade-fences,prerequisite-sender,quiesce-minimum}.log.
+
+L11 popup/mode/archive orchestration and L12 final acceptance remain in progress.
+No live API/data, push, tags or publication.

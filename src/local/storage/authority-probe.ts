@@ -168,7 +168,18 @@ export async function run(action:string,args:Arguments){
           }
           else throw Error('unknown_transfer_fixture');
         }finally{transfer.close();}
-      }else if(action==='quiesce-local')value=await owner.quiesceLocal(args.request as Parameters<MigrationOwner['quiesceLocal']>[0],args.now??now,args.mode==='join'?{kind:'join',id:args.requestId!}:undefined);
+      }else if(action==='quiesce-local'){
+        const original=FinancialDatabase.prototype.transaction;checkpoint=false;
+        if(args.mode==='pause-quiesce-write')FinancialDatabase.prototype.transaction=new Proxy(original,{apply(target,db,parameters){
+          if(parameters[0]==='rw'&&Array.isArray(parameters[1])&&parameters[1].some((table:{name:string})=>table.name==='f_capture_jobs')){
+            FinancialDatabase.prototype.transaction=original;checkpoint=true;
+            return new Promise<void>(resolve=>{release=resolve;}).then(()=>Reflect.apply(target,db,parameters));
+          }return Reflect.apply(target,db,parameters);
+        }});
+        try{value=await owner.quiesceLocal(args.request as Parameters<MigrationOwner['quiesceLocal']>[0],args.now??now,args.mode==='join'?{kind:'join',id:args.requestId!}:undefined);}
+        finally{FinancialDatabase.prototype.transaction=original;}
+      }
+
       else if(action==='remote-context'){
         const control=await RemoteControl.open(args.name,port(args.name));try{value=await control.remoteContext(await control.read());}finally{control.close();}
       }else if(action==='remote-peer'){

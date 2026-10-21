@@ -1,14 +1,15 @@
 /** Root owner for upgrading configured remote profiles without a local writer. */
 import Dexie from 'dexie';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
-import {runtimeControl} from '../../control/validation.js';
+import {participantControl} from './participant-validation.js';
+import {runtimeControl,datasetControl} from '../../control/validation.js';
 import {participantUuid} from '../../control/participant-wire.js';
 import {FinancialDatabase} from './database.js';
 import {serializeOpen} from './bootstrap-lock.js';
 import {assertAnchor,readAnchor} from './anchor.js';
 import {int64,requireStorage,storageFailure} from './types.js';
 
-const same=(a:RuntimeControl,b:RuntimeControl)=>Object.keys(a).every(key=>a[key as keyof RuntimeControl]===b[key as keyof RuntimeControl]);
+const same=(a:RuntimeControl,b:RuntimeControl)=>(!b.financialMayHaveStarted||a.financialMayHaveStarted)&&Object.keys(b).every(key=>key==='financialMayHaveStarted'||a[key as keyof RuntimeControl]===b[key as keyof RuntimeControl]);
 export interface RemoteDescriptor{url:string;contextId:string;legacy:boolean;installationId?:string;datasetId?:string}
 export class RemoteControl{
   private constructor(private db:FinancialDatabase,private port:SentinelPort){}
@@ -70,6 +71,16 @@ export class RemoteControl{
     return this.db.transaction('r',this.db.runtime,this.db.datasets,this.db.remoteContexts,async()=>{
       const current=await assertAnchor(this.db,anchor);requireStorage(same(current,expected)&&current.credentialRef!==null,'stale_epoch');
       const context=await this.db.remoteContexts.get(current.credentialRef);requireStorage(context!==undefined,'recovery_required');return context;
+    });
+  }
+  async localContext(expected:RuntimeControl){
+    const anchor=await readAnchor(this.port);
+    return this.db.transaction('r',this.db.runtime,this.db.datasets,this.db.participants,async()=>{
+      const root=await assertAnchor(this.db,anchor);requireStorage(same(root,expected)&&root.activeMode==='local'&&root.activeGeneration!==null,'stale_epoch');
+      const dataset=datasetControl(await this.db.datasets.get(root.activeGeneration));
+      const participant=participantControl(await this.db.participants.get(dataset.participantId));
+      requireStorage(participant.generation===dataset.generation&&participant.epoch===dataset.participantEpoch,'storage_corrupt');
+      return {datasetId:dataset.datasetId,awaitingSync:participant.awaitingSync,owners:[...dataset.ownerIds]};
     });
   }
   async readState(expected:RuntimeControl,scope:string){

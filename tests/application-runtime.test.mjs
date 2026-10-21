@@ -52,3 +52,48 @@ test('pending migration and a local Root cannot gain a remote transport as fallb
  assert.equal(f.calls.length,0);f.control.mutate({activeMode:'local',activeGeneration:crypto.randomUUID()});
  await assert.rejects(runtime.current(),{code:'local_mode_disabled'});assert.equal(f.calls.length,0);
 });
+
+test('bound same-server token repair retains scope and jobs and rejects a replaced physical dataset',async()=>{
+ const area=memoryArea({config:{url:'https://fixture.invalid',token:'old-synthetic'},capture:{phase:'paused',command:{request_id:'retained-command'}}}),control=memoryControl();
+ let identity={protocol_version:'2',archive_version:'2',financial_schema_version:'1',chunk_bytes:'262144',max_archive_bytes:'67108864',
+  installation_id:crypto.randomUUID(),dataset_id:crypto.randomUUID(),participant_epoch:'1',state:'active',operation_id:null,awaiting_sync:false,legacy_hold:null,can_import:false,owner_ids:['1'],checked_at:'1000'};
+ const fetch=async url=>Response.json(String(url).endsWith('/identity')?identity:{api_version:1,context_fencing:1});
+ const runtime=new ApplicationRuntime(area,{},'bound-unit',control,{session:memoryArea(),permission:async()=>true,serverPermission:async()=>true,fetch});
+ const unverified=await runtime.current();await assert.rejects(unverified.service.capture.start({}),{code:'server_verification_required'});
+ const before=await runtime.verifySelected(unverified);assert.equal(before.context.dataset_id,identity.dataset_id);
+ const repeated=await runtime.verifySelected(unverified);assert.deepEqual(repeated.context,before.context);await repeated.service.connections.list('bidv');
+ assert.notEqual(before.context.generation,before.context.dataset_id);
+ const next=await runtime.configure({url:'https://fixture.invalid',token:'replacement-synthetic'},before);
+ assert.equal(next.context.dataset_id,before.context.dataset_id);assert.equal(next.context.generation,before.context.generation);
+ assert.deepEqual((await next.state.get('capture')).capture.command,{request_id:'retained-command'});
+ const root=control.inspect();identity={...identity,dataset_id:crypto.randomUUID()};
+ await assert.rejects(runtime.configure({url:'https://fixture.invalid',token:'other-synthetic'},next),{code:'stale_context'});
+ assert.deepEqual(control.inspect(),root);assert.deepEqual((await next.state.get('capture')).capture.command,{request_id:'retained-command'});
+ runtime.close();
+});
+
+test('revoked server permission prevents ordinary requests and credential verification',async()=>{
+ const area=memoryArea({config:{url:'https://fixture.invalid',token:'synthetic'}}),control=memoryControl();let granted=true,calls=0;
+ const identity={protocol_version:'2',archive_version:'2',financial_schema_version:'1',chunk_bytes:'262144',max_archive_bytes:'67108864',
+  installation_id:crypto.randomUUID(),dataset_id:crypto.randomUUID(),participant_epoch:'1',state:'active',operation_id:null,awaiting_sync:false,legacy_hold:null,can_import:false,owner_ids:['1'],checked_at:'1000'};
+ const fetch=async url=>{calls++;return Response.json(String(url).endsWith('/identity')?identity:{api_version:1,context_fencing:1});};
+ const runtime=new ApplicationRuntime(area,{},'permission-unit',control,{session:memoryArea(),permission:async()=>true,serverPermission:async()=>granted,fetch});
+ const app=await runtime.verifySelected(await runtime.current()),before=calls;granted=false;
+ await assert.rejects(app.service.capture.start({}),{code:'permission_required'});
+ await assert.rejects(runtime.configure({url:'https://fixture.invalid',token:'replacement'},app),{code:'permission_required'});
+ assert.equal(calls,before);runtime.close();
+});
+
+test('an unavailable legacy server never blocks reading its context or repairing its selected token',async()=>{
+ const area=memoryArea({config:{url:'https://fixture.invalid',token:'invalid-synthetic'},capture:{phase:'paused',command:{request_id:'keep'}}}),control=memoryControl();let offline=true;
+ const identity={protocol_version:'2',archive_version:'2',financial_schema_version:'1',chunk_bytes:'262144',max_archive_bytes:'67108864',
+  installation_id:crypto.randomUUID(),dataset_id:crypto.randomUUID(),participant_epoch:'1',state:'active',operation_id:null,awaiting_sync:false,legacy_hold:null,can_import:false,owner_ids:['1'],checked_at:'1000'};
+ const fetch=async url=>{if(offline)throw Error('private-fixture');return Response.json(String(url).endsWith('/identity')?identity:{api_version:1,context_fencing:1});};
+ const runtime=new ApplicationRuntime(area,{},'repair-unit',control,{session:memoryArea(),permission:async()=>true,serverPermission:async()=>true,fetch});
+ const app=await runtime.current();assert.equal(app.context.mode,'remote');
+ await assert.rejects(runtime.verifySelected(app),{code:'backend_unavailable'});
+ assert.deepEqual((await (await runtime.current()).state.get('capture')).capture.command,{request_id:'keep'});
+ offline=false;const repaired=await runtime.configure({url:'https://fixture.invalid',token:'new-synthetic'},app);
+ assert.equal(repaired.context.mode,'remote');assert.equal(repaired.context.generation,app.context.generation);
+ assert.deepEqual((await repaired.state.get('capture')).capture.command,{request_id:'keep'});runtime.close();
+});

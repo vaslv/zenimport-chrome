@@ -11,7 +11,7 @@ export function mirrorReader(options:ReaderOptions):MirrorReader{
     if(!await permission())throw new LocalZenMoneyError('zenmoney_permission');
     let client:ZenMoneyClient|undefined;
     try{
-      client=new ZenMoneyClient({token,...(options.fetch?{fetch:options.fetch}:{}),clock:options.clock,
+      client=new ZenMoneyClient({token,...(options.fetch?{fetch:options.fetch}:{}),clock:options.clock?()=>Math.floor(options.clock!()):undefined,
         timeoutMs:options.timeoutMs??20000,maxResponseBytes:options.maxResponseBytes??32*1024*1024});
       const diff=await client.readDiff({serverTimestamp:BigInt(cursor),...(full?{forceFetch:FORCE_FETCH}:transactions?{forceFetch:['transaction'] as const}:{})});
       if(!await permission())throw new LocalZenMoneyError('zenmoney_permission');

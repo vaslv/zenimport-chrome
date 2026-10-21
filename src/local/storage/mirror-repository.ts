@@ -31,10 +31,10 @@ async function put<K extends TableName>(view:RepositorySession,table:K,key:reado
   if(await view.get(table,key))await view.replace(table,key,value);else await view.insert(table,value);
 }
 export class MirrorRepository{
-  private constructor(private db:FinancialDatabase,private sentinel:SentinelPort,private clock:()=>number){}
-  static async open(name:string,sentinel:SentinelPort,clock:()=>number=()=>Math.floor(Date.now()/1000)){
+  private constructor(private db:FinancialDatabase,private sentinel:SentinelPort,private clock:()=>number,private bound?:RuntimeControl){}
+  static async open(name:string,sentinel:SentinelPort,clock:()=>number=()=>Math.floor(Date.now()/1000),bound?:RuntimeControl){
     const marker=await readAnchor(sentinel),db=new FinancialDatabase(name,false);
-    try{await db.open();await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker));return new MirrorRepository(db,sentinel,clock);}
+    try{await db.open();await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker));return new MirrorRepository(db,sentinel,clock,bound?{...bound}:undefined);}
     catch(error){db.close();throw error;}
   }
   async #transaction<T>(expected:RuntimeControl|undefined,operation:(view:RepositorySession,root:RuntimeControl)=>Promise<T>){
@@ -49,6 +49,7 @@ export class MirrorRepository{
   // through Chrome storage while IDB owns a transaction.
   async #contextInTransaction(expected?:RuntimeControl){
     const root=runtimeControl(await this.db.runtime.get('runtime'));
+    requireStorage(!this.bound||same({...root,financialMayHaveStarted:this.bound.financialMayHaveStarted},this.bound)&&(!this.bound.financialMayHaveStarted||root.financialMayHaveStarted),'stale_epoch');
     requireStorage(!expected||same({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected),'stale_epoch');
     requireStorage(root.activeMode==='local'&&root.activeGeneration!==null&&root.pendingSwitchId===null,'dataset_not_writable');
     const dataset=datasetControl(await this.db.datasets.get(root.activeGeneration));
@@ -84,18 +85,20 @@ export class MirrorRepository{
     });}catch(error){throw rejection??error;}
   }
   async adopt(expected:RuntimeControl,ref:string|null,owners:readonly string[]){
-    return this.#transaction(expected,async(_,root)=>{
+    const selected=await this.#transaction(expected,async(_,root)=>{
       const dataset=datasetControl(await this.db.datasets.get(root.activeGeneration!));
       if(dataset.ownerIds.length&&JSON.stringify(dataset.ownerIds)!==JSON.stringify(owners))throw new LocalZenMoneyError('zenmoney_wrong_owner');
       const next=runtimeControl({...root,credentialRef:ref,credentialEpoch:int64(String(BigInt(root.credentialEpoch)+1n))});
       await this.db.datasets.put({...dataset,ownerIds:[...owners]});await this.db.runtime.put(next);await this.#saveControl(next,initial((await this.#control(root)).projectionGeneration,true));return next;
     });
+    if(this.bound)this.bound={...selected};return selected;
   }
   async removeCredential(expected:RuntimeControl){
-    return this.#transaction(expected,async(_,root)=>{
+    const selected=await this.#transaction(expected,async(_,root)=>{
       const next=runtimeControl({...root,credentialRef:null,credentialEpoch:int64(String(BigInt(root.credentialEpoch)+1n))});
       await this.db.runtime.put(next);await this.#saveControl(next,initial((await this.#control(root)).projectionGeneration,true));return next;
     });
+    if(this.bound)this.bound={...selected};return selected;
   }
   async status(hash:string|null,now:string){
     int64(now);return this.#transaction(undefined,async(view,root)=>{

@@ -107,7 +107,7 @@ export class MigrationOwner{
         .between([root.activeGeneration,Dexie.minKey],[root.activeGeneration,Dexie.maxKey],true,true).first();
       return {job:capture?unpackRow('capture_jobs',capture.row).id:null,outbox:await readOutbox(this.#db,root.activeGeneration)};
     });
-    const fence={installationId:expected.installationId,generation:expected.activeGeneration!,epoch:expected.epoch};
+    const fence={installationId:expected.installationId,generation:expected.activeGeneration!,epoch:expected.epoch,credentialEpoch:expected.credentialEpoch};
     if(pending.job){await writeTransaction(this.#db,this.#port,fence,async view=>{await checkIntent();await stopJob(view,pending.job!,now);});return false;}
     if(pending.outbox&&pending.outbox.phase!=='settled'){
       if(BigInt(pending.outbox.deadline)>BigInt(now))return false;

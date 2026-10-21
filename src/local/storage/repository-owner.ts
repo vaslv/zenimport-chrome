@@ -14,7 +14,7 @@ import {runtimeControl,datasetControl} from '../../control/validation.js';
 import {FinancialDatabase} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
-import {RepositorySession,writeTransaction,writeSetupTransaction} from './kernel.js';
+import {RepositorySession,writeTransaction,writeSetupTransaction,writeExplicitSyncTransaction} from './kernel.js';
 import {mirrorScope} from './mirror-scope.js';
 import {requireStorage} from './types.js';
 import {isDerivedCache} from './revisions.js';
@@ -35,7 +35,7 @@ export class RepositoryOwner{
   }
   async #context(marker:DatasetSentinel,allowSettings=false){
       const root=runtimeControl(await assertAnchor(this.db,marker)),fence=this.fence;
-      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&root.pendingSwitchId===null,'stale_epoch');
+      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&(fence.credentialEpoch===undefined||root.credentialEpoch===fence.credentialEpoch)&&root.pendingSwitchId===null,'stale_epoch');
       const dataset=datasetControl(await this.db.datasets.get(fence.generation)),participant=participantControl(await this.db.participants.get(dataset.participantId));
       requireStorage(dataset.lifecycle==='active'&&participant.state==='active'&&participant.generation===dataset.generation&&participant.epoch===dataset.participantEpoch,'dataset_not_writable');
       if(dataset.holdId!==null){
@@ -225,6 +225,20 @@ export class RepositoryOwner{
     try{return await writeTransaction(this.db,this.sentinel,this.fence,async view=>{
       try{return await operation(view);}catch(error){if(error instanceof CaptureError||error instanceof DeliveryError)rejection=error;throw error;}
     });}catch(error){throw rejection??error;}
+  }
+  /** Failed imported starts roll back the job and its sending-barrier release. */
+  async explicitSync<T>(requestId:string,operation:(view:RepositorySession)=>Promise<T>,clock:()=>number):Promise<T>{
+    let rejection:CaptureError|undefined;
+    try{
+      const result=await writeExplicitSyncTransaction(this.db,this.sentinel,this.fence,requestId,clock,async(view,releasing)=>{
+        try{return {ok:true as const,value:await operation(view)};}
+        catch(error){
+          if(error instanceof CaptureError){rejection=error;if(!releasing&&error.persist)return {ok:false as const,error};}
+          throw error;
+        }
+      });
+      if(!result.ok)throw result.error;return result.value;
+    }catch(error){throw rejection??error;}
   }
   /** A business failure may intentionally commit its paused/failed evidence. */
   async command<T>(operation:(view:RepositorySession)=>Promise<T>):Promise<T>{

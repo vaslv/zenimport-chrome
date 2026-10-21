@@ -295,7 +295,12 @@ export async function writeSetupTransaction<T>(db:FinancialDatabase,sentinel:Sen
   return transact(db,sentinel,fence,operation,false,true);
 }
 
-async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>,mirrorOnly:boolean,setup:boolean):Promise<T>{
+/** Only the named capture owner may accept an explicit imported Sync. */
+export async function writeExplicitSyncTransaction<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,requestId:string,clock:()=>number,operation:(view:RepositorySession,releasing:boolean)=>Promise<T>){
+  return transact(db,sentinel,fence,operation,false,false,{requestId,clock});
+}
+
+async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession,releasing:boolean)=>Promise<T>,mirrorOnly:boolean,setup:boolean,explicit?:{requestId:string;clock:()=>number}):Promise<T>{
   const scope={...fence};
   try{
     await sentinel.markFinancialActivity(scope.installationId);
@@ -304,16 +309,31 @@ async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:Cont
       const runtime=await assertAnchor(db,marker);
       const dataset=datasetControl(await db.datasets.get(scope.generation));
       requireStorage(runtime.installationId===scope.installationId && runtime.activeMode==='local' && runtime.activeGeneration===scope.generation &&
-        runtime.epoch===scope.epoch && runtime.pendingSwitchId===null,'stale_epoch');
+        runtime.epoch===scope.epoch && (scope.credentialEpoch===undefined||runtime.credentialEpoch===scope.credentialEpoch) && runtime.pendingSwitchId===null,'stale_epoch');
       requireStorage(dataset.lifecycle==='active' && dataset.holdId===null,'dataset_not_writable');
       const authority=participantControl(await db.participants.get(dataset.participantId));
       requireStorage(authority.generation===scope.generation&&authority.epoch===dataset.participantEpoch&&
-        authority.state==='active'&&(mirrorOnly||setup||!authority.awaitingSync),'dataset_not_writable');
+        authority.state==='active'&&(mirrorOnly||setup||explicit!==undefined||!authority.awaitingSync),'dataset_not_writable');
+      const releasing=explicit!==undefined&&authority.awaitingSync;let checkedAt:string|null=null;
+      const trustedNow=()=>{const at=Math.floor(explicit!.clock());requireStorage(Number.isSafeInteger(at)&&at>=0&&at<=253402300799,'invalid_row');return at;};
+      const fresh=()=>{const at=trustedNow();requireStorage(checkedAt!==null&&BigInt(at)>=BigInt(checkedAt)&&BigInt(at)-BigInt(checkedAt)<=300n,'dataset_not_writable');return at;};
+      if(releasing){
+        requireStorage(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(explicit.requestId),'invalid_row');
+        checkedAt=await assertSetup(db,runtime,false,trustedNow());fresh();
+        await db.participants.put({...authority,awaitingSync:false});
+      }
       if(setup&&authority.awaitingSync)await assertSetup(db,runtime);
       await db.runtime.put({...runtime,financialMayHaveStarted:true});
       const owner=Dexie.currentTransaction;requireStorage(owner!==undefined,'storage_corrupt');
       const view=new RepositorySession(db,scope.generation,owner,await mirrorScope(db,scope.generation),mirrorOnly,setup&&authority.awaitingSync);
-      try{return await operation(view);}finally{view.close();}
+      try{
+        const result=await operation(view,releasing);
+        if(releasing){
+          const at=String(fresh());await db.applicationState.put({scope:'local-first-sync:'+scope.generation,value:{requestId:explicit!.requestId,at,epoch:runtime.epoch,credentialEpoch:runtime.credentialEpoch}});
+          fresh();
+        }
+        return result;
+      }finally{view.close();}
     });
   }catch(error){throw storageFailure(error);}
 }

@@ -33,6 +33,13 @@ test('read-only SDK gateway bounds errors, checks permission and never sends fin
  allowed=true;const failedAndRevoked=mirrorReader({permission:async()=>allowed,fetch:async()=>{allowed=false;throw Error('private-network-detail');}});
  await assert.rejects(failedAndRevoked.read('secret-token','0',true),{code:'zenmoney_permission'});
 });
+test('SDK read gateway projects fractional clocks to exact Unix seconds',async()=>{
+ let calls=0;
+ const reader=mirrorReader({clock:()=>1792458000.875,permission:async()=>true,fetch:async(_url,init)=>{
+  calls++;assert.equal(JSON.parse(init.body).currentClientTimestamp,1792458000);return new Response(full());
+ }});
+ await reader.read('fixture-token','0',true);assert.equal(calls,1);
+});
 test('unverified secret drafts expire after 24 hours and never become configured',async()=>{
  let now=100;const values={};const area={setAccessLevel:async()=>{},set:async data=>Object.assign(values,data),get:async key=>({[key]:values[key]}),remove:async key=>{delete values[key];}};
  const service=new LocalCredentials(area,area,{context:async()=>{throw Error('No Root read for a draft');}},{read:async()=>{throw Error('No network for a draft');}},()=>now);

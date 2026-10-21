@@ -430,3 +430,20 @@ def test_coordinator_destination_credentials_are_immutable_until_cancelled(tmp_p
         assert ok(worker,'reserve',switchId=switch,peerId=source,credentialRef=credential)==slot
         assert ok(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()))=='cancelled'
         assert ok(worker,'current')['root']['pendingSwitchId'] is None
+
+
+def test_late_quiescence_cannot_mutate_a_capture_after_same_generation_token_rotation(tmp_path):
+    from test_authority import checkpoint
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,page,_):
+        ok(worker,'create');ok(worker,'seed',fixture=FIXTURE);ok(worker,'capture-for-migration')
+        initial=ok(worker,'current')['root']
+        snapshot="""()=>new Promise(resolve=>{const r=indexedDB.open('source');r.onsuccess=()=>{const db=r.result,t=db.transaction('f_capture_jobs'),q=t.objectStore('f_capture_jobs').getAll();t.oncomplete=()=>{resolve(q.result);db.close();};};})"""
+        before=worker.evaluate(snapshot)
+        worker.evaluate('data=>{globalThis.lateQuiesce=authorityProbe.run("quiesce-local",data);return true;}',dict(name='source',request=initial,mode='pause-quiesce-write'))
+        checkpoint(worker,page)
+        rotated=ok(worker,'credential',credentialRef=str(uuid4()))
+        ok(worker,'release')
+        result=worker.evaluate('()=>globalThis.lateQuiesce')
+        assert not result['ok'] and result['code']=='stale_epoch',result
+        assert worker.evaluate(snapshot)==before
+        assert ok(worker,'current')['root']['credentialEpoch']!=initial['credentialEpoch']

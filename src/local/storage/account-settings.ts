@@ -48,7 +48,7 @@ export class AccountSettingsOwner{
     const marker=await readAnchor(this.sentinel,this.fence.installationId,true);
     try{return await this.db.transaction('rw',this.db.tables,async()=>{
       const root=runtimeControl(await assertAnchor(this.db,marker)),fence=this.fence;
-      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&root.pendingSwitchId===null,'stale_epoch');
+      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&(fence.credentialEpoch===undefined||root.credentialEpoch===fence.credentialEpoch)&&root.pendingSwitchId===null,'stale_epoch');
       const dataset=datasetControl(await this.db.datasets.get(fence.generation)),participant=participantControl(await this.db.participants.get(dataset.participantId));
       requireStorage(dataset.lifecycle==='active'&&participant.state==='active'&&participant.generation===dataset.generation&&participant.epoch===dataset.participantEpoch,'dataset_not_writable');
       if(participant.awaitingSync)await assertSetup(this.db,root,dataset.holdId!==null);
@@ -162,7 +162,7 @@ export class AccountSettingsOwner{
     const marker=await readAnchor(this.sentinel,this.fence.installationId);
     return this.db.transaction('r',this.db.tables,async()=>{
       const root=runtimeControl(await assertAnchor(this.db,marker)),fence=this.fence;
-      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&root.pendingSwitchId===null,'stale_epoch');
+      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&(fence.credentialEpoch===undefined||root.credentialEpoch===fence.credentialEpoch)&&root.pendingSwitchId===null,'stale_epoch');
       const op=operation((await this.db.applicationState.get(scope(id)))?.value,id,fence.generation);
       return ['complete','failed'].includes(op.phase)?op:null;
     });

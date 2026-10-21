@@ -15,17 +15,23 @@ export function serverAddress(value) {
 export function permissionOrigin(url) { return new URL(serverAddress(url)).origin + '/*'; }
 
 export class Backend {
-  constructor(config, fetcher = (...args) => fetch(...args)) { this.url = serverAddress(config.url); this.token = config.token; this.fetcher = fetcher; }
+  constructor(config, fetcher = (...args) => fetch(...args)) {
+    this.url = serverAddress(config.url); this.token = config.token; this.fetcher = fetcher;
+    this.context=config.installationId&&config.datasetId ? {'X-ZenImport-Installation':config.installationId,'X-ZenImport-Dataset':config.datasetId} : null;
+    this.contextPath=this.context?'/contexts/'+encodeURIComponent(config.installationId)+'/'+encodeURIComponent(config.datasetId):'';
+    this.checked=null;
+  }
   async request(path, method = 'GET', body) {
     if (!this.token) throw new SyncError('unauthorized');
+    if(this.context && path!=='/info')await (this.checked??=this.info().catch(error=>{this.checked=null;throw error;}));
     let response;
     try {
-      response = await this.fetcher(this.url + '/api/v1' + path, {
-        method, headers: {Authorization: 'Bearer ' + this.token, ...(body === undefined ? {} : {'Content-Type': 'application/json'})},
+      response = await this.fetcher(this.url + '/api/v1' + this.contextPath + path, {
+        method, headers: {Authorization: 'Bearer ' + this.token, ...this.context, ...(body === undefined ? {} : {'Content-Type': 'application/json'})},
         ...(body === undefined ? {} : {body: JSON.stringify(body)}),
         credentials: 'omit', cache: 'no-store', redirect: 'error', signal: AbortSignal.timeout(20000),
       });
-    } catch { throw new SyncError('backend_unavailable', true); }
+    } catch(error) { if(error instanceof SyncError)throw error;throw new SyncError('backend_unavailable', true); }
     let result;
     try { result = await response.json(); } catch { throw new SyncError('invalid_response', true); }
     if (!response.ok) throw new SyncError(result?.error?.code || 'backend_error', result?.error?.retryable === true);
@@ -33,10 +39,12 @@ export class Backend {
   }
   async info() {
     const info = await this.request('/info');
+    if(this.context && info.context_fencing!==1)throw new SyncError('unsupported_api_version');
     if (info.api_version !== 1) throw new SyncError('unsupported_api_version');
     return info;
   }
   async transfer(action, file) {
+    if(this.context)throw new SyncError('unsupported_migration_version');
     if (!['export','import'].includes(action) || !this.token) throw new SyncError('unauthorized');
     let response;
     try {

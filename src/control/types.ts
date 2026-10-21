@@ -46,6 +46,7 @@ export interface DatasetControl{
 }
 
 export interface ContextFence{
+  readonly credentialEpoch?:Int64Text;
   readonly installationId:string;
   readonly generation:string;
   readonly epoch:Int64Text;

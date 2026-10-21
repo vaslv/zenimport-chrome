@@ -68,9 +68,10 @@ export class CaptureRepository{
     return {id:job.id,connection_id:job.connection_id,capture_state:job.capture_state,delivery_state:deliveryState,end_date:job.end_date,accounts,delivery:counts,errors};
   }
   async get(id:string,now:string){id=uuid(id);int64(now);return this.owner.command(view=>this.#jobView(view,id,now));}
-  async start(input:unknown,now:string){
+  async start(input:unknown,now:string,explicitSync=false,clock=()=>Date.now()/1000){
     const data=startCommand(input),body=canonicalDto(data);int64(now);
-    return this.owner.command(async view=>{
+    const command=<T>(work:(view:RepositorySession)=>Promise<T>)=>explicitSync?this.owner.explicitSync(data.request_id,work,clock):this.owner.command(work);
+    return command(async view=>{
       const known=await view.get('job_requests',[text(data.request_id)]);
       if(known){requireCapture(known.request_json===body,'idempotency_conflict');await this.owner.queueAuthorization(view,known.job_id,now);return this.#jobView(view,known.job_id,now);}
       const connection=await get(view,'connections',data.connection_id);requireCapture(connection.timezone!==null,'capture_context_changed');

@@ -1,5 +1,5 @@
 /** Transport-independent application boundary. All identifiers remain DTO values. */
-import type * as DTO from './dto.generated.js';
+import type * as DTO from './dto.js';
 export interface MigrationStatus{
   format_version:number;can_import:boolean;paused:boolean;awaiting_sync:boolean;
   imported_sha256:string|null;max_archive_bytes:number;

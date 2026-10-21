@@ -44,3 +44,33 @@ test('the adapter cannot turn an identifier into a second API path and propagate
  await assert.rejects(service.accounts.catalog(),value=>value===error);
  assert.equal(calls.length,2);
 });
+
+test('a bound server checks context support before writes and sends both identity headers',async()=>{
+  const {Backend}=await import('../extension/backend-client.js');const calls=[];
+  const backend=new Backend({url:'https://fixture.invalid',token:'synthetic',installationId:'physical',datasetId:'lineage'},async(url,options)=>{
+    calls.push({url,options});return Response.json(url.endsWith('/info')?{api_version:1,context_fencing:1}:{accepted:true});
+  });
+  await backend.request('/jobs','POST',{});
+  assert.equal(calls.length,2);assert.ok(calls[0].url.endsWith('/info'));
+  assert.ok(calls[1].url.endsWith('/api/v1/contexts/physical/lineage/jobs'));
+  assert.equal(calls[1].options.headers['X-ZenImport-Installation'],'physical');
+  assert.equal(calls[1].options.headers['X-ZenImport-Dataset'],'lineage');
+  const oldCalls=[],old=new Backend({url:'https://fixture.invalid',token:'synthetic',installationId:'physical',datasetId:'lineage'},async(url)=>{
+    oldCalls.push(url);return Response.json({api_version:1});
+  });
+  await assert.rejects(old.request('/jobs','POST',{}),{code:'unsupported_api_version'});
+  assert.equal(oldCalls.length,1);assert.ok(oldCalls[0].endsWith('/info'));
+});
+
+test('a same-address API downgrade cannot dispatch to an ordinary legacy mutator even after handshake',async()=>{
+ const {Backend}=await import('../extension/backend-client.js');let old=false,mutations=0;
+ const backend=new Backend({url:'https://fixture.invalid',token:'synthetic',installationId:'physical',datasetId:'lineage'},async(url,options)=>{
+  const path=new URL(url).pathname;
+  if(!old&&path.endsWith('/info'))return Response.json({api_version:1,context_fencing:1});
+  if((!old&&path==='/api/v1/contexts/physical/lineage/jobs')||(old&&path==='/api/v1/jobs')){mutations++;return Response.json({});}
+  return Response.json({error:{code:'not_found'}},{status:404});
+ });
+ await backend.request('/jobs','POST',{});old=true;
+ await assert.rejects(backend.request('/jobs','POST',{}),{code:'not_found'});assert.equal(mutations,1);
+ await assert.rejects(backend.transfer('import',new Blob(['fixture'])),{code:'unsupported_migration_version'});
+});

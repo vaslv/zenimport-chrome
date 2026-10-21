@@ -15,4 +15,5 @@ export async function assertSetup(db:FinancialDatabase,root:RuntimeControl,allow
   const state=unpackRow('zen_mirror_state',envelope.row);
   requireStorage(JSON.stringify(state)===permit.mirror&&state.ready==='1'&&state.needs_full==='0'&&state.refreshed_at!==null&&
     (allowExpired||BigInt(int64(String(now)))>=BigInt(state.refreshed_at)&&BigInt(now)-BigInt(state.refreshed_at)<=300n),'dataset_not_writable');
+  return state.refreshed_at;
 }

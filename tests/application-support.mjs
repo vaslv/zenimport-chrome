@@ -9,7 +9,7 @@ export function memoryControl(){
  patchState:async(expected,scope,patch,initialize)=>{assertRoot(expected);if(root.pendingSwitchId)throw Object.assign(Error('stale_epoch'),{code:'stale_epoch'});
   if(initialize&&states.has(scope))return structuredClone(states.get(scope));
   const value={...states.get(scope),...structuredClone(patch)};states.set(scope,value);return structuredClone(value);
- },remoteContext:async expected=>{assertRoot(expected);return structuredClone(contexts.get(root.credentialRef));}};
+ },bindIdentity:async(expected,installationId,datasetId)=>{assertRoot(expected);const value={...contexts.get(root.credentialRef),installationId,datasetId};contexts.set(root.credentialRef,value);return structuredClone(value);},remoteContext:async expected=>{assertRoot(expected);return structuredClone(contexts.get(root.credentialRef));}};
  return {exists:async()=>!!root,open:async(name,port,ref,context)=>{
   if(context)contexts.set(ref,structuredClone(context));
   root??={id:'runtime',installationId:crypto.randomUUID(),activeMode:'remote',activeGeneration:null,epoch:'1',pendingSwitchId:null,
