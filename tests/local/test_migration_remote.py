@@ -427,3 +427,100 @@ def test_source_lineage_remains_bound_after_reverse_request(tmp_path,moment):
                 assert db.execute("SELECT value FROM service_meta WHERE key='instance_id'").fetchone()[0]==replaced
             assert not harness.remote.writes
     finally:harness.close()
+
+
+def test_installed_archive_gateway_restores_browser_backup_on_empty_python_server(tmp_path):
+    import base64
+    from uuid import uuid4
+    from test_authority import ok,FIXTURE
+    from test_restore import source_archive
+    from backend import storage,portable_codec as codec
+    harness=DeliveryHarness(tmp_path/'archive-target.sqlite3');harness.app.state.archives.start()
+    try:
+        with sync_playwright() as p:
+            # Retire the source browser before declaring former writers stopped.
+            with installed(p,tmp_path/'source-extension',tmp_path/'source-profile') as (_,worker,_,_):
+                raw,rows,backup=source_archive(worker)
+            data=base64.b64decode(raw)
+            with server(harness) as url,installed(p,tmp_path/'target-extension',tmp_path/'target-profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+                cap=call(worker,'capabilities',url)['result'];id=str(uuid4())
+                assert call(worker,'archive-status',url,id=id)==dict(ok=False,code='not_found')
+                request=dict(id=id,installation_id=cap['installation_id'],expected_epoch=cap['participant_epoch'],dataset_id=backup['datasetId'],
+                    archive_sha256=backup['sha256'],archive_size=str(len(data)),owner_ids=['1'],former_writers_retired=True,accept_post_snapshot_evidence_loss=True)
+                started=call(worker,'archive-restore',url,request=request);assert started['ok'],started
+                assert started['result']['phase']=='uploading'
+                for number,start in enumerate(range(0,len(data),262144)):
+                    part=base64.b64encode(data[start:start+262144]).decode()
+                    assert call(worker,'archive-upload',url,id=id,number=number,data=part)['ok']
+                result=call(worker,'archive-finalize',url,id=id);assert result['ok'],result
+                for _ in range(200):
+                    status=call(worker,'archive-status',url,id=id);assert status['ok'],status
+                    if status['result']['phase']=='preview':break
+                    assert status['result']['phase']=='validating',status;page.wait_for_timeout(30)
+                else:raise AssertionError(status)
+                preview=call(worker,'archive-preview',url,id=id,checksum=backup['sha256']);assert preview['ok'],preview
+                assert preview['result']['bank_transactions']==str(len(rows['bank_transactions']))
+                assert call(worker,'archive-activate',url,id=id,previewId=preview['result']['id'],accept=False)==dict(ok=False,code='migration_paused')
+                activated=call(worker,'archive-activate',url,id=id,previewId=preview['result']['id']);assert activated['ok'],activated
+                assert activated['result']['phase']=='activated'
+                assert call(worker,'archive-activate',url,id=id,previewId=preview['result']['id'])==activated
+                with storage.transaction(harness.path,read_only=True) as db:
+                    assert db.execute('SELECT awaiting_sync FROM migration_installation').fetchone()[0]==1
+                    assert db.execute('SELECT count(*) FROM migration_receipts').fetchone()[0]==0
+                    for table in ['bank_transactions','bank_versions','deliveries','delivery_attempts','processing_receipts','processing_targets']:
+                        policy=codec.TABLES[table];found=[list(row) for row in db.execute('SELECT '+','.join(policy['columns'])+' FROM '+policy['source'])]
+                        expected=[[codec.unscalar(cell) for cell in row] for row in rows[table]]
+                        assert sorted(found,key=str)==sorted(expected,key=str),table
+                harness.worker.run_once();assert not harness.remote.writes
+    finally:harness.close()
+
+
+def test_installed_archive_gateway_downloads_server_backup_and_recovers_browser_copy(tmp_path):
+    import base64
+    from uuid import uuid4
+    from test_authority import ok,FIXTURE
+    from backend import storage,portable_codec as codec
+    from backend.portable_graph import source_tables
+    harness=DeliveryHarness(tmp_path/'archive-source.sqlite3')
+    job,first,auth,_=harness.capture(count=2)
+    for account in job['accounts']:
+        for interval in account['intervals']:
+            if interval['id']==first['id']:continue
+            assert harness.page(job,interval,auth).status_code==200
+            assert harness.complete(job,interval,auth).status_code==200
+    assert harness.client.post('/api/v1/jobs/'+job['id']+'/stop',json={}).status_code==200
+    harness.app.state.archives.start()
+    try:
+        with sync_playwright() as p:
+            with server(harness) as url,installed(p,tmp_path/'download-extension',tmp_path/'download-profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+                cap=call(worker,'capabilities',url)['result'];id=str(uuid4())
+                response=call(worker,'archive-backup',url,request=dict(id=id,installation_id=cap['installation_id'],expected_epoch=cap['participant_epoch']));assert response['ok'],response
+                for _ in range(200):
+                    status=call(worker,'archive-status',url,id=id);assert status['ok'],status
+                    if status['result']['phase']=='ready':break
+                    assert status['result']['phase']=='building',status;page.wait_for_timeout(30)
+                else:raise AssertionError(status)
+                parts=[]
+                for i in range(int(status['result']['chunks'])):
+                    part=call(worker,'archive-download',url,id=id,number=i);assert part['ok'],part
+                    parts.append(base64.b64decode(part['result']))
+                raw=b''.join(parts)
+                assert call(worker,'archive-ack',url,id=id,checksum=status['result']['archive_sha256'])['ok']
+                while True:
+                    cleaned=call(worker,'archive-clean',url,id=id);assert cleaned['ok'],cleaned
+                    if cleaned['result']['complete']:break
+                assert not harness.remote.writes
+            with storage.transaction(harness.path,read_only=True) as db:
+                dataset=db.execute("SELECT value FROM service_meta WHERE key='instance_id'").fetchone()[0];values,_=source_tables(db,dataset)
+                expected={name:[[codec.scalar(cell) for cell in row] for row in rows] for name,rows in values.items()}
+            harness.close();harness=None
+            with installed(p,tmp_path/'restore-extension',tmp_path/'restore-profile') as (_,worker,_,_):
+                ok(worker,'create','target');restore_id=str(uuid4())
+                decision=ok(worker,'restore-begin','target',requestId=restore_id,base64=base64.b64encode(raw).decode(),credentialRef=str(uuid4()),fixture=FIXTURE)
+                ok(worker,'restore-load','target',requestId=restore_id,base64=base64.b64encode(raw).decode())
+                proof=ok(worker,'restore-preview','target',requestId=restore_id,fixture=FIXTURE)
+                assert ok(worker,'restore-activate','target',requestId=restore_id,peerId=proof['preview']['id'])['phase']=='activated'
+                assert ok(worker,'inspect','target')['rows']==expected
+                assert not __import__('test_authority').call(worker,'write','target')['ok']
+    finally:
+        if harness is not None:harness.close()

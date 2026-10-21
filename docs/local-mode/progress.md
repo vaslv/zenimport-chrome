@@ -1621,3 +1621,29 @@ three large resource cases covered on current Chromium above. Log:
 L10 remains in progress: server archive backup/recovery, then major-gate review.
 L11 product integration and L12 full acceptance remain pending. Product local
 routing is disabled. No live API/data, push, tags or publication.
+
+### L10.16 — protected archive HTTP transport and installed interoperability
+
+- Separate archive-control methods reuse authenticated bounded transport, with
+  strict request/status/preview validation, exact UUID/hash/size/epoch bindings,
+  canonical integer text and no automatic retries. A cancelled/cleaned attempt
+  cannot become an activation response. No financial SDK/peer authority is added.
+- Independent API/adversarial reviews completed. Fixed typed unknown-archive404
+  being misreported as unsupported protocol; retained typed not_found so lost
+  creation outcomes can be resolved. Final reviews are clean. External cross-model
+  CLI unavailable. See reviews/l10-archive-http-2026-10-22.md.
+- Docker strict/generated/bundle and 255 unit/contracts passed in 1719.23ms.
+  Actual Python HTTP/native Chrome gate: all 20 passed in 56.30s (one existing
+  Starlette warning). Includes browser backup→empty server recovery and server
+  backup→fresh browser recovery, retiring each source, accepted read-only preview,
+  exact immutable/all-facts preservation, no fabricated peer receipts, lost reply
+  replay and explicit-sync requirement, with zero financial SDK writes.
+- Same two archive directions on minimum Chrome 140: two passed in 25.15s,
+  18 other scenarios already covered on current Chromium (one existing warning).
+  Logs: /tmp/zenimport-l10-archive-wire-final-unit.log,
+  /tmp/zenimport-l10-archive-interoperability-final.log,
+  /tmp/zenimport-l10-archive-interoperability-minimum.log.
+
+L10 major-gate review remains to be completed before L11 product integration and
+L12 release acceptance. Local product routing remains disabled. No live API/data,
+push, tags or publication.
