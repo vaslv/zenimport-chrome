@@ -81,6 +81,16 @@ network-disabled containers limited to 3 GiB. Timings include synthetic ZIP
 creation and are not a deployment performance promise. Evidence JSON records the
 actual browser user agent and retains exact byte counts.
 
+The separate complete-graph benchmark preserves the full current Python fixture
+and adds 1k/10k/100k correctly identified merchant entities. It imports, rehashes,
+validates all financial relationships and persists an inactive verdict. At 100k
+the graph is 207,024,399 logical bytes: 145 took 186.70s (140.33s graph validation),
+722.2ms maximum native transaction, 1,121,820,672-byte cgroup peak; 140 took 332.77s
+(277.88s validation), 110.8ms maximum transaction, 1,268,957,184-byte peak. Each
+browser's full 1k/10k/100k run passed within its 3 GiB container. These are
+synthetic merchant-heavy graphs, not proof of every possible 100k bank-history
+shape or live-bank throughput. Worker startup/teardown increases suite wall time.
+
 ZIP DOS timestamps are stable across UTC, Vietnam and Hawaii timezones. Signed and
 unsigned data descriptors are supported; their size, rather than an ambiguous CRC
 value, determines whether the optional signature is present. Compression yields

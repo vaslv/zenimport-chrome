@@ -20,10 +20,14 @@ export async function stagingProbe(db:LocalDatabase,args:StagingArguments){
     createdAt:'2026-10-20T00:00:00.000Z',version:'format-only'},async function*(name){
       if(name==='zen_entities'&&args.count){
         if(![1000,10000,100000].includes(args.count))throw Error('unsupported_fixture_size');
+        const complete=args.mode==='valid-graph';
+        if(complete)for(const row of args.golden.rows.zen_entities)if(row[0][0]==='text'&&row[0][1]<'merchant')yield row;
         const payload='{"note":"'+'x'.repeat(1900)+'","id":9007199254740993,"exact":1.00000000000000000001}';
         for(let i=0;i<args.count;i++){
-          const row=[...args.golden.rows.zen_entities[0]];row[1]=['text',String(i).padStart(12,'0')];row[2]=['text',payload];yield row;
+          const row=[...args.golden.rows.zen_entities[0]],id=String(i).padStart(12,'0');row[1]=['text',id];row[2]=['text',payload];
+          if(complete){row[0]=['text','merchant'];row[2]=['text',JSON.stringify({id,note:'x'.repeat(1900)})];}yield row;
         }
+        if(complete)for(const row of args.golden.rows.zen_entities)if(row[0][0]==='text'&&row[0][1]>='merchant')yield row;
       }else yield* args.golden.rows[name];
     },
     {async write(bytes){parts.push(new Uint8Array(bytes).buffer);}});
@@ -53,6 +57,10 @@ export async function stagingProbe(db:LocalDatabase,args:StagingArguments){
   };
   try{
     const value=await db.stageArchive(blob,args.fence,'1792540800');
+    if(args.mode==='valid-graph'){
+      const validationStart=performance.now(),validated=await db.validateStageGraph(value.id,args.fence,'1792540800');
+      return {...validated,elapsedMs:performance.now()-started,validationMs:performance.now()-validationStart,maxTransactionMs};
+    }
     return args.count?{...value,elapsedMs:performance.now()-started,maxTransactionMs}:value;
   }
   finally{for(const remove of cleanup)remove();FinancialDatabase.prototype.financial=original;FinancialDatabase.prototype.transaction=originalTransaction;}

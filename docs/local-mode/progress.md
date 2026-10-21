@@ -588,3 +588,17 @@ No archive validity is presented as financial graph or activation authority.
   variadic transaction call; the corrected table-array call passes strict typing.
 - Collection remains storage-private and is not scheduled by product handlers.
   Protected activation/export and financial interop/review gates remain open.
+
+### L4.15 — complete financial graph size gates (L4 in progress)
+
+- Added a separate synthetic benchmark preserving the complete current Python
+  financial fixture and 1k/10k/100k correctly keyed merchant entities. It proves
+  the full graph and persistent inactive verdict, not merely envelope integrity.
+- Docker: all three sizes passed per browser (145 suite: 220.52s; 140: 401.23s).
+  At 100k, both store 207,024,399 logical bytes. Import plus full validation takes
+  186.70s/332.77s; largest transaction 722.2ms/110.8ms; cgroup peak
+  1,121,820,672/1,268,957,184 bytes (145/140). Limits remain 3 GiB and 10s per
+  native transaction. Active data, pointer and exact stored fields are unchanged.
+- This does not establish performance for every bank-heavy graph or Chrome 155
+  on the user's machine. No real account, API request or production state used.
+  Remaining L4 authority/export, financial interop and review gates still apply.
