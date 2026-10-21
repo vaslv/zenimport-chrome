@@ -1432,3 +1432,19 @@ routing remains disabled. No live API/data, push, Git tags or publication.
 L10 remains in progress: production credential/setup ports, used-server joins,
 backups and archive-only restore. Product local routing remains disabled.
 No live API/data, push, Git tags or publication.
+
+### L10.7 — detached server credential candidates
+
+- Fresh authenticated identity verification now produces protected acknowledged
+  server credential references without selecting Root. Original owner and physical
+  installation bindings survive re-verification; legacy selected references remain
+  compatible and require fresh verification rather than invented candidate proofs.
+- Independent API/adversarial review fixes cover owner override and storage key
+  reordering; final reviews are clean. See
+  reviews/l10-server-credentials-2026-10-21.md. Docker strict/generated/bundle checks
+  and all 244 unit/contracts passed in 908.33ms.
+  Logs: /tmp/zenimport-l10-server-credentials-*.log.
+
+L10 production transfer ports, used-server joins, backups and archive-only restore
+remain in progress; local product routing is still disabled. No live API/data,
+push, Git tags or publication.
