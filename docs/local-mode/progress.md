@@ -1025,3 +1025,26 @@ pending. No product local routing, live API call, push, tag or publication.
 Final L8.1 Docker gate: strict types, generated contracts and all 195 unit/contract
 checks passed, including discarding an earlier unique split when a later search
 exhausts the same daily budget. No adapter or storage behavior was bypassed.
+
+### L8.2 — historical target proof and late transfer recovery
+
+- Ported durable original-target proof from immutable request/authorization history,
+  known-side claims, late opposite-bank corroboration and affected account/day
+  blocking. Current mapping or a mutable mobile field alone never creates a proof.
+- Independent review fixed separate eligible/current entity sets for permanent
+  tombstone reappearance and removed quadratic full-journal scans. Indexed peer
+  and alternative counts retain ambiguity barriers. See reviews/l8-ownership-2026-10-21.md.
+- Docker strict types and 200 unit/contracts passed, including linear traversal
+  assertions. Actual Python capture/authorization fixtures plus native domain
+  checks initially passed 13 tests in 11.77s (10 transfer scenarios, a 100k backfill
+  and two previous algorithm adapters). The expanded final 100k recovery check
+  and final independent recheck are recorded below after completion.
+
+Logs: /tmp/zenimport-l8-ownership.log, /tmp/zenimport-l8-ownership-unit.log,
+/tmp/zenimport-l8-ownership-final.log. This is still a pure policy checkpoint;
+persisted reconciliation, prediction/report assembly and L9–L12 remain pending.
+No production/live API use, push, tags or publication.
+Final L8.2 gate: all 11 native/source tests passed in 11.43s (one existing dependency
+warning). Both 100k backfill and 100k unresolved-owner scans stayed below their
+individual 10-second worker-unit limits. Both final independent readers reported
+no remaining finding. Durable browser application remains a later L8 point.

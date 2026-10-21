@@ -1,5 +1,5 @@
 import {build} from 'esbuild';
-for(const name of ['subsets','matching'])await build({entryPoints:['src/domain/reconciliation/'+name+'.ts'],outfile:'.local/contracts/reconciliation-'+name+'.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+for(const name of ['subsets','matching','ownership'])await build({entryPoints:['src/domain/reconciliation/'+name+'.ts'],outfile:'.local/contracts/reconciliation-'+name+'.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 for(const [entry,name]of [['src/domain/periods.ts','periods'],['src/local/capture/validation.ts','capture-validation']])await build({entryPoints:[entry],outfile:'.local/contracts/'+name+'.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 for(const name of ['projection','reader','credentials','mirror','catalog'])await build({entryPoints:['src/local/zenmoney/'+name+'.ts'],outfile:'.local/contracts/zenmoney-'+name+'.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
