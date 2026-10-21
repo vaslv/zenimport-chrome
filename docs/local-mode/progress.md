@@ -642,3 +642,14 @@ No archive validity is presented as financial graph or activation authority.
 - This is a prerequisite, not a durable participant implementation. L4 still needs
   protected active-source export, atomic generation activation/retirement, final
   crash/boundary gates and independent completion review. Local mode stays disabled.
+
+### Independent interim L4 review
+
+- A separate read-only reviewer inspected the persistent verdict/upgrade, safe
+  cleanup, inactive copy/native interop and participant wire changes through
+  `5edb32b`, with backend counterparts through `1aa0e4f`. No actionable findings
+  were reported. See reviews/l4-checkpoint-2026-10-21.md for scope and limitations.
+- This does not replace the independent completion gate: the durable participant,
+  protected active-source export and atomic activation/retirement are still next.
+  Their owner must support held and remote control contexts; ordinary local
+  storage fences must continue to reject pending switches and inactive histories.
