@@ -78,3 +78,7 @@ export async function runScenario(scenario: Scenario) {
 
 export {DomainError, ExactMoney, signedMovement, normalized, recipient, calendarDate, localDay, shiftMonths,
   canonicalDto, dtoDigest, moneyFromWire, rawRoundtrip, FixtureContext};
+
+// Private native domain adapters; never included as a product RPC surface.
+export {uniqueSubset,unmatchedSides} from '../domain/reconciliation/subsets.js';
+export {singleMatches,groupMatches} from '../domain/reconciliation/matching.js';

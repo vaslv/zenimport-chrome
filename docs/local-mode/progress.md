@@ -999,3 +999,29 @@ repeat import, lost ACK, worker termination, API outage, deletion and migration.
 Log: /tmp/zenimport-l7-remote-integration.log. L7's captured-fact and connector exit
 gates are complete. L8 begins next. The packaged product remains remote-only;
 local first-sync activation, SDK delivery, switching and popup wiring await L9–L12.
+
+## L8 — matching, category prediction and reports (in progress)
+
+### L8.1 — pure financial matching and bounded report comparison
+
+- Ported reference-first singles, exact account-side movements for all types/FX,
+  deterministic multiplicity, shared-target restriction and independent transfer
+  leg consumption. Split/net-settlement proposals need a unique exact proof and
+  cannot reuse a globally owned group UUID.
+- Added bounded 16-element/20,000-step searches. Exhaustion invalidates all earlier
+  proposals for that day. The read-only comparison reports both missing bank and
+  extra ZenMoney sides even when their daily totals balance.
+- Independent API and adversarial reviews found no confirmed remaining issue.
+  A proposed regex finding was disproved in Docker and withdrawn; it is not counted
+  as a fixed production defect. See reviews/l8-domain-2026-10-21.md.
+- Docker actual Python/native browser adapters passed two tests in 2.05s across
+  500 subset/report and 200 reference/multiplicity/group vectors. Inputs use the
+  frozen canonical plain decimal domain encoding without rounding financial values.
+  Logs: /tmp/zenimport-l8-parity.log and /tmp/zenimport-l8-unit.log.
+
+This is a domain checkpoint only. Ownership recovery, persisted reconciliation,
+category evidence/prediction and report assembly still remain in L8. L9–L12 are
+pending. No product local routing, live API call, push, tag or publication.
+Final L8.1 Docker gate: strict types, generated contracts and all 195 unit/contract
+checks passed, including discarding an earlier unique split when a later search
+exhausts the same daily budget. No adapter or storage behavior was bypassed.
