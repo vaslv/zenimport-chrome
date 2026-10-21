@@ -41,3 +41,5 @@ await build({entryPoints:['src/local/storage/outbox-control.ts'],outfile:'.local
 await build({entryPoints:['src/local/delivery/alarms.ts'],outfile:'.local/contracts/delivery-alarms.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/local/migration/remote.ts'],outfile:'.local/contracts/migration-remote.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/local/migration/wire.ts'],outfile:'.local/contracts/migration-wire.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+
+await build({entryPoints:['src/local/migration/journal.ts'],outfile:'.local/contracts/migration-journal.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});

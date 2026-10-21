@@ -1360,3 +1360,26 @@ financial authorization. No product local routing, live API/data or publication.
 
 L10 remains in progress: durable coordinator, transfer/recovery, used-server join
 and archive-only restore. No product local routing, live API/data or publication.
+
+### L10.4 — durable migration coordinator journal
+
+- Added one native active switch head, retained journals, immutable command UUIDs/
+  bodies before dispatch, integrity-checked participant receipts, ordered bounded
+  chunk ACKs, monotonic proof-bound phases and expiring exclusive runner leases.
+  Journal creation never activates a writer and stores only credential UUID refs.
+- Root checks fence unrelated token/context rotation while accepting only the
+  exact initial context or this switch's native reserve/hold/pointer transitions.
+  Destination IDs/generation/credential refs are verified together before and
+  after journal mutations; failed reservations roll back and remain retryable.
+- Independent API/adversarial reviews fixed reservation and stale-context recovery
+  findings; final reviews are clean. See reviews/l10-journal-2026-10-21.md.
+- Docker: strict/generated checks and 235 unit/contracts passed; six final native
+  journal cases passed in 11.94s, covering worker death, full browser restart,
+  quota rollback, credential rotation, own hold lost acknowledgment and a wrong
+  reservation pair followed by successful recovery. Earlier combined journal/
+  first-sync gate passed nine cases in 21.87s before the extra Root regressions.
+  Logs: /tmp/zenimport-l10-journal-*.log.
+
+L10 remains in progress: journal effect runner/adapters, transfer/cancellation,
+used-server join and archive-only restore. No product local routing, live API/data,
+push, tags or publication.

@@ -17,6 +17,9 @@ import type {ParticipantCommand} from './participant-model.js';
 import {writeTransaction,writeSetupTransaction} from './kernel.js';
 import {FirstSyncOwner} from './first-sync-owner.js';
 import {MirrorRepository} from './mirror-repository.js';
+import {SwitchJournalRepository} from './switch-journal-repository.js';
+import type {SwitchLease} from './switch-journal-repository.js';
+import type {Side,SwitchPhase,JournalCommand} from '../migration/journal.js';
 
 type Area=Parameters<typeof trustedSentinel>[0];
 const native=()=> (globalThis as unknown as {chrome:{storage:{local:Area&{remove(keys:string[]):Promise<void>}}}}).chrome.storage.local;
@@ -51,7 +54,7 @@ interface Arguments{
   name:string;participantId?:string;switchId?:string;peerId?:string;credentialRef?:string;command?:ParticipantCommand;request?:unknown;
   number?:number;base64?:string;checksum?:string;epoch?:string;mode?:string;generation?:string;
   fixture?:{rows:Record<TableName,TaggedRow[]>};count?:number;
-  peerStatus?:PeerStatus;requestId?:string;
+  peerStatus?:PeerStatus;requestId?:string;now?:string;lease?:SwitchLease;side?:Side;phase?:SwitchPhase;journalCommand?:JournalCommand['command'];
 }
 export async function run(action:string,args:Arguments){
   try{
@@ -65,7 +68,27 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action==='reserve'){
+      if(action.startsWith('journal-')){
+        const journal=await SwitchJournalRepository.open(args.name,port(args.name)),time=args.now??'1000';
+        const put=IDBObjectStore.prototype.put;
+        if(args.mode==='quota')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){
+          if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-switch:'))throw new DOMException('synthetic-journal-quota','QuotaExceededError');
+          return put.apply(this,values);
+        };
+        try{
+          if(action==='journal-create'){
+            const current=await owner.current(),local=args.mode==='remote-to-local';
+            value=await journal.create(current.root,{id:args.switchId!,direction:local?'remote-to-local':'local-to-remote',sourceId:local?args.peerId!:current.participantId!,destinationId:local?null:args.peerId!,remoteCredentialRef:local?current.root.credentialRef!:args.credentialRef!,localCredentialRef:local?args.credentialRef!:current.root.credentialRef!,ownerIds:['1']});
+          }else if(action==='journal-current')value=await journal.current();
+          else if(action==='journal-claim')value=await journal.claim(args.switchId!,time);
+          else if(action==='journal-reserve')value=await journal.reserve(args.lease!,args.participantId!,args.generation!,time);
+          else if(action==='journal-command')value=await journal.command(args.lease!,args.side??'source',args.journalCommand??'source_start',args.epoch??'1',time);
+          else if(action==='journal-accept')value=await journal.accept(args.lease!,args.request,time);
+          else if(action==='journal-advance')value=await journal.advance(args.lease!,args.phase!,time);
+          else if(action==='journal-release')value=await journal.release(args.lease!,time);
+          else throw Error('unknown_journal_fixture');
+        }finally{IDBObjectStore.prototype.put=put;journal.close();}
+      }else if(action==='reserve'){
         value=await owner.reserveDestination(args.switchId!,args.peerId!,args.credentialRef!,now);
         peers.set((value as {participantId:string}).participantId,owner);
       }else if(action==='status')value=await owner.status(args.participantId!,args.switchId!);
