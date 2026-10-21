@@ -33,6 +33,8 @@ export class SwitchJournalRepository{
     const plan=switchPlan(input),marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant(sameJournal(root,expected)&&root.pendingSwitchId===null,'migration_busy');
+      const restore=(await this.db.applicationState.get('archive-restore-head'))?.value;
+      if(restore)requireParticipant(['activated','cancelled'].includes((await this.db.applicationState.get('archive-restore:'+restore.id))?.value.phase as string),'migration_busy');
       const backup=(await this.db.applicationState.get('local-backup-head'))?.value;
       if(backup)requireParticipant((await this.db.applicationState.get('local-backup:'+backup.id))?.value.phase!=='building','migration_busy');
       const join=(await this.db.applicationState.get('mode-join-head'))?.value;

@@ -1,5 +1,6 @@
 /** Inactive imports only. No method here changes the active generation pointer. */
 import Dexie from 'dexie';
+import {restoreIntent,restoreScope} from './restore-control.js';
 import type {ContextFence,SentinelPort,RuntimeControl,DatasetSentinel} from '../../control/types.js';
 import {runtimeControl,datasetControl} from '../../control/validation.js';
 import {readArchive} from '../portable/zip.js';
@@ -64,8 +65,13 @@ export async function stageArchive(db:FinancialDatabase,sentinel:SentinelPort,fe
         await db.transaction('rw',[...scopeTables(db),db.stages],async()=>{
           const runtime=await routing(db,scope,marker,permit);
           if(permit){
-            const op=(await db.migrationOperations.get([permit.participantId,permit.switchId]))!;
-            requireStorage(op.datasetDigest===manifest.dataset_digest&&op.datasetId===manifest.dataset_id&&manifest.export_session_id===permit.switchId,'storage_corrupt');
+            if(permit.kind==='restore'){
+              const intent=restoreIntent((await db.applicationState.get(restoreScope(permit.switchId)))?.value);
+              requireStorage(intent.manifest===new TextDecoder().decode(canonical(manifest)),'storage_corrupt');
+            }else{
+              const op=(await db.migrationOperations.get([permit.participantId,permit.switchId]))!;
+              requireStorage(op.datasetDigest===manifest.dataset_digest&&op.datasetId===manifest.dataset_id&&manifest.export_session_id===permit.switchId,'storage_corrupt');
+            }
             const dataset=datasetControl(await db.datasets.get(id));createdAt=dataset.createdAt;
             await db.datasets.put({...dataset,datasetId:manifest.dataset_id,ownerIds:[...manifest.zenmoney_identity.owner_ids]});
           }else{
@@ -93,7 +99,11 @@ export async function stageArchive(db:FinancialDatabase,sentinel:SentinelPort,fe
     await markerFence();
     return await db.transaction('rw',[...scopeTables(db),db.stages],async()=>{
       const stage=await stageOwner(db,scope,id,writerId,marker,permit);
-      if(permit)requireStorage((await db.migrationOperations.get([permit.participantId,permit.switchId]))?.archiveSha256===result.archiveSha256,'storage_corrupt');
+      if(permit){
+        const expected=permit.kind==='restore'?restoreIntent((await db.applicationState.get(restoreScope(permit.switchId)))?.value).archiveSha256:
+          (await db.migrationOperations.get([permit.participantId,permit.switchId]))?.archiveSha256;
+        requireStorage(expected===result.archiveSha256,'storage_corrupt');
+      }
       const sealed:StageRecord={...stage,state:'format_valid',archiveSha256:result.archiveSha256};
       await db.stages.put(sealed);return stageSummary(sealed);
     });

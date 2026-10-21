@@ -1564,3 +1564,37 @@ disabled. No live API/data, push, tags or publication.
 
 Final minimum Chrome 140 replacement/corruption gate: eight passed in 78.22s,
 one existing Starlette warning. Log: /tmp/zenimport-l10-replacement-minimum.log.
+
+### L10.12 — archive-only browser recovery and reconciliation preview
+
+- Separate recovery intent and import permit preserve every financial/archive
+  fact without inventing peer authority. Empty destination and explicit former
+  writer retirement/loss declarations precede reservation. Fresh full SDK owner
+  verification and read-only, checksum-bound preview precede activation; the
+  restored participant requires explicit First Sync before financial sends.
+- Exact Root/nonce/generation/manifest fences protect every stage and activation.
+  Cancellation invalidates late work; different files, corrupt identity, expired
+  preview, denied permission and quota failures cannot silently select a writer.
+  Original/retired source history is retained. No financial SDK write occurs.
+- Fixed native Dexie async-scope lifetime, duplicate physical-account summary
+  counters, and brittle fault fixture scopes. Graph proof caches are bounded and
+  contain immutable positive relationship facts only; authority is always fresh.
+- Final independent API/adversarial source reviews are clean; external cross-model
+  CLI unavailable. See reviews/l10-archive-recovery-2026-10-22.md.
+- Final Docker strict/generated/bundle and 249 unit/contracts passed in 1652.82ms.
+  Current Chromium: all 14 native recovery cases passed in 153.48s, including
+  1k/10k/100k complete recovery (2.03/16.32/108.14s; container peak 1,106,677,760
+  bytes). Real Python HTTP gate: 18 passed in 55.74s, one existing Starlette
+  deprecation warning. Prior combined recovery/authority/journal/backup gate:
+  71 passed in 223.91s, three resource cases excluded then checked separately.
+  Logs: /tmp/zenimport-l10-restore-timed.log,
+  /tmp/zenimport-l10-restore-unit-timed.log,
+  /tmp/zenimport-l10-restore-python-final.log.
+
+L10 remains in progress: safe file handling/cleanup and server archive recovery,
+then major-gate review. L11 UI and L12 full acceptance remain pending. Product
+local routing is disabled. No live API/data, push, tags or publication.
+
+Final latest-source minimum Chrome 140 recovery gate: 11 passed in 94.39s,
+three large resource cases covered on current Chromium above. Log:
+/tmp/zenimport-l10-restore-minimum-timed.log.

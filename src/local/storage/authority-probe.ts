@@ -1,6 +1,8 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
 import {BackupOwner} from './backup-owner.js';
+import {RestoreOwner} from './restore-owner.js';
+import {fixtureArchive} from './staging-probe.js';
 import {ModeTransfers} from '../migration/controller.js';
 import {mirrorReader} from '../zenmoney/reader.js';
 import type {StorageArea} from '../../application/state.js';
@@ -79,7 +81,25 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('backup-')){
+      if(action.startsWith('restore-')){
+        const raw=args.fixture?.rows.zen_sync_runs[0].at(-1)?.[1] as string??JSON.stringify({serverTimestamp:1792540800,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
+        const proof={ownerIds:args.mode==='wrong-owner'?['2']:['1'],sourceHash:'f'.repeat(64)};
+        const restore=await RestoreOwner.open(args.name,port(args.name),{
+          async verify(){if(args.mode==='offline')throw new ParticipantError('zenmoney_unavailable');if(args.mode==='pause-restore-preview'){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return {...proof,raw};},
+          async credential(){return proof;},async permission(){return args.mode!=='permission-denied';},
+        },()=>Number(args.now??now));
+        const put=IDBObjectStore.prototype.put;
+        if(args.mode==='quota-activate'||args.mode==='quota-validated')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('archive-restore:')&&values[0]?.value?.phase===(args.mode==='quota-activate'?'activated':'validated'))throw new DOMException('synthetic-restore-quota','QuotaExceededError');return put.apply(this,values);};
+        const blob=async()=>args.count?fixtureArchive({golden:args.fixture! as Parameters<typeof fixtureArchive>[0]['golden'],count:args.count,mode:'valid-graph'}):new Blob([Uint8Array.from(atob(args.base64!),char=>char.charCodeAt(0))]);
+        try{
+          if(action==='restore-begin')value=await restore.begin(args.requestId!,await blob(),args.credentialRef!,{formerWritersRetired:args.mode!=='no-retirement',acceptPostSnapshotEvidenceLoss:args.mode!=='no-loss-consent',replaceInactiveLocalCopy:args.mode==='replace-copy'});
+          else if(action==='restore-current')value=await restore.current();
+          else if(action==='restore-load')value=await restore.load(args.requestId!,await blob());
+          else if(action==='restore-preview')value=await restore.preview(args.requestId!);
+          else if(action==='restore-activate')value=await restore.activate(args.requestId!,args.peerId!,args.mode!=='no-summary');
+          else if(action==='restore-cancel')value=await restore.cancel(args.requestId!);
+        }finally{IDBObjectStore.prototype.put=put;restore.close();}
+      }else if(action.startsWith('backup-')){
         const marker=port(args.name);let count=0;
         const backup=await BackupOwner.open(args.name,{...marker,async read(){if(args.mode==='pause-backup'&&++count===3){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}return marker.read();}});
         try{
@@ -230,10 +250,10 @@ export async function run(action:string,args:Arguments){
         if(args.mode)FinancialDatabase.prototype.transaction=new Proxy(original,{
           apply(target,db,parameters){
             const tables=parameters[1] as Array<{name:string}>;
-            if(args.mode==='pause-erase-header'&&parameters[0]==='rw'&&Array.isArray(tables)&&tables.length===6){
+            if(args.mode==='pause-erase-header'&&parameters[0]==='rw'&&Array.isArray(tables)&&tables.some(table=>table.name==='portable_stages')&&!tables.some(table=>table.name.startsWith('f_'))){
               checkpoint=true;return new Promise<void>(resolve=>{release=resolve;}).then(()=>Reflect.apply(target,db,parameters));
             }
-            if(args.mode==='quota-import'&&parameters[0]==='rw'&&Array.isArray(tables)&&tables.length===7&&tables.some(table=>table.name==='f_capture_jobs')){
+            if(args.mode==='quota-import'&&parameters[0]==='rw'&&Array.isArray(tables)&&tables.filter(table=>table.name.startsWith('f_')).length===1&&tables.some(table=>table.name==='f_capture_jobs')){
               const callback=parameters[parameters.length-1] as ()=>Promise<unknown>;
               return Reflect.apply(target,db,[...parameters.slice(0,-1),async()=>{await callback();throw new DOMException('synthetic-import-quota','QuotaExceededError');}]);
             }

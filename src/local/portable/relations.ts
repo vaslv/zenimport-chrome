@@ -42,6 +42,10 @@ async function insertProof(reader:GraphReader,table:TableName,data:RowByTable[Ta
 export async function validateRelations(reader:GraphReader,manifest?:PortableManifest):Promise<Readonly<Record<TableName,string>>>{
   const insertNames=Object.values(SCHEMA).flatMap(table=>table.triggers.filter(trigger=>/BEFORE\s+INSERT\s+ON/i.test(trigger.sql)).map(trigger=>trigger.name)).sort();
   requirePortable(insertNames.join(',')==='captured_record_scope,delivery_authorization_proof,interval_scope','unsupported_invariant');
+  // Readers represent immutable staged/held graphs and recheck their authority
+  // on each bounded page; final proof publication has its own nonce/Root CAS.
+  // Repeated positive FK facts need not open another native transaction per row.
+  const foreignFacts=new Set<string>();
   const counts={} as Record<TableName,string>;
   for(const table of Object.keys(SCHEMA).sort() as TableName[]){
     const definition=SCHEMA[table],seen=definition.indexes.filter(index=>index.unique).map(index=>({index,keys:new Set<string>()}));
@@ -62,7 +66,11 @@ export async function validateRelations(reader:GraphReader,manifest?:PortableMan
       for(const foreign of definition.foreignKeys){
         const values=foreign.columns.map(column=>field(table,packed,column));
         if(values.some(value=>value[0]==='null'))continue; // SQLite MATCH SIMPLE.
-        requirePortable(await reader.find(foreign.table,foreign.target,values)!==null,'invalid_relationship');
+        const key=JSON.stringify([foreign.table,foreign.target,values]);
+        if(!foreignFacts.has(key)){
+          requirePortable(await reader.find(foreign.table,foreign.target,values)!==null,'invalid_relationship');
+          if(foreignFacts.size>=1024)foreignFacts.clear();foreignFacts.add(key);
+        }
       }
       await insertProof(reader,table,data);
     }

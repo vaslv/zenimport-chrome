@@ -230,7 +230,11 @@ def test_native_return_from_remote_uses_a_fresh_generation_and_keeps_old_handoff
     # A separate fixture models a server after a later explicit sync; L4 itself
     # cannot clear awaiting_sync on a newly activated participant.
     remote=ok(worker,'create','server')['participantId'];ok(worker,'seed','server',fixture=FIXTURE)
-    switch=str(uuid4());slot=ok(worker,'reserve',switchId=switch,peerId=remote,credentialRef=str(uuid4()));local=slot['participantId']
+    from test_backup import acknowledged_inactive_backup
+    acknowledged_inactive_backup(worker)
+    switch,credential=str(uuid4()),str(uuid4())
+    ok(worker,'journal-create',switchId=switch,peerId=remote,credentialRef=credential,mode='remote-to-local-replace')
+    slot=ok(worker,'reserve',switchId=switch,peerId=remote,credentialRef=credential);local=slot['participantId']
     def command(name,id,command,**fields):
         epoch=ok(worker,'status',name,participantId=id,switchId=switch)['participant_epoch']
         return ok(worker,'command',name,participantId=id,command=command,

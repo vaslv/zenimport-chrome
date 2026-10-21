@@ -1,15 +1,17 @@
 /** Private migration permit, checked against durable ownership on every batch. */
+import {assertRestoreScope} from './restore-control.js';
 import type {ContextFence,DatasetSentinel} from '../../control/types.js';
 import {datasetControl} from '../../control/validation.js';
 import type {FinancialDatabase} from './database.js';
 import {assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
 import {requireStorage} from './types.js';
-export interface ImportPermit{readonly switchId:string;readonly participantId:string;readonly nonce:string}
-export const scopeTables=(db:FinancialDatabase)=>[db.runtime,db.datasets,db.participants,db.migrationOperations,db.switches];
+export interface ImportPermit{readonly switchId:string;readonly participantId:string;readonly nonce:string;readonly kind?:'restore'}
+export const scopeTables=(db:FinancialDatabase)=>[db.runtime,db.datasets,db.participants,db.migrationOperations,db.switches,db.applicationState];
 export async function assertImportScope(db:FinancialDatabase,fence:ContextFence,marker:DatasetSentinel,permit?:ImportPermit){
   const root=await assertAnchor(db,marker);
   requireStorage(root.installationId===fence.installationId&&root.epoch===fence.epoch,'stale_epoch');
+  if(permit?.kind==='restore')return assertRestoreScope(db,fence,marker,permit);
   if(permit){
     const control=participantControl(await db.participants.get(permit.participantId));
     const op=await db.migrationOperations.get([permit.participantId,permit.switchId]);

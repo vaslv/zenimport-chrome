@@ -12,8 +12,8 @@ export interface StagingArguments{
   golden:{dataset_id:string;owner_ids:string[];rows:Record<TableName,TaggedRow[]>};
 }
 
-export async function stagingProbe(db:LocalDatabase,args:StagingArguments){
-  const started=performance.now();
+
+export async function fixtureArchive(args:Omit<StagingArguments,'fence'>):Promise<Blob>{
   const parts:ArrayBuffer[]=[];
   await createArchive({datasetId:args.golden.dataset_id,ownerIds:args.golden.owner_ids,
     archiveId:'00000000-0000-4000-8000-000000000003',sessionId:'00000000-0000-4000-8000-000000000002',
@@ -31,7 +31,12 @@ export async function stagingProbe(db:LocalDatabase,args:StagingArguments){
       }else yield* args.golden.rows[name];
     },
     {async write(bytes){parts.push(new Uint8Array(bytes).buffer);}});
-  let blob=new Blob(parts);
+  return new Blob(parts);
+}
+
+export async function stagingProbe(db:LocalDatabase,args:StagingArguments){
+  const started=performance.now();
+  let blob=await fixtureArchive(args);
   if(args.mode==='bad-hash'){
     // Only tiny synthetic fixtures use the full-buffer rewrite helper.
     const files=unzipSync(new Uint8Array(await blob.arrayBuffer()));

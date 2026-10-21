@@ -33,7 +33,8 @@ export class StageGraphReader implements GraphReader{
     requireStorage(['format_valid','graph_valid'].includes(stage.state)&&stage.archiveSha256!==null,'dataset_not_writable');
     const manifest=validateManifest(parseJson(new TextEncoder().encode(stage.manifest)));
     const view=new StageGraphReader(db,sentinel,fence,id,stage.writerId,manifest,stage.archiveSha256,permit);
-    await view.#marker();await db.transaction('r',[...scopeTables(db),db.stages],()=>view.#routing());
+    // Declare a native async scope so Dexie tracks the complete nested guard.
+    await view.#marker();await db.transaction('r',[...scopeTables(db),db.stages],async()=>{await view.#routing();});
     return view;
   }
   get manifest():PortableManifest{return structuredClone(this.#manifest);}

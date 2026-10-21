@@ -47,3 +47,21 @@ test('relational checks enforce native uniqueness and CHECKs without accepting s
   const inconsistent=structuredClone(fixture.rows);inconsistent.bank_transactions[0][offset('bank_transactions','amount')]=['text','999'];
   await validateRelations(reader(inconsistent));
 });
+
+test('immutable repeated parent facts are bounded to one lookup per proof run without hiding a new missing key',async()=>{
+  const rows=structuredClone(fixture.rows),base=rows.zen_entities.find(row=>row[offset('zen_entities','run_id')][0]!=='null');
+  assert.ok(base);
+  for(let i=0;i<2000;i++){
+    const row=structuredClone(base);row[offset('zen_entities','kind')]=['text','merchant'];
+    row[offset('zen_entities','id')]=['text','cache-'+String(i).padStart(5,'0')];rows.zen_entities.push(row);
+  }
+  const source=reader(rows),calls=new Map(),counted={...source,async find(table,columns,values){
+    if(table==='zen_sync_runs'){const key=JSON.stringify(values);calls.set(key,(calls.get(key)??0)+1);}
+    return source.find(table,columns,values);
+  }};
+  const key=JSON.stringify([base[offset('zen_entities','run_id')]]);
+  await validateRelations(counted);assert.equal(calls.get(key),1);
+  await validateRelations(counted);assert.equal(calls.get(key),2,'a later proof has no retained facts cache');
+  rows.zen_entities.at(-1)[offset('zen_entities','run_id')]=['text','missing-new-parent'];
+  await assert.rejects(validateRelations(counted),{code:'invalid_relationship'});
+});

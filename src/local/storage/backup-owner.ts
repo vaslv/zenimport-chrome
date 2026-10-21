@@ -62,12 +62,12 @@ export class BackupOwner{
       const old=(await this.db.applicationState.get(scope(id)))?.value as unknown as Backup|undefined;
       if(old){requireParticipant(old.generation===generation);return old;}
       requireParticipant(same(root,expected)&&root.pendingSwitchId===null,'migration_busy');
-      for(const head of ['mode-switch-head','mode-join-head','local-backup-head']){
+      for(const head of ['mode-switch-head','mode-join-head','local-backup-head','archive-restore-head']){
         const key=(await this.db.applicationState.get(head))?.value.id;
         if(typeof key==='string'){
-          const prefix=head==='mode-switch-head'?'mode-switch:':head==='mode-join-head'?'mode-join:':'local-backup:';
+          const prefix=head==='mode-switch-head'?'mode-switch:':head==='mode-join-head'?'mode-join:':head==='archive-restore-head'?'archive-restore:':'local-backup:';
           const pending=(await this.db.applicationState.get(prefix+key))?.value;
-          requireParticipant(!pending||['complete','cancelled','ready','cleaned'].includes(pending.phase as string),'migration_busy');
+          requireParticipant(!pending||['complete','cancelled','ready','cleaned','activated'].includes(pending.phase as string),'migration_busy');
         }
       }
       const dataset=datasetControl(await this.db.datasets.get(generation));
