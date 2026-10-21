@@ -260,6 +260,12 @@ def test_native_source_snapshot_requires_quiescent_financial_history(pair,table,
     columns=contract['tables'][table]['columns']
     position=[item['name'] if isinstance(item,dict) else item for item in columns].index(column)
     fixture['rows'][table][0][position]=['text',value];ok(pair.worker,'seed',fixture=fixture)
+    if table=='capture_jobs':
+        # Reject before hold so stopping incomplete capture remains possible.
+        request=pair.request('source','source_start',peer_id=pair.target)
+        assert call(pair.worker,'command',participantId=pair.source,command='source_start',request=request)==dict(ok=False,code='migration_incomplete')
+        assert pair.status('source')['state']=='active' and pair.status('source')['operation'] is None
+        return
     pair.command('source','source_start',peer_id=pair.target)
     assert call(pair.worker,'snapshot',participantId=pair.source,switchId=pair.switch)==dict(ok=False,code=code)
     assert pair.status('source')['operation']['dataset_digest'] is None

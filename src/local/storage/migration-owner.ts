@@ -172,6 +172,11 @@ export class MigrationOwner{
         const outbox=await readOutbox(this.#db,control.generation);
         // An expired request still needs verification-only recovery before hold.
         requireParticipant(outbox===null||outbox.phase==='settled','migration_busy');
+        // one_active_capture contains only planned/collecting/paused jobs.
+        // The indexed first() stays bounded and shares the final hold CAS.
+        const capture=await this.#db.financial('capture_jobs').where('[generation+i0]')
+          .between([control.generation,Dexie.minKey],[control.generation,Dexie.maxKey],true,true).first();
+        requireParticipant(capture===undefined,'migration_incomplete');
         const epoch=increment(current.epoch);updated={...updated,lifecycle:'held',holdId:request.switch_id as string};
         await this.#db.switches.add({id:request.switch_id as string,generation:control.generation,role:'source',previousMode:'local',previousGeneration:control.generation,
           state:'pending',peerId:next.operation.peerId,credentialRef:null,routingEpoch:epoch});

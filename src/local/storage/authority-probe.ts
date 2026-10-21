@@ -17,6 +17,9 @@ import type {ParticipantCommand} from './participant-model.js';
 import {writeTransaction,writeSetupTransaction} from './kernel.js';
 import {FirstSyncOwner} from './first-sync-owner.js';
 import {MirrorRepository} from './mirror-repository.js';
+import {SwitchRunner} from '../migration/runner.js';
+import {NativeParticipant,ServerParticipant} from '../migration/participants.js';
+import {RemoteParticipant} from '../migration/remote.js';
 import {SwitchJournalRepository} from './switch-journal-repository.js';
 import type {SwitchLease} from './switch-journal-repository.js';
 import type {Side,SwitchPhase,JournalCommand} from '../migration/journal.js';
@@ -25,6 +28,7 @@ type Area=Parameters<typeof trustedSentinel>[0];
 const native=()=> (globalThis as unknown as {chrome:{storage:{local:Area&{remove(keys:string[]):Promise<void>}}}}).chrome.storage.local;
 const owners=new Map<string,MigrationOwner>(),peers=new Map<string,MigrationOwner>(),reads=new Map<string,number>();
 const externalPeers=new Map<string,PeerStatus>();
+const remotePeers=new Map<string,{client:RemoteParticipant;adapter:ServerParticipant}>();
 const modes=new Map<string,string>();let checkpoint=false;
 let release:(()=>void)|undefined;
 function port(name:string){
@@ -36,7 +40,7 @@ function port(name:string){
 async function open(name:string){
   owners.get(name)?.close();
   const owner=await MigrationOwner.open(name,port(name),{
-    async readPeer(id,switchId){const peer=peers.get(id);if(peer)return peer.status(id,switchId);
+    async readPeer(id,switchId){const remote=remotePeers.get(id);if(remote)return remote.adapter.status(switchId);const peer=peers.get(id);if(peer)return peer.status(id,switchId);
       const fixture=externalPeers.get(id+':'+switchId);if(!fixture)throw new ParticipantError('migration_paused');return structuredClone(fixture);},
     async verifyOwner(){
       reads.set(name,(reads.get(name)??0)+1);const mode=modes.get(name);
@@ -54,7 +58,7 @@ interface Arguments{
   name:string;participantId?:string;switchId?:string;peerId?:string;credentialRef?:string;command?:ParticipantCommand;request?:unknown;
   number?:number;base64?:string;checksum?:string;epoch?:string;mode?:string;generation?:string;
   fixture?:{rows:Record<TableName,TaggedRow[]>};count?:number;
-  peerStatus?:PeerStatus;requestId?:string;now?:string;lease?:SwitchLease;side?:Side;phase?:SwitchPhase;journalCommand?:JournalCommand['command'];
+  peerStatus?:PeerStatus;requestId?:string;url?:string;token?:string;now?:string;lease?:SwitchLease;side?:Side;phase?:SwitchPhase;journalCommand?:JournalCommand['command'];
 }
 export async function run(action:string,args:Arguments){
   try{
@@ -68,7 +72,13 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action.startsWith('journal-')){
+      if(action==='remote-peer'){
+        const client=new RemoteParticipant({url:args.url!,token:args.token!},async()=>{
+          const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
+          return chrome.permissions.contains({origins:[new URL(args.url!).origin+'/*']});
+        });
+        const identity=await client.identity();remotePeers.set(identity.installation_id,{client,adapter:new ServerParticipant(client,identity.installation_id)});value=identity;
+      }else if(action.startsWith('journal-')){
         const journal=await SwitchJournalRepository.open(args.name,port(args.name)),time=args.now??'1000';
         const put=IDBObjectStore.prototype.put;
         if(args.mode==='quota')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){
@@ -81,6 +91,31 @@ export async function run(action:string,args:Arguments){
             value=await journal.create(current.root,{id:args.switchId!,direction:local?'remote-to-local':'local-to-remote',sourceId:local?args.peerId!:current.participantId!,destinationId:local?null:args.peerId!,remoteCredentialRef:local?current.root.credentialRef!:args.credentialRef!,localCredentialRef:local?args.credentialRef!:current.root.credentialRef!,ownerIds:['1']});
           }else if(action==='journal-current')value=await journal.current();
           else if(action==='journal-claim')value=await journal.claim(args.switchId!,time);
+          else if(action==='journal-run'){
+            const record=(await journal.current())!,target=peers.get(record.plan.direction==='local-to-remote'?record.plan.destinationId!:record.plan.sourceId)!;
+            const sourceLocal=record.plan.direction==='local-to-remote',server=remotePeers.get(sourceLocal?record.plan.destinationId!:record.plan.sourceId);
+            const decorated=(participant:NativeParticipant)=>{
+              const execute=participant.command.bind(participant);
+              participant.command=async(command,request)=>{
+                const result=await execute(command,request),drop={source_start:'drop-start',source_handoff:'drop-handoff',destination_activate:'drop-activate'};
+                if(args.mode&&args.mode===drop[command as keyof typeof drop])throw new ParticipantError('backend_unavailable');
+                if(args.mode==='pause-handoff'&&command==='source_handoff'){checkpoint=true;await new Promise(()=>{});}
+                return result;
+              };return participant;
+            };
+            const runner=new SwitchRunner(journal,{
+              async prepare(plan){
+                if(server){const identity=await server.client.identity();
+                  if(JSON.stringify(identity.owner_ids)!==JSON.stringify(plan.ownerIds))throw new ParticipantError('migration_wrong_account');
+                  if(sourceLocal){if(!identity.can_import)throw new ParticipantError('migration_not_empty');return null;}
+                }
+                if(sourceLocal)return null;const slot=await owner.reserveDestination(plan.id,plan.sourceId,plan.localCredentialRef,time);peers.set(slot.participantId,owner);return {id:slot.participantId,generation:slot.generation};},
+              async quiesce(){return true;},
+              source:plan=>!sourceLocal&&server?server.adapter:decorated(new NativeParticipant(sourceLocal?owner:target,plan.sourceId)),
+              destination:plan=>sourceLocal&&server?server.adapter:decorated(new NativeParticipant(sourceLocal?target:owner,plan.destinationId!)),
+              selectRemote:plan=>owner.selectRemote(plan.sourceId,plan.id,plan.remoteCredentialRef),
+            },()=>Number(time));value=await runner.run();
+          }
           else if(action==='journal-reserve')value=await journal.reserve(args.lease!,args.participantId!,args.generation!,time);
           else if(action==='journal-command')value=await journal.command(args.lease!,args.side??'source',args.journalCommand??'source_start',args.epoch??'1',time);
           else if(action==='journal-accept')value=await journal.accept(args.lease!,args.request,time);
@@ -150,6 +185,11 @@ export async function run(action:string,args:Arguments){
         try{
           await writeTransaction(db,port(args.name),{installationId:current.root.installationId,generation:args.generation??current.root.activeGeneration!,epoch:current.root.epoch},
             async session=>{await session.insert('dataset_metadata',{key:'forbidden-probe-write',value:'never'});});value=true;
+        }finally{db.close();}
+      }else if(action==='capture-for-migration'){
+        const current=await owner.current(),db=new FinancialDatabase(args.name,false);await db.open();
+        try{const entry=(await db.financial('capture_jobs').where('generation').equals(current.root.activeGeneration!).first())!,row=unpackRow('capture_jobs',entry.row);
+          await db.financial('capture_jobs').put(envelope(current.root.activeGeneration!,'capture_jobs',packRow('capture_jobs',{...row,capture_state:args.mode==='complete'?'complete':'paused'})));value=true;
         }finally{db.close();}
       }else if(action==='refresh-for-setup'){
         const time=Math.floor(Date.now()/1000)-(args.mode==='stale'?301:0),mirror=await MirrorRepository.open(args.name,port(args.name),()=>time);

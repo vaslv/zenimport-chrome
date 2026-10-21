@@ -1383,3 +1383,30 @@ and archive-only restore. No product local routing, live API/data or publication
 L10 remains in progress: journal effect runner/adapters, transfer/cancellation,
 used-server join and archive-only restore. No product local routing, live API/data,
 push, tags or publication.
+
+### L10.5 — durable normal transfer execution and real server interoperability
+
+- Added bounded journal-driven commands/chunks and authenticated native/server
+  participant adapters. Lost replies recover the same saved request, permanent
+  receipt and archive identity. Source handoff precedes pointer selection; native
+  activation selects Root atomically. Activation never releases explicit Sync.
+- Queued/running server tasks are polled; transient migration writer-lock contention
+  waits without generating another request UUID. The source's final hold CAS uses
+  the existing partial active-capture index to reject unfinished history before
+  stop becomes blocked, without scanning terminal capture history.
+- Independent API/adversarial reviews are clean; see reviews/l10-runner-2026-10-21.md.
+  Docker strict/bundle/generated checks and all 235 unit/contracts passed.
+- Twelve current native journal/transfer cases passed in 24.25s; the same twelve
+  passed on minimum Chrome 140 in 85.95s. Coverage includes exact graph preservation,
+  lost start/handoff/activation responses, actual worker death after irreversible
+  handoff, quota/context recovery and source capture quiescence.
+- Actual installed Chrome to isolated Python HTTP API plus native transfer gates:
+  14 passed in 25.13s, one existing Starlette deprecation warning. This includes
+  real chunk upload, background graph validation/activation, awaiting-Sync and
+  zero financial SDK writes. Final authority/first-sync regressions: 28 passed in
+  55.10s after updating the old capture test to expect the stronger pre-hold guard.
+  Logs: /tmp/zenimport-l10-runner-*.log. All services/data were synthetic and isolated.
+
+L10 remains in progress: cancellation/forward recovery, production credential and
+setup ports, used-server joins, backups and archive-only restore. Product local
+routing remains disabled. No live API/data, push, Git tags or publication.

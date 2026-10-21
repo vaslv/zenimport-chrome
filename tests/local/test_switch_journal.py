@@ -1,5 +1,6 @@
 """Coordinator effects persist before dispatch and survive native worker loss."""
 from uuid import uuid4
+import pytest
 from playwright.sync_api import sync_playwright
 from test_runtime import installed
 from test_authority import ok,call,FIXTURE,pair
@@ -104,3 +105,87 @@ def test_remote_reservation_rejects_the_wrong_pair_without_poisoning_recovery(pa
     assert ok(worker,'journal-reserve',lease=lease,participantId=reserved['participantId'],generation=reserved['generation'])
     saved=ok(worker,'journal-current')
     assert saved['plan']['destinationId']==reserved['participantId'] and saved['destinationGeneration']==reserved['generation']
+
+
+def test_durable_runner_transfers_native_graph_and_selects_only_the_destination(pair):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    before=ok(worker,'inspect')['rows']
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    phases=[]
+    for _ in range(100):
+        result=ok(worker,'journal-run',now='1792540800')
+        assert result['state'] not in ('blocked','busy'),result
+        phases.append(result.get('phase'))
+        if result['state']=='complete':break
+    else:raise AssertionError(phases)
+    assert pair.status('source')['state']=='handed_off'
+    assert pair.status('target')['state']=='active' and pair.status('target')['awaiting_sync']
+    assert ok(worker,'current')['root']['activeMode']=='remote'
+    assert ok(worker,'inspect','target')['rows']==before
+    journal=ok(worker,'journal-current')
+    assert journal['phase']=='complete' and journal['lease'] is None
+    assert len(journal['commands'])==6
+    assert not call(worker,'write',generation=pair.generation)['ok']
+    assert not call(worker,'write','target')['ok']
+
+
+@pytest.mark.parametrize('mode,phase',[('drop-start','source_quiescing'),('drop-handoff','destination_verified'),('drop-activate','active_pointer_committed')])
+def test_runner_recovers_a_lost_mutation_reply_with_the_same_request(pair,mode,phase):
+    pair,_,_=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        journal=ok(worker,'journal-current')
+        if journal['phase']==phase:break
+        result=ok(worker,'journal-run',now='1792540800');assert result['state']!='blocked',result
+    else:raise AssertionError('fault phase not reached')
+    dropped=ok(worker,'journal-run',now='1792540800',mode=mode)
+    assert dropped['state']=='blocked' and dropped['code']=='backend_unavailable',dropped
+    saved=ok(worker,'journal-current')['commands']
+    for _ in range(100):
+        result=ok(worker,'journal-run',now='1792540800');assert result['state']!='blocked',result
+        if result['state']=='complete':break
+    else:raise AssertionError('recovery did not complete')
+    final=ok(worker,'journal-current')
+    for command in saved:assert command in final['commands']
+    assert len(final['commands'])==6
+    assert pair.status('source')['state']=='handed_off' and pair.status('target')['awaiting_sync']
+    assert ok(worker,'reads','target')==2
+
+
+def test_runner_recovers_after_worker_death_following_irreversible_handoff(pair):
+    pair,context,page=pair;worker=pair.worker
+    ok(worker,'rotate-for-setup',credentialRef=str(uuid4()))
+    ok(worker,'journal-create',switchId=pair.switch,peerId=pair.target,credentialRef=str(uuid4()))
+    for _ in range(100):
+        if ok(worker,'journal-current')['phase']=='destination_verified':break
+        assert ok(worker,'journal-run',now='1792540800')['state']!='blocked'
+    worker.evaluate('()=>{globalThis.pending=authorityProbe.run("journal-run",{name:"source",now:"1792540800",mode:"pause-handoff"});return true;}')
+    for _ in range(300):
+        if ok(worker,'checkpoint'):break
+        page.wait_for_timeout(20)
+    assert ok(worker,'checkpoint')
+    session=context.new_cdp_session(page)
+    target=next(row for row in session.send('Target.getTargets')['targetInfos'] if row['type']=='service_worker' and row['url']==worker.url)
+    assert session.send('Target.closeTarget',dict(targetId=target['targetId']))['success']
+    page.evaluate('()=>chrome.runtime.sendMessage({type:"probe-wake"})');ok(page,'open');ok(page,'open','target')
+    pair.worker=page
+    assert pair.status('source')['state']=='handed_off'
+    for _ in range(100):
+        result=ok(page,'journal-run',now='1792541100');assert result['state'] not in ('blocked','busy'),result
+        if result['state']=='complete':break
+    else:raise AssertionError('handoff recovery did not complete')
+    assert pair.status('target')['awaiting_sync']
+    assert ok(page,'journal-current')['phase']=='complete'
+
+
+def test_source_cannot_freeze_an_incomplete_capture_behind_its_hold(pair):
+    pair,_,_=pair;worker=pair.worker;ok(worker,'capture-for-migration')
+    before=ok(worker,'current');request=pair.request('source','source_start',peer_id=pair.target)
+    failed=call(worker,'command',participantId=pair.source,command='source_start',request=request)
+    assert failed==dict(ok=False,code='migration_incomplete')
+    assert ok(worker,'current')==before and pair.status('source')['state']=='active'
+    ok(worker,'capture-for-migration',mode='complete')
+    proof=pair.command('source','source_start',request=request)
+    assert proof['state']=='export_hold'
