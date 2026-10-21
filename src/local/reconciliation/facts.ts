@@ -5,7 +5,7 @@ import {ExactMoney} from '../../domain/money.js';
 import {revisionKey} from '../../domain/reconciliation/ownership.js';
 import type {RemoteMovement} from '../../domain/reconciliation/matching.js';
 import type {CategoryBank,ReviewedPayment,CategoryTag} from '../../domain/prediction/categories.js';
-import {jsonTruthy,jsonEqual,scalarText} from '../portable/json-values.js';
+import {jsonTruthy,jsonEqual} from '../portable/json-values.js';
 import {requireStorage} from '../storage/types.js';
 import type {RowByTable} from '../storage/schema.generated.js';
 import type {SourceSnapshot} from './source.js';
@@ -15,7 +15,10 @@ export function storedObject(raw:string):FinancialObject{
   const value=decodeJson(raw);requireStorage(value!==null&&typeof value==='object'&&!Array.isArray(value)&&!(value instanceof ExactDecimal),'storage_corrupt');
   return value as FinancialObject;
 }
-const text=(value:unknown):string|null=>value==null?null:scalarText(value,'invalid_financial_identifier');
+// Related accounts are strings and instruments are integers in the API. Do
+// not turn malformed string/number collisions into a durable financial match.
+const text=(value:unknown):string|null=>typeof value==='string'?value:null;
+export const instrumentText=(value:unknown):string|null=>(typeof value==='bigint'||typeof value==='number'&&Number.isSafeInteger(value))&&value>0?String(value):null;
 const string=(value:unknown,fallback='')=>{requireStorage(value==null||typeof value==='string','storage_corrupt');return value??fallback;};
 const amount=(value:unknown):string|null=>value==null?null:moneyFromWire(value).toString();
 const scaleAllowed=(value:unknown)=>{
@@ -28,13 +31,13 @@ export function movementFact(row:RowByTable['zen_entities']):RemoteMovement{
   const value=storedObject(row.data),created=value.created;
   requireStorage(created==null||typeof created==='bigint'||typeof created==='number'&&Number.isSafeInteger(created),'storage_corrupt');
   return {id:row.id,date:value.date==null?undefined:string(value.date),incomeAccount:text(value.incomeAccount),outcomeAccount:text(value.outcomeAccount),
-    incomeInstrument:text(value.incomeInstrument),outcomeInstrument:text(value.outcomeInstrument),income:amount(value.income)??undefined,outcome:amount(value.outcome)??undefined,
+    incomeInstrument:instrumentText(value.incomeInstrument),outcomeInstrument:instrumentText(value.outcomeInstrument),income:amount(value.income)??undefined,outcome:amount(value.outcome)??undefined,
     hold:jsonTruthy(value.hold),created:created==null?null:String(created),comment:value.comment==null?null:string(value.comment)};
 }
 export function reviewedFact(row:RowByTable['zen_entities']):ReviewedPayment{
   const value=storedObject(row.data),tag=value.tag??[];requireStorage(Array.isArray(tag)&&tag.every(id=>typeof id==='string'),'storage_corrupt');
   return {id:row.id,viewed:value.viewed===true||value.viewed===1||value.viewed===1n,hold:jsonTruthy(value.hold),deleted:jsonTruthy(value.deleted),tags:tag as string[],
-    incomeAccount:text(value.incomeAccount),outcomeAccount:text(value.outcomeAccount),incomeInstrument:text(value.incomeInstrument),outcomeInstrument:text(value.outcomeInstrument),
+    incomeAccount:text(value.incomeAccount),outcomeAccount:text(value.outcomeAccount),incomeInstrument:instrumentText(value.incomeInstrument),outcomeInstrument:instrumentText(value.outcomeInstrument),
     income:amount(value.income),outcome:amount(value.outcome),incomeScaleAllowed:scaleAllowed(value.income),outcomeScaleAllowed:scaleAllowed(value.outcome)};
 }
 export function tagFact(row:RowByTable['zen_entities']):CategoryTag{

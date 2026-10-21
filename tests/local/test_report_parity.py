@@ -6,7 +6,7 @@ from uuid import uuid4
 from unittest.mock import patch
 import pytest
 pytest.importorskip('backend')
-from backend import storage,accounts,capture,discrepancies
+from backend import storage,accounts,capture,discrepancies,existing,predictions
 from backend.sync_contracts import DiscoverConnection,AccountSettings,StartSync,CaptureLeaseRequest,CapturePage,CaptureComplete
 from mirror_factory import Fixture
 from playwright.sync_api import sync_playwright
@@ -35,7 +35,7 @@ def normalize(report,bank_ids,account_ids,connection_id):
     return visit(report)
 
 
-@pytest.mark.parametrize('case',['balanced','duplicate','split','fx','income_transfer','mobile_edit','held','deleted','partial_revision','no_coverage','shared_target','different_days'])
+@pytest.mark.parametrize('case',['balanced','duplicate','split','fx','income_transfer','mobile_edit','held','deleted','partial_revision','no_coverage','shared_target','different_days','string_instrument'])
 def test_actual_python_and_native_complete_reports_match(tmp_path,case):
     f=Fixture(tmp_path/'source.sqlite3');f.now=NOW
     try:
@@ -61,6 +61,7 @@ def test_actual_python_and_native_complete_reports_match(tmp_path,case):
             if case=='mobile_edit':txs=[remote(amount=130)]
             if case=='held':txs=[remote(hold=True)]
             if case=='deleted':txs=[remote(deleted=True)]
+            if case=='string_instrument':txs=[remote(outcomeInstrument='2')]
             if case=='different_days':records=[record(local_date='2026-10-19',occurred_at='2026-10-19T12:00:00+07:00')]
             # Use the published lossless source codec for Decimal payloads.
             from zenmoney_api.protocol import encode_json
@@ -93,4 +94,31 @@ def test_actual_python_and_native_complete_reports_match(tmp_path,case):
             ids_r={r['id']:r['external_id'] for r in call(worker,'capture-state')['result']['bank_transactions']}
             a_l={r['id']:r['source_key'] for r in left['accounts']};a_r={r['id']:r['source_key'] for r in right['accounts']}
             assert normalize(actual['result'],ids_r,a_r,right['id'])==normalize(expected,ids_l,a_l,left['id'])
+            if case not in ('partial_revision','no_coverage'):
+                with storage.transaction(f.path) as db:
+                    remote_accounts=predictions.entities(db,'account')
+                    candidates=[(predictions.bank_record(db,row['id']),remote_accounts[row['zenmoney_account_id']]) for row in db.execute('SELECT b.id,a.zenmoney_account_id FROM bank_transactions b JOIN bank_accounts a ON a.id=b.account_id')]
+                    recognized,blocked=existing.reconcile(db,candidates,NOW)
+                    expected_receipts=[dict(r) for r in db.execute('SELECT * FROM processing_receipts')]
+                    expected_targets=[dict(r) for r in db.execute('SELECT * FROM processing_targets')]
+                    expected_processing=[dict(r) for r in db.execute('SELECT * FROM bank_processing')]
+                    expected_groups=[dict(kind=g['kind'],account_id=g['account_id'],origin=g['origin'],banks=[r[0] for r in db.execute('SELECT bank_id FROM link_bank_members WHERE group_id=?',(g['id'],))],zens=[r[0] for r in db.execute('SELECT zen_id FROM link_zen_members WHERE group_id=?',(g['id'],))]) for g in db.execute('SELECT * FROM link_groups')]
+                choices=[dict(bank_id=r['id'],revision=r['revision'],target_id='a') for r in call(worker,'capture-state')['result']['bank_transactions']]
+                outcome=call(worker,'reconcile-run',now=NOW,data=choices);assert outcome['ok'],outcome
+                actual_state=call(worker,'reconcile-state')['result']
+                def facts_normalized(items,bank_ids,account_ids):
+                    def cell(value,key=None):
+                        if key in ('at','updated_at'):return str(value)
+                        if isinstance(value,dict):return {k:cell(v,k) for k,v in value.items()}
+                        if isinstance(value,list):return sorted([cell(v) for v in value],key=repr)
+                        if isinstance(value,str):return bank_ids.get(value,account_ids.get(value,value))
+                        return value
+                    return sorted([cell(item) for item in items],key=repr)
+                for name,expected_rows in [('receipts',expected_receipts),('targets',expected_targets),('processing',expected_processing)]:
+                    assert facts_normalized(actual_state[name],ids_r,a_r)==facts_normalized(expected_rows,ids_l,a_l),(case,name)
+                actual_groups=[dict(kind=g['kind'],account_id=g['account_id'],origin=g['origin'],banks=[r['bank_id'] for r in actual_state['banks'] if r['group_id']==g['id']],zens=[r['zen_id'] for r in actual_state['zens'] if r['group_id']==g['id']]) for g in actual_state['groups']]
+                assert facts_normalized(actual_groups,ids_r,a_r)==facts_normalized(expected_groups,ids_l,a_l)
+                assert sorted(ids_r[i] for i in outcome['result']['recognized'])==sorted(ids_l[i] for i in recognized)
+                assert sorted(ids_r[i] for i in outcome['result']['blocked'])==sorted(ids_l[i] for i in blocked)
+
     finally:f.close()

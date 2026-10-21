@@ -1130,3 +1130,26 @@ API/data, push, tags or publication.
 L8 still needs persisted reconciliation and category cache publication. Reports
 remain internal until the L11 privileged facade/UI integration. No product local
 financial routing/writer, live data/API, push, tags or publication.
+
+### L8.7 — durable reconciliation and explicit UUID recovery
+
+- Added validated complete-version matching plans and a named repository that
+  atomically commits each single or split/settlement group with its actual target
+  side, immutable receipt/member proof, terminal state and unattempted-intent cleanup.
+- Explicit known UUID facts run before new amount matching. Permanent deletion
+  suppresses even never-attempted intents while retaining their original payload/
+  UUID. Current UUID presence confirms mobile edits without recreating operations.
+- Fixed typed instrument collisions; known marker dependencies/reread races; 200-row
+  receipt units for large imported groups; and repeated timestamp-only churn.
+  Reports use shared group sets. See reviews/l8-persisted-2026-10-21.md for the
+  exact source-metadata optimization and 1m Cartesian ownership resource limit.
+- Both independent final reviews are clean. Docker: strict types/generated checks
+  and 214 unit/contracts passed (including 100k unchanged known identities below
+  the 10-second CPU guard); 27 native/actual Python cases passed in 64.57s; minimum
+  Chrome 140 passed all 10 native persisted cases in 90.74s. Includes quota abort,
+  exact repeat/now+1, 1001-UUID worker-death recovery and concurrent external-edge
+  invalidation. Logs: /tmp/zenimport-l8-persisted-*.log.
+
+L8 still needs atomic derived category cache publication/invalidation and its exit
+integration gates. L9–L12 remain pending. New SDK financial requests and product
+local routing remain disabled. No live API/data, push, tags or publication.

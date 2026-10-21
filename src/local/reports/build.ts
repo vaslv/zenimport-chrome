@@ -46,8 +46,9 @@ export function buildReport(source:SourceSnapshot,facts:Facts,request:ReportRequ
   }
   const edges=new Map<string,Set<string>>();function edge(bank:string,zen:string){const set=edges.get(bank)??new Set<string>();set.add(zen);edges.set(bank,set);}
   for(const row of [...rows.processing_receipts,...rows.deliveries])edge(row.bank_id,row.zen_id);
-  const groupZens=new Map<string,string[]>();for(const row of rows.link_zen_members){const set=groupZens.get(row.group_id)??[];set.push(row.zen_id);groupZens.set(row.group_id,set);}
-  for(const row of rows.link_bank_members)for(const zen of groupZens.get(row.group_id)??[])edge(row.bank_id,zen);
+  // Share a group's membership set instead of expanding bank×ZenMoney pairs.
+  const groupZens=new Map<string,Set<string>>();for(const row of rows.link_zen_members){const set=groupZens.get(row.group_id)??new Set<string>();set.add(row.zen_id);groupZens.set(row.group_id,set);}
+  const bankGroups=new Map(rows.link_bank_members.map(row=>[row.bank_id,row.group_id]));
   const remoteByTarget=new Map<string,RemoteMovement[]>();for(const tx of [...facts.transactions.values()].sort(timeCompare))if(!tx.hold)for(const target of new Set([tx.incomeAccount,tx.outcomeAccount]))if(target!=null){
     const bucket=remoteByTarget.get(target)??[];bucket.push(tx);remoteByTarget.set(target,bucket);
   }
@@ -72,12 +73,14 @@ export function buildReport(source:SourceSnapshot,facts:Facts,request:ReportRequ
     const remote=new Map((remoteByTarget.get(target)??[]).map(tx=>[tx.id,tx]));
     for(const tx of remote.values()){
       if(tx.date===undefined||!eligible.has(tx.date))continue;const amount=signed(tx,target);if(!amount.sign())continue;
-      const instrument=amount.sign()>0?tx.incomeInstrument:tx.outcomeInstrument;
-      if(instrument==null||facts.instruments.get(instrument)!==account.currency){info.status='unsupported_movement';continue;}
+      // The read-only Python report resolves currency by scalar display; matching
+      // separately requires correct numeric API types before adopting a UUID.
+      const raw=facts.entities.get('transaction')!.get(tx.id)!,instrument=raw[amount.sign()>0?'incomeInstrument':'outcomeInstrument'];
+      if(instrument==null||facts.instruments.get(scalarText(instrument,'invalid_instrument'))!==account.currency){info.status='unsupported_movement';continue;}
       bucket(tx.date).zens.set(tx.id,amount);
     }
     for(const [day,{banks,zens}]of days){
-      const values=banks.map(signedBank),total=ExactMoney.sum(values),zenTotal=ExactMoney.sum(zens.values()),preferred=new Map(banks.map((bank,index)=>[index,edges.get(bank.id)??new Set<string>()]));
+      const values=banks.map(signedBank),total=ExactMoney.sum(values),zenTotal=ExactMoney.sum(zens.values()),preferred=new Map(banks.map((bank,index)=>[index,{has:(id:string)=>edges.get(bank.id)?.has(id)===true||groupZens.get(bankGroups.get(bank.id)??'')?.has(id)===true}]));
       const {missing,extras}=unmatchedSides(values,zens,preferred);if(!missing.size&&!extras.size)continue;
       result.days.push({date:day,account_id:account.id,bank_total:total.toString(),zenmoney_total:zenTotal.toString(),difference:zenTotal.subtract(total).toString(),
         bank_operations:[...missing].sort((a,b)=>a-b).map(i=>({id:banks[i].id,amount:values[i].toString(),payee:'',comment:banks[i].description||'',categories:[],created:null})),

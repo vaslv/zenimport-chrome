@@ -28,3 +28,8 @@ test('permanent tombstone reappearance stays in blocking data but never enters e
   const rows={bank_accounts:[],bank_transactions:[],bank_versions:[],zen_tombstones:[{kind:'transaction',entity_id:'tx'}],zen_entities:[entity('{"income":0,"outcome":1,"outcomeAccount":"a","incomeAccount":"a"}') ]};
   const facts=sourceFacts({rows});assert.equal(facts.blockingTransactions.size,1);assert.equal(facts.transactions.size,0);assert.equal(facts.reviewed.size,0);assert.equal(facts.entities.has('transaction'),false);
 });
+test('malformed API reference types never collide with valid matching identifiers',()=>{
+  const row=entity('{"incomeAccount":2,"outcomeAccount":"a","incomeInstrument":"2","outcomeInstrument":2,"income":0,"outcome":100}');
+  assert.equal(movementFact(row).incomeAccount,null);assert.equal(movementFact(row).incomeInstrument,null);
+  assert.equal(movementFact(row).outcomeInstrument,'2');assert.equal(reviewedFact(row).incomeInstrument,null);
+});

@@ -62,6 +62,18 @@ export class RepositoryOwner{
     return this.write(async view=>{await this.#unchanged(view,stamp);const result=await operation(view);return {result,stamp:await this.#stamp(view)};});
   }
 
+  async knownMirrorCurrent(stamp:FinancialSnapshot){
+    return this.read(async view=>{
+      await this.#unchanged(view,stamp);const value=(await this.db.applicationState.get('known-mirror:'+stamp.generation))?.value;
+      if(value===undefined)return false;
+      requireStorage(value!==null&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).sort().join(',')==='mirror,projection,revision'&&typeof value.mirror==='string'&&typeof value.projection==='string'&&typeof value.revision==='string'&&BigInt(int64(value.revision))>=0n,'storage_corrupt');
+      return value.projection===stamp.projection&&value.mirror===stamp.mirror&&value.revision===stamp.revision;
+    });
+  }
+  async confirmKnownMirror(stamp:FinancialSnapshot){
+    return this.write(async view=>{await this.#unchanged(view,stamp);await this.db.applicationState.put({scope:'known-mirror:'+stamp.generation,value:{projection:stamp.projection,mirror:stamp.mirror,revision:stamp.revision}});});
+  }
+
   async write<T>(operation:(view:RepositorySession)=>Promise<T>){
     let rejection:CaptureError|undefined;
     try{return await writeTransaction(this.db,this.sentinel,this.fence,async view=>{

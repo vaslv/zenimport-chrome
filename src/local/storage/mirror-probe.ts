@@ -20,6 +20,8 @@ import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
 import {AccountRepository} from './account-repository.js';
+import {ReconciliationRepository} from './reconciliation-repository.js';
+import type {ReconcileChoice} from '../reconciliation/plan.js';
 import {ReportRepository} from './report-repository.js';
 import type {ReportRequest} from '../reports/build.js';
 import {readSource} from '../reconciliation/source.js';
@@ -27,7 +29,8 @@ import {sourceFacts} from '../reconciliation/facts.js';
 import {RepositoryOwner} from './repository-owner.js';
 import type {FinancialSnapshot} from './repository-owner.js';
 import {CaptureRepository} from './capture-repository.js';
-let paused=false;
+let paused=false,releaseKnown:(()=>void)|undefined;
+export const resumeKnown=()=>{releaseKnown?.();releaseKnown=undefined;};
 export const checkpoint=()=>paused;
 let networkSerial=0,releaseRead:(()=>void)|undefined;
 export const networkCount=()=>networkSerial;
@@ -61,6 +64,35 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action==='seed-reconcile-group'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{await owner.write(async view=>{
+        const bank=(await view.get('bank_transactions',[['text',args.id!]]))!,id=crypto.randomUUID();
+        await view.insert('link_groups',{id,kind:'split',account_id:bank.account_id,created_at:int64(String(now)),origin:'manual'});
+        await view.insert('link_bank_members',{group_id:id,bank_id:bank.id});
+        for(let i=0;i<args.size!;i++)await view.insert('link_zen_members',{group_id:id,zen_id:'known-'+i});
+        const state=(await view.get('bank_processing',[['text',bank.id]]))!;await view.replace('bank_processing',[['text',bank.id]],{...state,state:'delivered'});
+      });result=true;}finally{owner.close();}
+    }
+    if(action==='seed-reconcile-intent'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{await owner.write(async view=>{
+        const bank=await view.get('bank_transactions',[['text',args.id!]]);if(!bank)throw Error('fixture_bank');
+        await view.insert('deliveries',{bank_id:bank.id,zen_id:args.label??'known-intent',payload:JSON.stringify({id:args.label??'known-intent',incomeAccount:'a',outcomeAccount:'a'}),state:'prepared',ever_attempted:int64('0'),origin:'created',authorized_job_id:null,updated_at:int64(String(now)),needs_rebuild:int64(args.mode==='needs-rebuild'?'1':'0')});
+        const state=(await view.get('bank_processing',[['text',bank.id]]))!;await view.replace('bank_processing',[['text',bank.id]],{...state,state:'prepared'});
+      });result=true;}finally{owner.close();}
+    }
+    if(action==='reconcile-run'){
+      const {root}=await store.context(),repository=await ReconciliationRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      const add=IDBObjectStore.prototype.add,native=FinancialDatabase.prototype.transaction;let armed=true,wroteReceipt=false;
+      if(['quota-reconcile','pause-known'].includes(args.mode??''))IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(this.name==='f_processing_receipts'){wroteReceipt=true;if(armed&&args.mode==='quota-reconcile'){armed=false;throw new DOMException('private-reconciliation-fixture','QuotaExceededError');}}return add.apply(this,values);};
+      if(args.mode==='pause-known')FinancialDatabase.prototype.transaction=new Proxy(native,{apply(target,db,parameters){return (Reflect.apply(target,db,parameters) as Promise<unknown>).then(value=>{if(wroteReceipt&&!paused){paused=true;return new Promise(resolve=>{releaseKnown=()=>resolve(value);});}return value;});}});
+      try{result=await repository.run(args.data as ReconcileChoice[],String(now));}finally{repository.close();IDBObjectStore.prototype.add=add;FinancialDatabase.prototype.transaction=native;}
+    }
+    if(action==='reconcile-state'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{result=await owner.read(async view=>({receipts:await view.rows('processing_receipts'),targets:await view.rows('processing_targets'),groups:await view.rows('link_groups'),banks:await view.rows('link_bank_members'),zens:await view.rows('link_zen_members'),processing:await view.rows('bank_processing')}));}finally{owner.close();}
+    }
     if(action==='report-build'){
       const {root}=await store.context(),reports=await ReportRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       try{result=await reports.build(args.data as ReportRequest,String(now));}finally{reports.close();}

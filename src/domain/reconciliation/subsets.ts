@@ -23,7 +23,7 @@ export function uniqueSubset(items:readonly (readonly [string,ExactMoney])[],tar
 /** Report matching intentionally uses only same-sign, strictly smaller splits.
  * Preferred historical identities are tie-breakers after current amount checks.
  */
-export function unmatchedSides(banks:readonly ExactMoney[],zens:ReadonlyMap<string,ExactMoney>,preferred:ReadonlyMap<number,ReadonlySet<string>>=new Map()){
+export function unmatchedSides(banks:readonly ExactMoney[],zens:ReadonlyMap<string,ExactMoney>,preferred:ReadonlyMap<number,Pick<ReadonlySet<string>,'has'>>=new Map()){
   const remaining=new Map(zens),matched=new Set<number>(),unmatched:{index:number;amount:ExactMoney}[]=[];
   for(let i=0;i<banks.length;i++)for(const [key,value]of remaining){
     if(value.equals(banks[i])&&preferred.get(i)?.has(key)){remaining.delete(key);matched.add(i);break;}
