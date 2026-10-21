@@ -1268,3 +1268,36 @@ API/data, push, tags or publication.
 
 L9 remains in progress: durable scheduler, startup/alarm recovery and complete
 independent delivery exit review remain. No live API/data or publication.
+
+### L9.6 — durable cycles, verification, backoff and alarm recovery
+
+- Added expiring native cycle ownership, bounded create-only SDK cycles, forced
+  pre-batch refresh and explicit post-send transaction verification. Unknown
+  UUIDs remain verification-only; partial HTTP 400 and lost replies never resend.
+  Backoff persists at 15/30/60/120/240/300 seconds across browser restarts.
+- Added periodic native watchdog restoration before long work and convergent
+  serialized alarm updates. Each wake drains at most three bounded units. Alarm
+  timing follows current Chrome documentation; minimum Chrome 140 can lose alarms
+  across browser sessions, so every service-worker start must restore them.
+- Atomic private status sweeps drain 20 jobs per page without SDK access after
+  financial work ends. Empty capture completion also queues a sweep. Status and
+  delivery progress remain separate from bank capture; native work hints avoid
+  reloading the full financial graph for idle watchdog checks.
+- Independent API/adversarial major L9 exit reviews are clean after fixing the
+  alarm, status-tail, empty-capture and no-intent backoff findings. See
+  reviews/l9-delivery-2026-10-21.md. External cross-model CLI remains unavailable.
+- Docker: 46 current native worker/sender/outbox/accepted-queue cases passed in
+  127.91s; 24 minimum Chrome 140 worker/sender cases passed in 199.37s; actual
+  Python/native archive/intent/capture/known-UUID parity passed 21 cases in 32.70s
+  (one existing Starlette deprecation warning); 96 native kernel/relations/authority/
+  reconciliation/mirror regressions passed in 305.67s. Three unchanged large-mirror
+  volume variants were deselected in this regression run; they passed at L8 and
+  the earlier L9.4 full mirror gate. No skipped case is claimed as new coverage.
+  Logs: /tmp/zenimport-l9-worker-*.log and /tmp/zenimport-l9-exit-unit*.log.
+
+L9 is complete. L10 mode selection/migration orchestration is next, followed by
+L11 product facade/popup routing and L12 full acceptance. The SDK writer is still
+unreachable through product local routing; only isolated private fixtures can use
+it until later gates pass. No production API/data, push, Git tags or publication.
+Final strict/generated checks and all 224 unit/contract tests passed on the final
+L9 source (923.66ms test execution); no unit skips or failures.

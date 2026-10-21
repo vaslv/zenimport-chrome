@@ -1,3 +1,6 @@
+import {readJobRefresh,jobRefreshScope,markJobRefresh} from './job-refresh.js';
+import type {JobRefresh} from './job-refresh.js';
+import {readCycle,cycleScope} from './delivery-cycle.js';
 import {readOutbox,outboxActive,outboxControl,outboxValue} from './outbox-control.js';
 import type {OutboxItem,OutboxControl} from './outbox-control.js';
 import {DeliveryError} from '../delivery/errors.js';
@@ -21,7 +24,7 @@ export type {FinancialSnapshot} from './source-stamp.js';
 import {categoryControl,categoryScope,CATEGORY_TABLES,categoriesReady} from './category-control.js';
 import type {CategoryCounts} from './category-control.js';
 import {int64} from './types.js';
-import type {TableName} from './schema.generated.js';
+import type {TableName,RowByTable} from './schema.generated.js';
 import {CaptureError} from '../capture/errors.js';
 
 export class RepositoryOwner{
@@ -62,6 +65,59 @@ export class RepositoryOwner{
   async check(stamp:FinancialSnapshot){return this.read(view=>this.#unchanged(view,stamp));}
   async apply<T>(stamp:FinancialSnapshot,operation:(view:RepositorySession)=>Promise<T>){
     return this.write(async view=>{await this.#unchanged(view,stamp);const result=await operation(view);return {result,stamp:await this.#stamp(view)};});
+  }
+
+  async claimDeliveryCycle(now:string){
+    int64(now);return this.write(async view=>{
+      const current=await readCycle(this.db,this.fence.generation),schedule=await view.get('delivery_schedule',[['integer',int64('1')]]);
+      if(current&&BigInt(current.deadline)>BigInt(now)||schedule&&BigInt(schedule.next_run_at)>BigInt(now))return null;
+      const lease={id:crypto.randomUUID(),deadline:String(BigInt(now)+180n)};
+      await this.db.applicationState.put({scope:cycleScope(this.fence.generation),value:lease});return lease;
+    });
+  }
+  async deliveryCycle<T>(id:string,now:string,work:(view:RepositorySession)=>Promise<T>,release=false){
+    int64(now);return this.write(async view=>{
+      const current=await readCycle(this.db,this.fence.generation);
+      requireStorage(current?.id===id&&BigInt(current.deadline)>BigInt(now),'stale_epoch');
+      const result=await work(view);
+      if(release)await this.db.applicationState.delete(cycleScope(this.fence.generation));
+      else await this.db.applicationState.put({scope:cycleScope(this.fence.generation),value:{id,deadline:String(BigInt(now)+180n)}});
+      return result;
+    });
+  }
+
+  async deliveryProgress(id:string,now:string,phase:'reading'|'sending'|'verifying'|'idle'|'paused',error:string|null=null){
+    return this.deliveryCycle(id,now,async()=>{
+      await this.db.applicationState.put({scope:'delivery-status:'+this.fence.generation,value:{phase,at:now,error}});
+    });
+  }
+  async deliveryStatus(){return this.read(async()=> (await this.db.applicationState.get('delivery-status:'+this.fence.generation))?.value??null);}
+
+  async pendingJobRefresh(){return this.read(()=>readJobRefresh(this.db,this.fence.generation));}
+  async jobRefreshPage(){return this.read(async view=>{
+    const control=await readJobRefresh(this.db,this.fence.generation);if(!control)return null;
+    const page=await view.page('capture_jobs',control.after,20);return {control,ids:page.rows.map(row=>row.id),after:page.after,done:page.rows.length<20};
+  });}
+  async acknowledgeJobRefresh(control:JobRefresh,after:string|null,done:boolean){return this.write(async()=>{
+    const current=await readJobRefresh(this.db,this.fence.generation);
+    if(JSON.stringify(current)!==JSON.stringify(control))return false;
+    if(done)await this.db.applicationState.delete(jobRefreshScope(this.fence.generation));
+    else await this.db.applicationState.put({scope:jobRefreshScope(this.fence.generation),value:{...control,after}});
+    return true;
+  });}
+  async deliveryWork(){
+    const stamp=await this.snapshot(),cached=await this.read(async()=> (await this.db.applicationState.get('delivery-work:'+this.fence.generation))?.value);
+    if(cached?.revision===stamp.revision&&typeof cached.pending==='boolean'&&typeof cached.uncertain==='boolean')return {pending:cached.pending,uncertain:cached.uncertain};
+    let pending=false,uncertain=false,after:string|null=null;
+    for(;;){
+      const page:{rows:RowByTable['bank_processing'][];after:string|null}=await this.scan('bank_processing',stamp,after);
+      uncertain=uncertain||page.rows.some(row=>row.state==='uncertain');
+      const candidates=page.rows.filter(row=>['pending','prepared'].includes(row.state));
+      if(!pending&&candidates.length)pending=await this.read(async view=>{await this.#unchanged(view,stamp);return (await view.getMany('delivery_authorizations',candidates.map(row=>[['text',row.bank_id]]))).some(row=>row!==null);});
+      if(pending&&uncertain||page.rows.length<500)break;after=page.after;
+    }
+    await this.apply(stamp,async()=>{await this.db.applicationState.put({scope:'delivery-work:'+this.fence.generation,value:{revision:stamp.revision,pending,uncertain}});});
+    return {pending,uncertain};
   }
 
   async outbox(){return this.read(()=>readOutbox(this.db,this.fence.generation));}
@@ -118,6 +174,7 @@ export class RepositoryOwner{
   async queueAuthorization(view:RepositorySession,jobId:string,now:string){
     requireStorage(await view.get('capture_jobs',[['text',jobId]])!==null,'invariant_violation');
     await queueAuthorization(this.db,this.fence.generation,jobId,now);
+    await markJobRefresh(this.db,this.fence.generation);
   }
   async pendingAuthorizations(){return this.read(()=>pendingAuthorizations(this.db,this.fence.generation));}
   async acknowledgeAuthorization(task:AuthorizationTask){return this.write(()=>acknowledgeAuthorization(this.db,this.fence.generation,task));}

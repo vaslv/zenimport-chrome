@@ -1,3 +1,4 @@
+import {markJobRefresh} from './job-refresh.js';
 /** Internal repository transaction owner. Never import from application handlers. */
 import Dexie from 'dexie';
 import type {Transaction} from 'dexie';
@@ -31,6 +32,7 @@ export class RepositorySession{
   #mirrorGeneration:string;
   #mirrorOnly:boolean;
   #revisionAdvanced=false;
+  #jobsQueued=false;
   constructor(db:FinancialDatabase,generation:string,owner:Transaction,mirrorGeneration=generation,mirrorOnly=false){this.#db=db;this.#generation=generation;this.#owner=owner;this.#mirrorGeneration=mirrorGeneration;this.#mirrorOnly=mirrorOnly;}
   #scope(table:TableName){return isMirrorTable(table)?this.#mirrorGeneration:this.#generation;}
   #writeScope(table:TableName,key?:readonly Scalar[]){
@@ -40,6 +42,9 @@ export class RepositorySession{
   }
 
   async #changed(table:TableName){
+    if(!this.#jobsQueued&&['bank_processing','deliveries','delivery_authorizations','processing_receipts','link_bank_members','link_zen_members'].includes(table)){
+      await markJobRefresh(this.#db,this.#generation);this.#jobsQueued=true;
+    }
     if(this.#revisionAdvanced||isDerivedCache(table))return;
     await advanceFinancialRevision(this.#db,this.#generation);this.#revisionAdvanced=true;
   }

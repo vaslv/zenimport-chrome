@@ -1,3 +1,7 @@
+import {DeliveryAlarms,DELIVERY_ALARM} from '../delivery/alarms.js';
+import type {DeliveryAlarmPort} from '../delivery/alarms.js';
+import {DeliveryScheduleRepository} from './delivery-schedule-repository.js';
+import {DeliveryWorker} from '../delivery/worker.js';
 import {DeliverySender} from '../delivery/sender.js';
 import {OutboxRepository} from './outbox-repository.js';
 import {DeliveryAuthorizationRepository} from './delivery-authorization-repository.js';
@@ -74,6 +78,37 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action==='delivery-service')result=(await storage.get('fakeService')).fakeService??null;
+    if(['delivery-run','delivery-next','delivery-status','delivery-alarm'].includes(action)){
+      const {root}=await store.context(),fence={installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch};
+      const authorization=await DeliveryAuthorizationRepository.open(args.name,sentinel,fence),schedule=await DeliveryScheduleRepository.open(args.name,sentinel,fence),outbox=await OutboxRepository.open(args.name,sentinel,fence),reconciliation=await ReconciliationRepository.open(args.name,sentinel,fence),capture=await CaptureRepository.open(args.name,sentinel,fence);
+      const network:typeof fetch=async(_,options)=>{
+        const body=JSON.parse(String(options?.body)),write=Array.isArray(body.transaction);
+        const service=((await storage.get('fakeService')).fakeService??{cursor:200,transactions:[],requests:[],reads:0}) as {cursor:number;transactions:Record<string,unknown>[];requests:unknown[];reads:number};
+        service.cursor++;calls++;networkSerial++;
+        if(write){
+          service.requests.push(body);
+          const rows=body.transaction as Record<string,unknown>[];
+          for(const row of args.mode==='partial-400'?rows.slice(0,1):rows)if(!service.transactions.some(old=>old.id===row.id))service.transactions.push(row);
+        }else service.reads++;
+        await storage.set({fakeService:service});
+        if(args.mode==='pause-service')await new Promise<void>(resolve=>{releaseRead=resolve;});
+        if(args.mode==='read-failure'&&!write)return new Response('{}',{status:500});
+        if(write&&['partial-400','lost-service-reply'].includes(args.mode??''))return new Response('{}',{status:args.mode==='partial-400'?400:500});
+        return new Response(JSON.stringify({serverTimestamp:service.cursor,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[{id:'a',title:'Fixture',type:'checking',user:args.mode==='invalid-catalog'?null:1,instrument:2}],tag:[],transaction:service.transactions}),{status:200});
+      };
+      const direct=mirrorReader({clock:()=>now,permission:async()=>args.permission!==false,fetch:network}),localMirror=new LocalMirror(store,credentials,direct,()=>now),sender=new DeliverySender(outbox,store,credentials,{clock:()=>now,permission:async()=>args.permission!==false,fetch:network});
+      const worker=new DeliveryWorker(authorization,schedule,outbox,localMirror,reconciliation,capture,sender,()=>now);
+      try{
+        if(action==='delivery-alarm'){
+          const alarms=(globalThis as unknown as {chrome:{alarms:DeliveryAlarmPort}}).chrome.alarms;
+          const controller=new DeliveryAlarms(alarms,async()=>worker,()=>Date.now()/1000);
+          if(args.mode==='clear-alarm')await alarms.clear(DELIVERY_ALARM);
+          await controller.restore();result=await alarms.get(DELIVERY_ALARM);
+        }else result=action==='delivery-run'?await worker.run():action==='delivery-next'?await worker.next():{...await schedule.status(),display:await schedule.display()};
+      }
+      finally{authorization.close();schedule.close();outbox.close();reconciliation.close();capture.close();}
+    }
     if(action.startsWith('outbox-')&&!['outbox-seed-error','outbox-evidence'].includes(action)){
       const {root}=await store.context(),repository=await OutboxRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put,reconcile=ReconciliationRepository.prototype.run;let armed=true;
