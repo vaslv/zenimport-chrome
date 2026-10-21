@@ -2,8 +2,8 @@
 
 The extension's local financial mode is still disabled in product handlers.
 L4 uses actual IndexedDB/Dexie with the 49 typed financial tables and independent
-runtime/dataset/import control. Physical IDB version 3 is independent of financial
-schema 1 and archive version 2. Versions 1/2 are unpublished development layouts.
+runtime/dataset/import control. Physical IDB version 4 is independent of financial
+schema 1 and archive version 2. Versions 1–3 are unpublished development layouts.
 
 ## Inactive format staging
 
@@ -28,6 +28,24 @@ replacement active history. A retry creates a separate inactive stage. Financial
 application handlers have no native database handles or arbitrary mutation API.
 No automatic garbage collection, activation or protected handoff is implemented
 by this checkpoint; those remaining L4 gates must be completed before exposure.
+
+## Persistent facts-only validation
+
+`LocalDatabase.validateStageGraph` reruns the full archived financial proof and
+atomically records its version, dataset digest and verification timestamp with
+the inactive dataset's `validated` lifecycle. It never changes the active pointer,
+obtains a fresh token-owner proof or grants permission to send. A retry always
+rechecks persisted bytes and financial relationships; it preserves the original
+timestamp only if the proof still succeeds. A semantic/hash failure clears the
+verdict and marks the inactive import failed.
+
+Runtime version 4 adds explicit nullable proof fields to version-3 stage journals.
+The upgrade does not infer validation from an old format/hash result. A malformed
+old journal aborts the entire version change, preserving version 3 and its bytes.
+Worker death before the final commit retains the original format-valid stage;
+a quota failure inside that commit rolls back both lifecycle and verdict. Stale
+routing or an unavailable sentinel cannot persist a new verdict. No result is
+an activation shortcut; protected handoff and fresh ownership remain separate.
 
 ## Evidence
 

@@ -39,6 +39,26 @@ export async function kernelProbe(args:KernelArguments,sentinel:SentinelPort):Pr
       await db.financial(args.table!).delete([row.generation,row.key]);
       await db.financial(args.table!).add({...row,generation:crypto.randomUUID()});return true;
     }
+    if(args.mode==='upgrade-stage-v3'||args.mode==='failed-upgrade-stage-v3'){
+      const name=args.name+'-stage-v3';await Dexie.delete(name);
+      const old=new Dexie(name,{autoOpen:false});
+      old.version(3).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'});await old.open();
+      try{
+        for(const table of db.tables){
+          const values=await table.toArray();
+          if(table.name==='portable_stages')for(const value of values){
+            delete value.graphVersion;delete value.graphDigest;delete value.graphVerifiedAt;
+            if(args.mode==='failed-upgrade-stage-v3')value.unexpected='reject';
+          }
+          await old.table(table.name).bulkAdd(values);
+        }
+      }finally{old.close();}
+      const upgraded=new FinancialDatabase(name,false);let code:string|null=null;
+      try{await upgraded.open();}catch(error){code=storageFailure(error).code;}finally{upgraded.close();}
+      const inspect=new Dexie(name);await inspect.open();
+      try{return {code,version:inspect.verno,stages:await inspect.table('portable_stages').toArray()};}
+      finally{inspect.close();}
+    }
     if(args.mode==='upgrade'||args.mode==='failed-upgrade'){
       const name=args.name+'-old';await Dexie.delete(name);
       const old=new Dexie(name,{autoOpen:false});old.version(1).stores(storeDefinitions());await old.open();

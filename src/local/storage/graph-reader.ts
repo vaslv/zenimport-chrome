@@ -25,7 +25,7 @@ export class StageGraphReader implements GraphReader{
   }
   static async open(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,id:string):Promise<StageGraphReader>{
     const stage=stageRecord(await db.stages.get(id));
-    requireStorage(stage.state==='format_valid'&&stage.archiveSha256!==null,'dataset_not_writable');
+    requireStorage(['format_valid','graph_valid'].includes(stage.state)&&stage.archiveSha256!==null,'dataset_not_writable');
     const manifest=validateManifest(parseJson(new TextEncoder().encode(stage.manifest)));
     const view=new StageGraphReader(db,sentinel,fence,id,stage.writerId,manifest,stage.archiveSha256);
     await view.#marker();await db.transaction('r',db.runtime,db.datasets,db.stages,()=>view.#routing());
@@ -45,7 +45,8 @@ export class StageGraphReader implements GraphReader{
     requireStorage(active.lifecycle==='active'&&active.holdId===null,'dataset_not_writable');
     const stage=stageRecord(await this.#db.stages.get(this.#id)),dataset=datasetControl(await this.#db.datasets.get(this.#id));
     requireStorage(this.#id!==runtime.activeGeneration&&stage.writerId===this.#writerId&&stage.installationId===runtime.installationId&&
-      stage.routingEpoch===runtime.epoch&&stage.state==='format_valid'&&dataset.lifecycle==='staging'&&dataset.holdId===null&&
+      stage.routingEpoch===runtime.epoch&&((stage.state==='format_valid'&&dataset.lifecycle==='staging')||
+        (stage.state==='graph_valid'&&dataset.lifecycle==='validated'&&stage.graphDigest===this.#manifest.dataset_digest))&&dataset.holdId===null&&
       dataset.datasetId===this.#manifest.dataset_id&&same(dataset.ownerIds,this.#manifest.zenmoney_identity.owner_ids)&&
       stage.manifest===this.#manifestText&&stage.archiveSha256===this.#archiveSha256,'dataset_not_writable');
     requireStorage(BigInt(stage.rowCount)===this.#manifest.tables.reduce((sum,item)=>sum+BigInt(item.rows),0n)&&

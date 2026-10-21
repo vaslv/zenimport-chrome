@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {StorageError,storageFailure} from '../.local/contracts/storage-types.mjs';
-import {stageRecord} from '../.local/contracts/storage-stage-types.mjs';
+import {stageRecord,upgradeStageV3} from '../.local/contracts/storage-stage-types.mjs';
 
 test('nested native quota and bulk errors expose only stable storage codes',()=>{
   const quota=new DOMException('sensitive-native-detail','QuotaExceededError');
@@ -16,7 +16,7 @@ test('nested native quota and bulk errors expose only stable storage codes',()=>
 
 const id='00000000-0000-4000-8000-000000000001';
 const stage={id,writerId:id,installationId:id,routingEpoch:'1',state:'loading',manifest:'{}\n',
-  archiveSha256:null,rowCount:'0',byteCount:'0',createdAt:'1792540800',errorCode:null};
+  archiveSha256:null,rowCount:'0',byteCount:'0',createdAt:'1792540800',errorCode:null,graphVersion:null,graphDigest:null,graphVerifiedAt:null};
 test('staging metadata has exact shape and exact nonnegative counters',()=>{
   assert.equal(stageRecord(stage),stage);
   for(const patch of [{extra:'not-allowed'},{routingEpoch:'0'},{routingEpoch:1},{rowCount:'-1'},
@@ -30,4 +30,12 @@ test('format completion needs a hash while failed staging needs a redacted reaso
   assert.equal(stageRecord({...stage,state:'format_valid',archiveSha256:'0'.repeat(64)}).state,'format_valid');
   assert.throws(()=>stageRecord({...stage,state:'failed'}),/storage_corrupt/);
   assert.equal(stageRecord({...stage,state:'failed',errorCode:'quota_exceeded'}).errorCode,'quota_exceeded');
+});
+
+test('graph completion records only a bounded facts proof and old stages upgrade without invented proof',()=>{
+  const value={...stage,state:'graph_valid',archiveSha256:'0'.repeat(64),graphVersion:'1',graphDigest:'a'.repeat(64),graphVerifiedAt:'1792540800'};
+  assert.equal(stageRecord(value),value);
+  for(const patch of [{graphVersion:null},{graphDigest:null},{graphVerifiedAt:null},{errorCode:'invalid_financial_graph'},{state:'format_valid'}])assert.throws(()=>stageRecord({...value,...patch}),/storage_corrupt/);
+  const old={...stage};delete old.graphVersion;delete old.graphDigest;delete old.graphVerifiedAt;
+  assert.deepEqual(upgradeStageV3(old),stage);assert.throws(()=>upgradeStageV3(value),/storage_corrupt/);
 });

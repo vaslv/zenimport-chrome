@@ -15,6 +15,7 @@ type Area=Parameters<typeof trustedSentinel>[0];
 const area=()=> (globalThis as unknown as {chrome:{storage:{local:Area}}}).chrome.storage.local;
 const stores=new Map<string,LocalDatabase>();
 let markerAcknowledged=false;
+let graphCheckpoint=false;
 
 async function open(name:string,mode='normal'){
   const native=area();
@@ -40,7 +41,7 @@ async function state(name:string){
   finally{db.close();}
 }
 
-export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string;owners?:string[]}){
+export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string;owners?:string[];now?:string}){
   try{
     let value:unknown;
     if(action==='open')value=await open(args.name,args.mode);
@@ -76,7 +77,24 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
     }else if(action==='graph-proof'){
       const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
       value=await db.checkStageGraph(args.stageId,args.fence,args.owners);
+    }else if(action==='validate-graph'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.stageId)throw Error('missing_test_handle');
+      const transaction=FinancialDatabase.prototype.transaction;
+      if(args.mode==='pause-final-commit'||args.mode==='quota-final-commit')FinancialDatabase.prototype.transaction=new Proxy(transaction,{
+        apply(target,owner,parameters){
+          if(parameters[0]!=='rw')return Reflect.apply(target,owner,parameters);
+          graphCheckpoint=true;
+          if(args.mode==='pause-final-commit')return new Promise(()=>{});
+          const callback=parameters[parameters.length-1] as ()=>Promise<unknown>;
+          return Reflect.apply(target,owner,[...parameters.slice(0,-1),async()=>{
+            await callback();throw new DOMException('synthetic-private-quota','QuotaExceededError');
+          }]);
+        },
+      });
+      try{value=await db.validateStageGraph(args.stageId,args.fence,args.now??'1792540800');}
+      finally{FinancialDatabase.prototype.transaction=transaction;}
     }
+    else if(action==='graph-checkpoint')value=graphCheckpoint;
     else if(action==='checkpoint')value=markerAcknowledged;
     else if(action==='state')value=await state(args.name);
     else if(action==='concurrent')value=await Promise.all([open(args.name),open(args.name)]);

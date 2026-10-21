@@ -9,6 +9,7 @@ import {envelope} from './envelope.js';
 import {requireStorage} from './types.js';
 import {runtimeControl,datasetControl} from '../../control/validation.js';
 import type {StageRecord} from './stage-types.js';
+import {upgradeStageV3} from './stage-types.js';
 
 export interface FinancialEnvelope{
   readonly generation:string;
@@ -52,6 +53,8 @@ export class FinancialDatabase extends Dexie{
       }
     });
     this.version(3).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'});
+    this.version(4).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'}).upgrade(transaction=>
+      transaction.table('portable_stages').toCollection().modify(value=>{Object.assign(value,upgradeStageV3(value));}));
     this.runtime=this.table('runtime');this.datasets=this.table('datasets');
     this.stages=this.table('portable_stages');
     this.on('versionchange',()=>{this.close();return false;});

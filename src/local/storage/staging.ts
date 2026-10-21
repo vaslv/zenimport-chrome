@@ -31,11 +31,13 @@ async function stageOwner(db:FinancialDatabase,fence:ContextFence,id:string,writ
   return stage;
 }
 
-function summary(stage:StageRecord):StageSummary{
+export function stageSummary(stage:StageRecord):StageSummary{
   stageRecord(stage);
   const manifest=validateManifest(parseJson(new TextEncoder().encode(stage.manifest)));
+  if(stage.state==='graph_valid')requireStorage(stage.graphDigest===manifest.dataset_digest,'storage_corrupt');
   return {id:stage.id,state:stage.state,datasetId:manifest.dataset_id,archiveId:manifest.archive_id,
-    datasetDigest:manifest.dataset_digest,archiveSha256:stage.archiveSha256,rowCount:stage.rowCount,byteCount:stage.byteCount,errorCode:stage.errorCode};
+    datasetDigest:manifest.dataset_digest,archiveSha256:stage.archiveSha256,rowCount:stage.rowCount,byteCount:stage.byteCount,errorCode:stage.errorCode,
+    graphVersion:stage.graphVersion,graphDigest:stage.graphDigest,graphVerifiedAt:stage.graphVerifiedAt};
 }
 
 export async function stageArchive(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,blob:Blob,now:string):Promise<StageSummary>{
@@ -71,7 +73,8 @@ export async function stageArchive(db:FinancialDatabase,sentinel:SentinelPort,fe
             logicalSchemaVersion:'1',lifecycle:'staging',ownerIds:[...manifest.zenmoney_identity.owner_ids],holdId:null,
             createdAt,backupAcknowledgedAt:null});
           await db.stages.add({id,writerId,installationId:scope.installationId,routingEpoch:scope.epoch,state:'loading',
-            manifest:new TextDecoder().decode(canonical(manifest)),archiveSha256:null,rowCount:int64('0'),byteCount:int64('0'),createdAt,errorCode:null});
+            manifest:new TextDecoder().decode(canonical(manifest)),archiveSha256:null,rowCount:int64('0'),byteCount:int64('0'),createdAt,errorCode:null,
+            graphVersion:null,graphDigest:null,graphVerifiedAt:null});
           await db.runtime.put({...runtime,financialMayHaveStarted:true});
         });prepared=true;
       },
@@ -88,7 +91,7 @@ export async function stageArchive(db:FinancialDatabase,sentinel:SentinelPort,fe
     return await db.transaction('rw',db.runtime,db.datasets,db.stages,async()=>{
       const stage=await stageOwner(db,scope,id,writerId);
       const sealed:StageRecord={...stage,state:'format_valid',archiveSha256:result.archiveSha256};
-      await db.stages.put(sealed);return summary(sealed);
+      await db.stages.put(sealed);return stageSummary(sealed);
     });
   }catch(error){
     buffer=[];
@@ -126,7 +129,7 @@ export async function stageSummaries(db:FinancialDatabase):Promise<StageSummary[
   try{return await db.transaction('r',db.runtime,db.datasets,db.stages,async()=>{
     const runtime=runtimeControl(await db.runtime.get('runtime')),result:StageSummary[]=[];
     for(const value of await db.stages.toArray()){
-      const stage=stageRecord(value),dataset=datasetControl(await db.datasets.get(stage.id)),item=summary(stage);
+      const stage=stageRecord(value),dataset=datasetControl(await db.datasets.get(stage.id)),item=stageSummary(stage);
       requireStorage(stage.installationId===runtime.installationId&&stage.id!==runtime.activeGeneration&&
         dataset.datasetId===item.datasetId&&['staging','validated','held','armed','discarded'].includes(dataset.lifecycle),'storage_corrupt');
       result.push(item);

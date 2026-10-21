@@ -552,3 +552,23 @@ No archive validity is presented as financial graph or activation authority.
   activation/retirement, backup-aware cleanup, full financial interop/format-1
   conversion, 100k graph/boundary gates and independent review remain. Product
   continues to use the remote backend; no live calls or production changes.
+
+### L4.13 — persistent inactive facts verdict (L4 in progress)
+
+- Full graph validation now commits a versioned digest/timestamp and inactive
+  `validated` lifecycle atomically. The active generation and API authority remain
+  unchanged. Revalidation reads the entire proof again rather than trusting a
+  cached verdict; modified bytes revoke the proof. Successful retries preserve
+  the original verification timestamp.
+- Native runtime schema 4 adds nullable proof fields without inventing results
+  for version-3 imports. Malformed old stage metadata aborts the whole upgrade;
+  the original version and bytes remain available.
+- Docker: strict typing and 160 unit/contract cases passed. Nineteen native
+  validation/kernel cases passed per browser (145: 44.07s; 140: 158.21s), including
+  current/legacy restart, stale routing, missing marker, tampering after a verdict,
+  failed upgrade, final-transaction quota rollback and worker death before commit.
+  The first launch did not reach pytest because Xvfb was container PID 1; the
+  corrected isolated runs use `--init`, and only completed runs count as evidence.
+- Full-graph size benchmarks are still running and are not part of this result.
+  Protected activation/export/retirement, backup-aware cleanup, full interop and
+  independent L4 review remain before L5. No live requests or product sends added.
