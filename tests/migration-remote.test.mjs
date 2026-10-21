@@ -5,7 +5,7 @@ import {RemoteParticipant} from '../.local/contracts/migration-remote.mjs';
 import {identity,status} from '../.local/contracts/migration-wire.mjs';
 import {participantTransition} from '../.local/contracts/participant-transition.mjs';
 const id=n=>'00000000-0000-4000-8000-'+String(n).padStart(12,'0');
-const cap={protocol_version:'2',archive_version:'2',financial_schema_version:'1',chunk_bytes:'262144',max_archive_bytes:'67108864',installation_id:id(1),participant_epoch:'1',state:'active',operation_id:null,awaiting_sync:false,legacy_hold:null,can_import:true};
+const cap={protocol_version:'2',archive_version:'2',financial_schema_version:'1',chunk_bytes:'262144',max_archive_bytes:'67108864',installation_id:id(1),dataset_id:id(5),participant_epoch:'1',state:'active',operation_id:null,awaiting_sync:false,legacy_hold:null,can_import:true};
 const json=value=>new Response(JSON.stringify(value),{headers:{'Content-Type':'application/json'}});
 const config={url:'https://backend.invalid',token:'synthetic-remote-token'};
 const code=expected=>error=>error.code===expected;

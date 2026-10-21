@@ -48,6 +48,6 @@ export class ServerCredentials{
   }
   async verifiedCandidate(ref:string,expectedOwners:readonly string[]=[]){
     const saved=await this.proof(ref),checked=await this.verifyReference(ref,saved.owner_ids,saved.installation_id);
-    this.#owners(checked,expectedOwners);return checked;
+    this.#owners(checked,expectedOwners);requireParticipant(checked.dataset_id===saved.dataset_id,'migration_invalid');return checked;
   }
 }

@@ -44,3 +44,16 @@ COPY contracts ./contracts
 COPY tests/local ./tests/local
 COPY --from=backend tests/test_transfer_recovery.py ./fixture_helpers/
 CMD ["xvfb-run", "-a", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/local/test_mirror_parity.py"]
+
+# Actual Python HTTP interoperability at the same pinned minimum browser.
+# Keep this binary/hash aligned with Dockerfile's local-chrome140 target.
+FROM mcr.microsoft.com/playwright/python:v1.58.0-noble@sha256:678457c4c323b981d8b4befc57b95366bb1bb6aa30057b1269f6b171e8d9975a AS integration-chrome140-binary
+RUN curl -fsSL https://storage.googleapis.com/chrome-for-testing-public/140.0.7339.80/linux64/chrome-linux64.zip -o /tmp/chrome.zip \
+    && echo '7184052e2155f270dd49503b1c9c7163204f3a7bc0fba9bd9e746dde04eb0546  /tmp/chrome.zip' | sha256sum -c - \
+    && python -m zipfile -e /tmp/chrome.zip /opt/chrome140 \
+    && chmod +x /opt/chrome140/chrome-linux64/chrome /opt/chrome140/chrome-linux64/chrome_crashpad_handler /opt/chrome140/chrome-linux64/chrome_sandbox \
+    && rm /tmp/chrome.zip
+
+FROM local-integration AS local-integration-chrome140
+COPY --from=integration-chrome140-binary /opt/chrome140 /opt/chrome140
+ENV CHROME_EXECUTABLE=/opt/chrome140/chrome-linux64/chrome

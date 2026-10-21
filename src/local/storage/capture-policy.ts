@@ -39,3 +39,9 @@ export async function canonicalSupport(view:RepositorySession){
     const flag=int64(supported.has(account.id)?'1':'0');if(account.supported!==flag)await view.replace('bank_accounts',[text(account.id)],{...account,supported:flag});
   }
 }
+
+/** Shared bounded capture stop; it grants no completeness or delivery authority. */
+export async function stopJob(view:RepositorySession,id:string,now:string){
+  await get(view,'capture_jobs',id);for(const interval of await view.related('capture_intervals',['job_id'],[text(id)]))if(ACTIVE.includes(interval.state))await view.replace('capture_intervals',[text(interval.id)],{...interval,state:'cancelled'});
+  await refreshJob(view,id);
+}

@@ -91,11 +91,18 @@ export async function run(action:string,args:Arguments){
           if(action==='transfer-credential'){
             const candidate=await transfer.localCredentials.verifyToken('synthetic-local-sdk-token'),mirror=await MirrorRepository.open(args.name,port(args.name));
             try{const {root}=await mirror.context();await mirror.adopt(root,candidate.ref,candidate.owners);}finally{mirror.close();}value=candidate;
-          }else if(action==='transfer-candidate')value=await transfer.serverCredentials.verify({url:args.url!,token:args.token!},['1']);
+          }else if(action==='transfer-candidate'){const candidate=await transfer.serverCredentials.verify({url:args.url!,token:args.token!},['1']);value={...candidate,contextId:(await transfer.serverCredentials.read(candidate.ref)).contextId};}
           else if(action==='transfer-to-server')value=await transfer.toServer(args.credentialRef!);
           else if(action==='transfer-to-browser'){
             const candidate=await transfer.localCredentials.verifyToken('synthetic-local-sdk-token');value=await transfer.toBrowser(candidate.ref,{pauseSharedServer:args.mode!=='no-consent'});
-          }else if(action==='transfer-step')value=await transfer.run();
+          }else if(action==='transfer-join')value=await transfer.joinServer(args.requestId!,args.credentialRef!,{retainLocalCopy:args.mode!=='no-consent',withoutImport:true,acceptMissingDedupEvidence:true});
+          else if(action==='transfer-join-current')value=await transfer.joinCurrent();
+          else if(action==='transfer-join-cancel')value=await transfer.cancelJoin(args.requestId!);
+          else if(action==='transfer-step'){
+            const put=IDBObjectStore.prototype.put;
+            if(args.mode==='quota-route')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-join:')&&values[0]?.value?.phase==='complete')throw new DOMException('synthetic-route-quota','QuotaExceededError');return put.apply(this,values);};
+            try{value=await transfer.run();if(args.mode==='drop-join-reply'&&(value as {state:string}).state==='complete')throw new ParticipantError('backend_unavailable');}finally{IDBObjectStore.prototype.put=put;}
+          }
           else if(action==='transfer-current')value=await transfer.current();
           else if(action==='transfer-cancel'){
             const add=IDBObjectStore.prototype.add;
@@ -104,7 +111,7 @@ export async function run(action:string,args:Arguments){
           }
           else throw Error('unknown_transfer_fixture');
         }finally{transfer.close();}
-      }else if(action==='quiesce-local')value=await owner.quiesceLocal(args.request as Parameters<MigrationOwner['quiesceLocal']>[0],args.now??now);
+      }else if(action==='quiesce-local')value=await owner.quiesceLocal(args.request as Parameters<MigrationOwner['quiesceLocal']>[0],args.now??now,args.mode==='join'?{kind:'join',id:args.requestId!}:undefined);
       else if(action==='remote-context'){
         const control=await RemoteControl.open(args.name,port(args.name));try{value=await control.remoteContext(await control.read());}finally{control.close();}
       }else if(action==='remote-peer'){

@@ -21,7 +21,7 @@ export function receipt(input:unknown):ParticipantReceipt{
 }
 export interface PortableCapabilities{
   protocol_version:'2';archive_version:'2';financial_schema_version:'1';chunk_bytes:'262144';max_archive_bytes:'67108864';
-  installation_id:string;participant_epoch:string;state:string;operation_id:string|null;awaiting_sync:boolean;legacy_hold:string|null;can_import:boolean;
+  installation_id:string;dataset_id:string;participant_epoch:string;state:string;operation_id:string|null;awaiting_sync:boolean;legacy_hold:string|null;can_import:boolean;
 }
 export interface PortableIdentity extends PortableCapabilities{owner_ids:string[];checked_at:string}
 export interface PortableStatus{
@@ -35,14 +35,14 @@ function participant(value:Record<string,unknown>){
   requireParticipant((value.state==='active')===(value.operation_id===null));
 }
 export function capabilities(input:unknown):PortableCapabilities{
-  const value=object(input);participant(value);
+  const value=object(input);participant(value);participantUuid(value.dataset_id);
   requireParticipant(value.protocol_version==='2'&&value.archive_version==='2'&&value.financial_schema_version==='1'&&value.chunk_bytes==='262144'&&value.max_archive_bytes==='67108864'&&typeof value.can_import==='boolean');
-  return value as unknown as PortableCapabilities;
+  return Object.fromEntries(['protocol_version','archive_version','financial_schema_version','chunk_bytes','max_archive_bytes','installation_id','dataset_id','participant_epoch','state','operation_id','awaiting_sync','legacy_hold','can_import'].map(key=>[key,value[key]])) as unknown as PortableCapabilities;
 }
 export function identity(input:unknown):PortableIdentity{
   const value=object(input);capabilities(value);participantInteger(value.checked_at,9223372036854775807n,0n);
   requireParticipant(Array.isArray(value.owner_ids)&&value.owner_ids.length>0&&value.owner_ids.length<=200&&value.owner_ids.every(id=>typeof id==='string'&&/^[1-9][0-9]*$/.test(id)&&id.length<=240)&&new Set(value.owner_ids).size===value.owner_ids.length);
-  return value as unknown as PortableIdentity;
+  return {...capabilities(value),owner_ids:[...value.owner_ids as string[]],checked_at:value.checked_at as string};
 }
 export interface PortableTask{id:string;switch_id:string;kind:'snapshot'|'validate'|'activate';state:'queued'|'running'|'blocked'|'complete';error_code:string|null}
 export function task(input:unknown,expected:{id?:string;switchId?:string;kind?:string}={}):PortableTask{

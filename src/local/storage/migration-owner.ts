@@ -1,7 +1,8 @@
 import {readOutbox} from './outbox-control.js';
 /** Existing-store control owner. Never exposed to bank/page messages. */
 import Dexie from 'dexie';
-import {CaptureRepository} from './capture-repository.js';
+import {stopJob} from './capture-policy.js';
+import {writeTransaction} from './kernel.js';
 import {OutboxRepository} from './outbox-repository.js';
 import {unpackRow} from './cells.js';
 import type {RemoteDescriptor} from './remote-control.js';
@@ -87,18 +88,24 @@ export class MigrationOwner{
     });
   }
   /** One bounded pre-hold unit; stopping a capture never invents completeness. */
-  async quiesceLocal(expected:RuntimeControl,now:string){
+  async quiesceLocal(expected:RuntimeControl,now:string,intent?:{kind:'join'|'switch';id:string}){
+    const checkIntent=async()=>{
+      if(!intent)return;participantUuid(intent.id);
+      const join=intent.kind==='join',head=join?'mode-join-head':'mode-switch-head',scope=(join?'mode-join:':'mode-switch:')+intent.id;
+      const value=(await this.#db.applicationState.get(scope))?.value;
+      requireParticipant((await this.#db.applicationState.get(head))?.value.id===intent.id&&value!==undefined&&
+        (join?value.phase==='quiescing':!['complete','cancelled'].includes(value.phase as string)),'migration_busy');
+    };
     const anchor=await this.#anchor();
     const pending=await this.#db.transaction('r',this.#db.tables,async()=>{
-      const root=await assertAnchor(this.#db,anchor);
+      const root=await assertAnchor(this.#db,anchor);await checkIntent();
       requireParticipant((!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&same({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected)&&root.activeMode==='local'&&root.activeGeneration!==null&&root.pendingSwitchId===null,'migration_busy');
       const capture=await this.#db.financial('capture_jobs').where('[generation+i0]')
         .between([root.activeGeneration,Dexie.minKey],[root.activeGeneration,Dexie.maxKey],true,true).first();
       return {job:capture?unpackRow('capture_jobs',capture.row).id:null,outbox:await readOutbox(this.#db,root.activeGeneration)};
     });
     const fence={installationId:expected.installationId,generation:expected.activeGeneration!,epoch:expected.epoch};
-    if(pending.job){const capture=await CaptureRepository.open(this.#db.name,this.#port,fence);
-      try{await capture.stop(pending.job,now);}finally{capture.close();}return false;}
+    if(pending.job){await writeTransaction(this.#db,this.#port,fence,async view=>{await checkIntent();await stopJob(view,pending.job!,now);});return false;}
     if(pending.outbox&&pending.outbox.phase!=='settled'){
       if(BigInt(pending.outbox.deadline)>BigInt(now))return false;
       const outbox=await OutboxRepository.open(this.#db.name,this.#port,fence);
@@ -365,7 +372,7 @@ export class MigrationOwner{
       dataset_digest:result.manifest.dataset_digest,archive_sha256:result.archiveSha256,archive_size:String(result.bytes)},now,{sha256:archived.sha256,size:archived.size,nonce});
   }
   async selectRemote(participantId:string,switchId:string,remoteContextRef:string,descriptor?:RemoteDescriptor){
-    participantUuid(remoteContextRef);if(descriptor){participantUuid(descriptor.contextId);requireParticipant(typeof descriptor.url==='string'&&typeof descriptor.legacy==='boolean');}
+    participantUuid(remoteContextRef);if(descriptor){participantUuid(descriptor.contextId);requireParticipant(typeof descriptor.url==='string'&&typeof descriptor.legacy==='boolean');if(descriptor.installationId!==undefined||descriptor.datasetId!==undefined){participantUuid(descriptor.installationId);participantUuid(descriptor.datasetId);}}
     const snapshot=await this.#snapshot(participantId,switchId);
     if(snapshot.transfer?.state==='remote'){
       requireParticipant(snapshot.transfer.credentialRef===remoteContextRef);return;

@@ -1,3 +1,4 @@
+import {stopJob} from './capture-policy.js';
 /** Durable local bank capture. A committed page ACK never depends on API delivery. */
 import type {ContextFence,SentinelPort} from '../../control/types.js';
 import type {RepositorySession} from './kernel.js';
@@ -193,8 +194,7 @@ export class CaptureRepository{
   }
   async stop(id:string,now:string){
     id=uuid(id);int64(now);return this.owner.command(async view=>{
-      await get(view,'capture_jobs',id);for(const interval of await view.related('capture_intervals',['job_id'],[text(id)]))if(ACTIVE.includes(interval.state))await view.replace('capture_intervals',[text(interval.id)],{...interval,state:'cancelled'});
-      await refreshJob(view,id);return this.#jobView(view,id,now);
+      await stopJob(view,id,now);return this.#jobView(view,id,now);
     });
   }
   close(){this.owner.close();}

@@ -1478,3 +1478,33 @@ push, Git tags or publication.
 L10 remains in progress: used-server/no-import joins, backup/export, replacement
 consent and archive-only restore. Local product routing remains disabled until
 L10/L11 gates. No live API/data, push, Git tags or publication.
+
+### L10.9 — verified no-import joins and financial lineage fences
+
+- A durable no-import join selects an authenticated server without changing its
+  participant, jobs or financial rows. Required consent retains the local copy
+  read-only and acknowledges missing deduplication evidence; owner and dataset
+  identity are checked again before the atomic Root selection.
+- Physical installation identity and financial dataset identity are now separate
+  HTTP fields. Selected remote descriptors bind both. Reverse transfer rechecks
+  that binding at preparation and against the actual source_start receipt.
+  A last-moment lineage change requests ordinary bilateral cancellation before
+  any destination import; permanent audit retains the actual proof.
+- Cancellation fences late quiescence inside the final capture transaction.
+  Final independent API/adversarial reviews are clean; see
+  reviews/l10-route-selection-2026-10-21.md. External cross-model CLI unavailable.
+- Final Docker strict/generated/bundle checks and all 248 unit/contracts passed
+  in 1842.97ms. All 18 actual Python HTTP/native-controller cases passed in
+  57.70s, one existing Starlette warning. Earlier combined HTTP/capture/journal:
+  59 passed in 168.06s. Backend dataset identity changes passed all 770 tests
+  in 42.35s plus HTTP/auth/process-lifecycle gates, three existing warnings.
+  Logs: /tmp/zenimport-l10-route-*.log and
+  /tmp/zenimport-l10-dataset-backend-full.log. Synthetic isolated data only.
+
+L10 remains in progress: backup/export, replacement consent and archive-only
+restore. Local product routing remains disabled. No live API/data, push, tags
+or publication.
+
+Final minimum Chrome 140 source-lineage/controller gate: five passed in 47.88s
+(one existing Starlette warning), including both journal-to-hold races. Log:
+/tmp/zenimport-l10-route-minimum-lineage.log.

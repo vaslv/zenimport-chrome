@@ -200,7 +200,7 @@ def test_production_reverse_transfer_requires_shared_pause_consent_and_stops_ser
             # Use an actual verified legacy credential record, selected remote-only.
             ok(worker,'create')
             candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
-            ok(worker,'create-remote','remote-profile',credentialRef=candidate['ref'],url=url,peerId=str(uuid4()))
+            ok(worker,'create-remote','remote-profile',credentialRef=candidate['ref'],url=url,peerId=candidate['contextId'])
             assert authority_call(worker,'transfer-to-browser','remote-profile',mode='no-consent')['code']=='migration_paused'
             assert ok(worker,'transfer-current','remote-profile') is None
             ok(worker,'transfer-to-browser','remote-profile')
@@ -227,7 +227,7 @@ def test_competing_server_transfer_cancels_only_unused_native_slot(tmp_path,save
     try:
         with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
             ok(worker,'create');candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
-            before=ok(worker,'create-remote','remote-profile',credentialRef=candidate['ref'],url=url,peerId=str(uuid4()))['root']
+            before=ok(worker,'create-remote','remote-profile',credentialRef=candidate['ref'],url=url,peerId=candidate['contextId'])['root']
             journal=ok(worker,'transfer-to-browser','remote-profile');switch=journal['plan']['id']
             assert ok(worker,'transfer-step','remote-profile')['state']=='progress'
             reserved=ok(worker,'current','remote-profile')['root'];assert reserved['pendingSwitchId']==switch
@@ -256,5 +256,164 @@ def test_competing_server_transfer_cancels_only_unused_native_slot(tmp_path,save
                 current=db.execute('SELECT * FROM migration_installation').fetchone()
                 assert current['state']=='export_hold' and current['operation_id']==foreign
                 assert db.execute('SELECT count(*) FROM migration_operations').fetchone()[0]==1
+            assert not harness.remote.writes
+    finally:harness.close()
+
+
+@pytest.mark.parametrize('history,used,fault',[(False,True,'normal'),(True,True,'quota-route'),(True,False,'drop-join-reply')])
+def test_no_import_join_retires_local_copy_without_touching_shared_server(tmp_path,history,used,fault):
+    from test_authority import ok,call as authority_call,FIXTURE
+    from uuid import uuid4
+    from backend import storage
+    harness=DeliveryHarness(tmp_path/'join.sqlite3')
+    if used:harness.capture(count=3)
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (context,worker,page,_):
+            ok(worker,'create')
+            if history:ok(worker,'seed',fixture=FIXTURE);ok(worker,'transfer-credential')
+            before=ok(worker,'current')['root'];local=ok(worker,'inspect')['rows']
+            candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN);assert candidate['identity']['can_import'] is not used
+            with storage.transaction(harness.path,read_only=True) as db:
+                remote_before=[tuple(row) for row in db.execute('SELECT * FROM bank_transactions ORDER BY id')]
+                jobs_before=[tuple(row) for row in db.execute('SELECT * FROM capture_jobs ORDER BY id')]
+                participant_before=tuple(db.execute('SELECT * FROM migration_installation').fetchone())
+            command=str(uuid4())
+            denied=authority_call(worker,'transfer-join',credentialRef=candidate['ref'],requestId=command,mode='no-consent')
+            assert denied['code']=='migration_paused' and ok(worker,'transfer-join-current') is None
+            intent=ok(worker,'transfer-join',credentialRef=candidate['ref'],requestId=command)
+            assert ok(worker,'current')['root']==before
+            assert ok(worker,'transfer-join',credentialRef=candidate['ref'],requestId=command)==intent
+            if history:
+                blocked=authority_call(worker,'journal-create',switchId=str(uuid4()),peerId=str(uuid4()),credentialRef=str(uuid4()))
+                assert blocked['code']=='migration_busy'
+            if fault=='quota-route':
+                rejected=authority_call(worker,'transfer-step',mode=fault);assert rejected['code']=='quota_exceeded'
+                assert ok(worker,'current')['root']==before
+                assert ok(worker,'transfer-join-current')['phase']=='quiescing'
+                assert next(row for row in ok(worker,'inspect')['datasets'] if row['generation']==before['activeGeneration'])['lifecycle']=='active'
+            if fault=='drop-join-reply':
+                assert authority_call(worker,'transfer-step',mode=fault)['code']=='backend_unavailable'
+                session=context.new_cdp_session(page)
+                target=next(row for row in session.send('Target.getTargets')['targetInfos'] if row['type']=='service_worker' and row['url']==worker.url)
+                assert session.send('Target.closeTarget',dict(targetId=target['targetId']))['success']
+                page.evaluate('()=>chrome.runtime.sendMessage({type:"probe-wake"})');ok(page,'open');worker=page
+                assert ok(worker,'transfer-join',credentialRef=candidate['ref'],requestId=command)['phase']=='complete'
+            else:assert ok(worker,'transfer-step')['state']=='complete'
+            root=ok(worker,'current')['root'];assert root['activeMode']=='remote' and root['activeGeneration'] is None
+            assert root['credentialRef']==candidate['ref'] and int(root['epoch'])==int(before['epoch'])+1
+            descriptor=ok(worker,'remote-context')
+            assert descriptor['installationId']==candidate['identity']['installation_id'] and descriptor['datasetId']==candidate['identity']['dataset_id']
+            retained=ok(worker,'inspect',generation=before['activeGeneration'])
+            assert retained['rows']==local
+            assert next(row for row in retained['datasets'] if row['generation']==before['activeGeneration'])['lifecycle']=='retired'
+            assert not authority_call(worker,'write',generation=before['activeGeneration'])['ok']
+            assert not harness.remote.writes
+            with storage.transaction(harness.path,read_only=True) as db:
+                assert [tuple(row) for row in db.execute('SELECT * FROM bank_transactions ORDER BY id')]==remote_before
+                assert [tuple(row) for row in db.execute('SELECT * FROM capture_jobs ORDER BY id')]==jobs_before
+                assert tuple(db.execute('SELECT * FROM migration_installation').fetchone())==participant_before
+                assert db.execute('SELECT count(*) FROM migration_operations').fetchone()[0]==0
+    finally:harness.close()
+
+
+def test_cancelled_join_fences_late_quiescence_and_can_recover_after_token_rotation(tmp_path):
+    from test_authority import ok,call as authority_call,FIXTURE
+    from uuid import uuid4
+    harness=DeliveryHarness(tmp_path/'join-cancel.sqlite3');harness.capture(count=1)
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
+            ok(worker,'create');ok(worker,'seed',fixture=FIXTURE);ok(worker,'transfer-credential')
+            before=ok(worker,'current')['root'];candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN);command=str(uuid4())
+            ok(worker,'transfer-join',credentialRef=candidate['ref'],requestId=command)
+            ok(worker,'credential',credentialRef=str(uuid4()))
+            assert ok(worker,'transfer-join-cancel',requestId=command)['phase']=='cancelled'
+            current=ok(worker,'current')['root'];facts=ok(worker,'inspect')['rows']
+            assert authority_call(worker,'quiesce-local',request=current,requestId=command,mode='join')['code']=='migration_busy'
+            assert ok(worker,'inspect')['rows']==facts
+            assert current['activeMode']=='local' and current['activeGeneration']==before['activeGeneration']
+            assert not harness.remote.writes
+    finally:harness.close()
+
+
+@pytest.mark.parametrize('change',['owner','dataset'])
+def test_server_change_during_no_import_join_never_selects_another_context(tmp_path,change):
+    from test_authority import ok,call as authority_call,FIXTURE
+    from uuid import uuid4
+    from backend import storage
+    harness=DeliveryHarness(tmp_path/'join-changed.sqlite3');harness.capture(count=1)
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
+            ok(worker,'create');ok(worker,'seed',fixture=FIXTURE);ok(worker,'transfer-credential')
+            before=ok(worker,'current')['root'];candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN);command=str(uuid4())
+            ok(worker,'transfer-join',credentialRef=candidate['ref'],requestId=command)
+            if change=='owner':harness.remote.data['user']=[{'id':2}]
+            else:
+                with storage.transaction(harness.path) as db:db.execute("UPDATE service_meta SET value=? WHERE key='instance_id'",(str(uuid4()),))
+            refused=authority_call(worker,'transfer-step')
+            assert refused['code']==('migration_wrong_account' if change=='owner' else 'migration_invalid')
+            assert ok(worker,'current')['root']==before
+            assert ok(worker,'transfer-join-current')['phase']=='quiescing'
+            assert ok(worker,'transfer-join-cancel',requestId=command)['phase']=='cancelled'
+            assert not harness.remote.writes
+    finally:harness.close()
+
+
+def test_reverse_migration_rejects_replaced_selected_dataset_without_fallback(tmp_path):
+    from test_authority import ok,call as authority_call
+    from uuid import uuid4
+    from backend import storage
+    harness=DeliveryHarness(tmp_path/'joined-drift.sqlite3');harness.capture(count=1)
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
+            ok(worker,'create');candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            ok(worker,'transfer-join',credentialRef=candidate['ref'],requestId=str(uuid4()))
+            assert ok(worker,'transfer-step')['state']=='complete'
+            selected=ok(worker,'current')['root']
+            with storage.transaction(harness.path) as db:db.execute("UPDATE service_meta SET value=? WHERE key='instance_id'",(str(uuid4()),))
+            assert authority_call(worker,'transfer-to-browser')['code']=='migration_invalid'
+            assert ok(worker,'current')['root']==selected and selected['activeMode']=='remote'
+            assert ok(worker,'transfer-current') is None
+            assert not harness.remote.writes
+    finally:harness.close()
+
+
+@pytest.mark.parametrize('moment',['before_reserve','after_prepare'])
+def test_source_lineage_remains_bound_after_reverse_request(tmp_path,moment):
+    from test_authority import ok,call as authority_call
+    from uuid import uuid4
+    from backend import storage
+    harness=DeliveryHarness(tmp_path/'source-lineage.sqlite3');harness.ready();harness.app.state.portable.start()
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+            ok(worker,'create');candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            before=ok(worker,'create-remote','remote-profile',credentialRef=candidate['ref'],url=url,peerId=candidate['contextId'])['root']
+            requested=ok(worker,'transfer-to-browser','remote-profile');switch=requested['plan']['id']
+            assert ok(worker,'remote-context','remote-profile')['datasetId']==candidate['identity']['dataset_id']
+            if moment=='after_prepare':
+                for _ in range(3):assert ok(worker,'transfer-step','remote-profile')['state']=='progress'
+                assert ok(worker,'transfer-current','remote-profile')['phase']=='source_quiescing'
+            replaced=str(uuid4())
+            with storage.transaction(harness.path) as db:db.execute("UPDATE service_meta SET value=? WHERE key='instance_id'",(replaced,))
+            if moment=='before_reserve':
+                assert ok(worker,'transfer-step','remote-profile')['code']=='migration_invalid'
+                assert ok(worker,'current','remote-profile')['root']==before
+                assert ok(worker,'transfer-cancel','remote-profile',switchId=switch,requestId=str(uuid4()))=='cancelled'
+            else:
+                for _ in range(300):
+                    result=ok(worker,'transfer-step','remote-profile')
+                    assert result['state'] not in ('blocked','busy'),result
+                    if result['state']=='cancelled':break
+                    if result['state']=='waiting':page.wait_for_timeout(20)
+                else:raise AssertionError(ok(worker,'transfer-current','remote-profile'))
+                journal=ok(worker,'transfer-current','remote-profile')
+                assert not any(row['command'].startswith('destination_') and row['command']!='destination_discard' for row in journal['commands'])
+                assert not any(row['command']=='source_handoff' for row in journal['receipts'])
+                assert any(row['command']=='source_resume' and row['dataset_id']==replaced for row in journal['receipts'])
+            root=ok(worker,'current','remote-profile')['root'];assert root['activeMode']=='remote' and root['pendingSwitchId'] is None
+            assert root['credentialRef']==before['credentialRef']
+            assert ok(worker,'remote-context','remote-profile')['datasetId']==candidate['identity']['dataset_id']
+            with storage.transaction(harness.path,read_only=True) as db:
+                assert db.execute('SELECT state FROM migration_installation').fetchone()[0]=='active'
+                assert db.execute("SELECT value FROM service_meta WHERE key='instance_id'").fetchone()[0]==replaced
             assert not harness.remote.writes
     finally:harness.close()

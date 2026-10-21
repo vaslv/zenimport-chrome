@@ -17,6 +17,8 @@ export interface LiveParticipant{
   upload(switchId:string,epoch:string,number:number,bytes:Uint8Array):Promise<unknown>;
 }
 export interface SwitchPorts{
+  /** Protected selected lineage, never inferred from an unauthenticated URL. */
+  sourceDataset?(plan:SwitchPlan):Promise<string|null>;
   /** Fresh identity/eligibility checks; may reserve a new native destination. */
   prepare(plan:SwitchPlan):Promise<{id:string;generation:string}|null>;
   /** At most one bounded capture-stop/recovery unit; never dispatch a new send. */
@@ -63,6 +65,10 @@ export class SwitchRunner{
       return await this.#command(value,lease,'source','source_start')?this.#advance(lease,'source_paused'):'waiting';
     }
     if(value.phase==='source_paused'){
+      const expected=await this.ports.sourceDataset?.(plan);
+      if(expected!=null&&this.#proof(value,'source_start').dataset_id!==expected){
+        await this.journal.cancelSourceContext(lease,expected,this.#now());return 'progress';
+      }
       const source=this.ports.source(plan),status=await this.#status(value,'source');
       const blocked=status.work.find(work=>work.kind==='snapshot'&&work.state==='blocked');
       if(blocked)throw new ParticipantError(String(blocked.error_code??'migration_incomplete'));

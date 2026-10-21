@@ -41,7 +41,7 @@ export class FinancialDatabase extends Dexie{
   readonly migrationChunks:Table<ParticipantChunk,[string,string,number]>;
   readonly switches:Table<ModeSwitch,string>;
   readonly applicationState:Table<{scope:string;value:Record<string,unknown>},string>;
-  readonly remoteContexts:Table<{id:string;url:string;contextId:string;legacy:boolean},string>;
+  readonly remoteContexts:Table<{id:string;url:string;contextId:string;legacy:boolean;installationId?:string;datasetId?:string},string>;
   constructor(name:string,allowCreate:boolean){
     super(name,{autoOpen:false,chromeTransactionDurability:'strict',cache:'disabled'});
     this.version(1).stores(storeDefinitions());

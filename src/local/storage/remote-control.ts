@@ -9,7 +9,7 @@ import {assertAnchor,readAnchor} from './anchor.js';
 import {int64,requireStorage,storageFailure} from './types.js';
 
 const same=(a:RuntimeControl,b:RuntimeControl)=>Object.keys(a).every(key=>a[key as keyof RuntimeControl]===b[key as keyof RuntimeControl]);
-export interface RemoteDescriptor{url:string;contextId:string;legacy:boolean}
+export interface RemoteDescriptor{url:string;contextId:string;legacy:boolean;installationId?:string;datasetId?:string}
 export class RemoteControl{
   private constructor(private db:FinancialDatabase,private port:SentinelPort){}
   static async exists(name:string,port:SentinelPort){return await port.read()!==null||await Dexie.exists(name);}
@@ -53,6 +53,16 @@ export class RemoteControl{
       const next=runtimeControl({...current,credentialRef:ref,credentialEpoch:int64(String(BigInt(current.credentialEpoch)+1n)),
         epoch:switchDataset?int64(String(BigInt(current.epoch)+1n)):current.epoch});
       await this.db.remoteContexts.add({id:ref,...context});await this.db.runtime.put(next);return next;
+    });
+  }
+  /** Strengthen an old selected context after fresh authenticated discovery. */
+  async bindIdentity(expected:RuntimeControl,installationId:string,datasetId:string){
+    participantUuid(installationId);participantUuid(datasetId);const anchor=await readAnchor(this.port);
+    return this.db.transaction('rw',this.db.runtime,this.db.datasets,this.db.remoteContexts,async()=>{
+      const current=await assertAnchor(this.db,anchor);requireStorage(same(current,expected)&&current.activeMode==='remote'&&current.pendingSwitchId===null&&current.credentialRef!==null,'stale_epoch');
+      const context=await this.db.remoteContexts.get(current.credentialRef);requireStorage(context!==undefined,'recovery_required');
+      requireStorage(context.installationId===undefined&&context.datasetId===undefined||context.installationId===installationId&&context.datasetId===datasetId,'stale_epoch');
+      const bound={...context,installationId,datasetId};await this.db.remoteContexts.put(bound);return bound;
     });
   }
   async remoteContext(expected:RuntimeControl){

@@ -32,6 +32,8 @@ export class SwitchJournalRepository{
     const plan=switchPlan(input),marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant(sameJournal(root,expected)&&root.pendingSwitchId===null,'migration_busy');
+      const join=(await this.db.applicationState.get('mode-join-head'))?.value;
+      if(join){const pending=(await this.db.applicationState.get('mode-join:'+participantUuid(join.id)))?.value;requireParticipant(pending!==undefined&&['complete','cancelled'].includes(pending.phase as string),'migration_busy');}
       const pointer=(await this.db.applicationState.get(head))?.value;
       if(pointer){
         const previous=switchJournal((await this.db.applicationState.get(scope(participantUuid(pointer.id))))?.value);
@@ -143,6 +145,18 @@ export class SwitchJournalRepository{
       await this.db.applicationState.put({scope:scope(id),value:cloneRecord(next)});
       await this.db.applicationState.put({scope:cancelScope(id),value:{requestId:previous?.requestId??requestId,state:unused?'finished':forward?'forward':'requested'}});
       return unused?'cancelled':forward?'forward':'requested';
+    });
+  }
+  /** A post-preflight source change is cancelled before any destination import. */
+  async cancelSourceContext(lease:SwitchLease,expectedDataset:string,now:string){
+    participantUuid(expectedDataset);return this.#unit(lease,now,async value=>{
+      requireParticipant(value.plan.direction==='remote-to-local'&&value.phase==='source_paused');
+      const selected=await this.db.remoteContexts.get(value.plan.remoteCredentialRef),started=value.receipts.find(row=>row.command==='source_start');
+      requireParticipant(selected?.installationId===value.plan.sourceId&&selected.datasetId===expectedDataset&&started!==undefined&&started.dataset_id!==expectedDataset&&
+        !value.commands.some(row=>row.side==='destination')&&!value.receipts.some(row=>row.command==='source_handoff'),'migration_invalid');
+      await this.db.applicationState.add({scope:'mode-switch-context:'+value.plan.id,value:{reason:'source_dataset_changed',expectedDataset,actualDataset:started.dataset_id,proof:started}});
+      await this.db.applicationState.put({scope:cancelScope(value.plan.id),value:{requestId:crypto.randomUUID(),state:'requested'}});
+      return {value:{...value,lease:null,error:'migration_invalid'},result:true};
     });
   }
   /** An obsolete CAS is replaceable only after permanent epoch advancement proves
