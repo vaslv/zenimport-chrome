@@ -64,6 +64,29 @@ handed-off generations or permanent participant receipts. A missing sentinel is
 never repaired or cleared by cleanup, even after all abandoned imports are gone.
 No background collector or UI invokes these private operations yet.
 
+## Offline financial interoperability
+
+`sh scripts/test-financial-interop.sh ../ZenImportBackend` runs Python archives
+through actual installed MV3/IndexedDB staging, full validation and a read-only
+inactive copy. Python verifies every raw logical scalar, installs that archive
+in a separate synthetic protocol-2 destination, re-exports its SQL projections
+and sends them through the native browser again. Current and legacy graphs and
+format-1 conversion all take this path. Use `INTEROP_BROWSER=chrome140` for the
+minimum-browser image. All containers disable network and use private scratch.
+
+Format 1 is restored by a compatible temporary backend using its existing owner
+verification/restore path and exported as format 2. The browser does not load or
+execute SQLite or archived SQL. Tests compare exact financial facts and explicitly
+enumerate mirror rebinding, prediction invalidation, fresh unattempted source
+context and appended import provenance. Physical migration-hold audit aliases
+project back to their original logical key; this does not resume the old hold.
+
+`copyInactiveStage` only re-exports a fully checked immutable inactive generation.
+Its newly generated archive/session IDs do not authorize a source handoff. The
+test bridge and synthetic owner/participant setup are not product handlers or
+proof of live identity, protected active-source export or local activation. Those
+remaining authority gates must pass before exposing local mode.
+
 ## Evidence
 
 Docker native tests import the format-only golden fixture and explicitly reject

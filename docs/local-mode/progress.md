@@ -602,3 +602,25 @@ No archive validity is presented as financial graph or activation authority.
 - This does not establish performance for every bank-heavy graph or Chrome 155
   on the user's machine. No real account, API request or production state used.
   Remaining L4 authority/export, financial interop and review gates still apply.
+
+### L4.16 — complete native/Python financial interoperability (L4 in progress)
+
+- Added a facts-only inactive archive copier and an explicit offline integration
+  runner: Python ZIP -> native MV3/IDB validation/copy -> isolated Python protocol-2
+  installation -> SQL export -> native IDB -> Python comparison. All 49 tables
+  and raw scalars are preserved except separately asserted runtime normalizations.
+- Current, legacy and converted format-1 graphs take that path. The old format is
+  restored by a compatible temporary backend, then exported as format 2; no browser
+  SQLite engine or executable archived SQL is used. Synthetic owner verification
+  and participant setup do not count as a live identity or browser handoff gate.
+- Docker: strict typing and 160 unit/contract cases passed. Three native roundtrips
+  per direction passed on 145 (5.41s/4.39s) and 140 (27.04s/21.64s); all three Python
+  prepare/install/final verification phases passed. The initial format-1 oracle
+  incorrectly expected the physical hold alias in a logical export; corrected
+  the independent expectation, without changing runtime behavior or financial data.
+- Full backend Docker gate: 759 tests passed in 38.15s plus HTTP/auth, actual fake
+  SDK dispatch, SIGKILL/recovery, graceful shutdown and snapshot-restore checks.
+  Shared contract copies still agree. No live account or production data involved.
+- L4 still requires protected active-source export, generation activation and
+  irreversible retirement, remaining boundary/crash gates and independent review.
+  L5–L12 have not started, and distributed product handlers remain remote-only.

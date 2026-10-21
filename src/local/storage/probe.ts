@@ -10,6 +10,7 @@ import type {KernelArguments} from './kernel-probe.js';
 import {stagingProbe} from './staging-probe.js';
 import type {StagingArguments} from './staging-probe.js';
 import {PortableError} from '../portable/format.js';
+import {archiveProbe} from './archive-probe.js';
 
 type Area=Parameters<typeof trustedSentinel>[0];
 const area=()=> (globalThis as unknown as {chrome:{storage:{local:Area}}}).chrome.storage.local;
@@ -41,7 +42,7 @@ async function state(name:string){
   finally{db.close();}
 }
 
-export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string;owners?:string[];now?:string}){
+export async function run(action:string,args:{name:string;mode?:string;fence?:ContextFence;stageId?:string;owners?:string[];now?:string;base64?:string}){
   try{
     let value:unknown;
     if(action==='open')value=await open(args.name,args.mode);
@@ -50,6 +51,13 @@ export async function run(action:string,args:{name:string;mode?:string;fence?:Co
     else if(action==='stage'){
       const db=stores.get(args.name);if(!db)throw Error('missing_test_handle');
       value=await stagingProbe(db,args as unknown as StagingArguments);
+    }else if(action==='stage-bytes'){
+      const db=stores.get(args.name);if(!db||!args.fence||!args.base64)throw Error('missing_test_handle');
+      const raw=Uint8Array.from(atob(args.base64),char=>char.charCodeAt(0));
+      value=await db.stageArchive(new Blob([raw]),args.fence,'1792540800');
+    }else if(action==='copy-inactive-stage'){
+      if(!args.fence||!args.stageId)throw Error('missing_test_handle');
+      value=await archiveProbe(args.name,trustedSentinel(area()),args.fence,args.stageId);
     }else if(action==='stages'){
       const db=stores.get(args.name);if(!db)throw Error('missing_test_handle');value=await db.stages();
     }else if(action==='relations'){
