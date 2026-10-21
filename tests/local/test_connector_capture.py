@@ -33,7 +33,8 @@ def test_existing_dom_driver_and_coordinator_commit_complete_local_capture(tmp_p
     path=tmp_path/'extension';prepare_extension(path,hosts=(origin+'/*',))
     bootstrap=path/'probe-worker.mjs';bootstrap.write_text(bootstrap.read_text()+"\nimport {Coordinator} from './coordinator.js';import * as bidv from './connectors/bidv/index.js';import * as vietinbank from './connectors/vietinbank/index.js';globalThis.captureFixture={Coordinator,adapters:{bidv,vietinbank}};\n")
     with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=(origin+'/*',)) as (context,worker,ui,_):
-        context.add_init_script("""(() => {const Original=Date,skew=Original.parse('2026-10-21T12:00:00Z')-Original.now();globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[Original.now()+skew]));}static now(){return Original.now()+skew;}};})();""")
+        # Preserve the shared wall clock: the MAIN response timestamp and the
+        # ISOLATED driver's freshness gate must not use different test clocks.
         context.route(origin+'/**',lambda r:r.fulfill(content_type='text/html',body=html))
         context.route(origin+'/w2/process' if bank=='bidv' else 'https://api-ipay.vietinbank.vn/**',api)
         page=context.new_page();page.goto(origin+('/tai-khoan' if bank=='bidv' else '/payment-history?accountNo=12345678'))

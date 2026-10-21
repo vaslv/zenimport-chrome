@@ -1708,3 +1708,20 @@ Product local routing remains disabled. No live API/data, push, tags or publicat
 All identified L10 major-review defects are corrected. Connector fixture clock
 repair and consolidated L10 gate evidence follow before product integration.
 No live API/data, push, tags or publication.
+
+### L10 broad verification correction — preserve cross-world fixture clock
+
+- Removed the bank page's MAIN-only Date override from the native connector
+  fixture. The real observer's MAIN response timestamp and ISOLATED driver's
+  freshness gate must share wall time. The coordinator/domain clock stays
+  explicitly injected; all completion, coverage, record and export assertions stay.
+- Before correction, after disk recovery: two VietinBank fixture failures and the
+  timeout-write delivery case passed (99.85s). With only the clock override
+  removed, all four bank/empty-history combinations passed in Docker (15.01s).
+  Independent API reread: no findings; no remaining confirmed L10 findings in
+  that reviewer's major-gate scope. Product connector behavior is unchanged.
+- Logs: /tmp/zenimport-l10-major-recheck-space-restored.log and
+  /tmp/zenimport-l10-connector-real-clock.log. A consolidated actual-Python/native
+  suite is running in disposable bounded batches; it is not yet counted as passed.
+
+No live bank/API/data, push, tags or publication.
