@@ -7,7 +7,7 @@ import type {SourceSnapshot} from './source.js';
 import type {Facts} from './facts.js';
 import type {RowByTable} from '../storage/schema.generated.js';
 import {int64,requireStorage} from '../storage/types.js';
-export function categoryPlan(source:SourceSnapshot,facts:Facts,now:string){
+export function categoryModel(source:SourceSnapshot,facts:Facts){
   const rows=source.rows,states=new Map(rows.bank_processing.map(row=>[row.bank_id,row.state])),bindings=new Map<string,Set<string>>();
   function bind(bank:string,target:string){const set=bindings.get(bank)??new Set<string>();set.add(target);bindings.set(bank,set);}
   for(const row of rows.account_bindings)bind(row.account_id,row.zenmoney_account_id);
@@ -18,6 +18,10 @@ export function categoryPlan(source:SourceSnapshot,facts:Facts,now:string){
     tags:facts.tags,transactions:facts.reviewed,accounts,instruments:facts.instruments,bindings,groups,receipts:rows.processing_receipts,deliveries});
   const rules=rows.recipient_rules.map((row):{bank:string;direction:'income'|'expense';name:string;category_id:string}=>{requireStorage(row.direction==='income'||row.direction==='expense','storage_corrupt');return {...row,direction:row.direction};});
   const context=categoryContext({tags:facts.tags,banks,payments:evidence.payments,rules,manual:new Map(rows.category_choices.filter(row=>row.source==='manual').map(row=>[row.bank_id,row.category_id]))});
+  return {evidence,context};
+}
+export function categoryPlan(source:SourceSnapshot,facts:Facts,now:string){
+  const {evidence,context}=categoryModel(source,facts),rows=source.rows,banks=[...facts.banks.values()],states=new Map(rows.bank_processing.map(row=>[row.bank_id,row.state]));
   const attempted=new Set(rows.deliveries.filter(row=>row.ever_attempted==='1').map(row=>row.bank_id)),fresh=sourceFresh(source,now),generation=rows.zen_mirror_state[0]?.generation;
   requireStorage(generation!==undefined,'storage_corrupt');const predictions:RowByTable['category_predictions'][]=[];
   for(const bank of banks)if(['pending','prepared'].includes(states.get(bank.id)??'')&&!attempted.has(bank.id)){

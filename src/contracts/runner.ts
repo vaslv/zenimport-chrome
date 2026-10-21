@@ -89,3 +89,5 @@ export {categoryPlan} from '../local/reconciliation/categories.js';
 export {sourceFacts} from '../local/reconciliation/facts.js';
 
 export {authorizeJob} from '../local/delivery/authorization.js';
+
+export {deliveryCandidates,createPayload,intentPlan} from '../local/delivery/intents.js';

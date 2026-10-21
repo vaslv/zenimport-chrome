@@ -1215,3 +1215,23 @@ unavailable. No live API/data, push, tags or publication.
 L9 remains in progress: immutable write intents, fenced SDK dispatch, verification
 and durable scheduling are next. Local product routing/writer remains disabled.
 No live API/data, push, tags or publication.
+
+
+### L9.3 — exact create-only intent planning
+
+- Added fresh source/current setting/capture-revision eligibility and a maximum
+  20-create plan using published SDK exact builders. Bank time determines created,
+  send time determines changed, viewed is false and prepared UUIDs stay stable.
+  Historical authorized revisions use the same extracted category model as caches.
+- Fixed review findings: no reuse of historical UUIDs absent from the mirror;
+  malformed numeric raw account IDs cannot be repaired into valid string writes.
+  Invalid user/instrument/source/settings return stable scoped errors.
+- Independent API final recheck is clean; see reviews/l9-intents-2026-10-21.md.
+  Docker: 219 unit/contracts with strict/generated checks; 40 source/category/SDK
+  cases in 34.36s; seven native cache cases in 14.41s; final 15 actual Python
+  intent/error cases in 13.83s. Logs: /tmp/zenimport-l9-intents-*.log.
+
+L9 remains in progress: persist immutable intent/attempt before dispatch, verify
+unknown outcomes, enforce durable writer ownership/backoff and add the scheduler.
+No financial SDK dispatch/product local routing, live API/data, push, tags or
+publication.
