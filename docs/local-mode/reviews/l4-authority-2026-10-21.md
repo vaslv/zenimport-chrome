@@ -28,6 +28,13 @@ import nonces, protection of the anchor and permanent journal from cleanup, fres
 owner/credential CAS, awaiting-sync guards, version-5 rollback and the interop runner.
 The reviewer did not run Docker, access an API or inspect production data.
 
+The broad Docker run subsequently exposed an obsolete test-only v3 database
+builder copying new authority stores into the old layout. A supplemental read-only
+review confirmed the correction enumerates the complete historical layout without
+weakening successful upgrade or malformed-stage rollback assertions. Corrected
+native regression gates and the unchanged-runtime size gates are recorded in
+progress.md; no runtime change followed the implementation review.
+
 Explicit boundaries of this L4 result:
 
 - L5 must bootstrap control for existing remote users without IDB; an unavailable

@@ -711,3 +711,47 @@ No archive validity is presented as financial graph or activation authority.
   interop cases were skipped because they require their separate runners. Both
   successful/failed v3-upgrade assertions remain, and independent review confirmed
   the fixture correction preserves their scope. Final regression runs follow.
+
+## L4 — completion gate
+
+Status: complete for storage, portable facts and private participant authority.
+Independent review and the following isolated Docker gates passed. Distributed
+handlers remain remote-only; L5–L12 have not started.
+
+| Gate | Executed result |
+|---|---|
+| Strict TypeScript, generated schema and unit/contracts | 168 passed |
+| Current product browser regression | 14 passed, 2 backend-integration modules intentionally skipped |
+| Chromium 145 native regression after the historical-helper correction | 105 passed, 4 explicit interop cases skipped, 7 size cases deselected; 212.68s |
+| Chrome 140 authority/storage/upgrade/cleanup/import regression after correction | 60 passed, 3 size cases deselected; 477.28s |
+| Full-run size evidence on unchanged runtime code | All 7 current-browser size cases and all 6 minimum-browser import/graph size cases passed, including 100k; 3 GiB container and 10s transaction assertions held |
+| Native/SQLite authority exchange | All seven phases passed per browser, including persisted profiles, both activation directions and exact receipt replay |
+| Current/legacy/converted-format-1 financial roundtrip | 3 cases per direction per browser, all Python phases passed; 145: 10.87s/8.43s, 140: 36.12s/27.87s |
+| Backend unit/integration/lifecycle | 760 passed in 50.30s; HTTP/auth, fake SDK, SIGKILL/recovery, graceful stop and restored snapshot passed |
+
+The initial broad runs reported only the obsolete v3 fixture setup failure
+(145: 111 passed/1 failed/4 explicit interop skips; 140: 65 passed/1 failed).
+After correcting that helper, the non-size regression gates above reran it and
+all other selected cases successfully. Size cases were not repeated because the
+fix changes only old-schema test setup, not the runtime or size fixture. The four
+ordinary-suite interop skips were executed by the two dedicated runners; no
+unexecuted interop case is counted as passed. Current/minimum browsers are pinned
+Docker Chromium 145 on Linux/arm64 and Chrome 140 on Linux/amd64, not the user's
+Chrome 155. Parallel-run timings are not performance promises.
+
+The independent reviewer found two implementation defects, both fixed before
+`d79a148`, then found no further actionable issue in the complete authority code
+or the separate historical-fixture correction. See
+[the review record](reviews/l4-authority-2026-10-21.md).
+
+Completed local commits: Chrome `d79a148` (authority), `3c362dd` (native/SQLite
+exchange), `3d5ca16` (historical upgrade fixture); backend `7b21b43` (test runner
+only). The final evidence commit records this gate. Working production services,
+browser data, credentials and real accounts were not used or changed. No push,
+tags or publication were performed.
+
+Next is L5's unified application service and configured-remote control bootstrap.
+L6/L7 must guard imported mirror/source initialization and L9 must implement
+explicit awaiting-sync release. L10/L11 then connect authenticated transfer and
+setup UI; L12 remains the installed-product acceptance gate. L4 alone does not
+enable a local financial send or a mode-switch button.

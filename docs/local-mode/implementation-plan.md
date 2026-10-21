@@ -255,6 +255,12 @@ code yet required; unknown source status fails safely.
 
 **Goal:** store the complete financial model with enforceable invariants.
 
+**Implementation status:** completed storage/private authority gate; see
+[progress](progress.md#l4--completion-gate) and the
+[independent review](reviews/l4-authority-2026-10-21.md).
+ADR 004 records the immutable anchor and deferred guarded first-sync setup.
+Product routing/local financial sends remain gated by L5–L12 below.
+
 **Chrome targets:** `src/local/storage/`, `src/local/migration/`,
 `src/control/`, archive worker/page boundary as justified by L1.
 
