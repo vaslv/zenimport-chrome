@@ -36,3 +36,5 @@ await build({entryPoints:['src/local/storage/category-control.ts'],outfile:'.loc
 await build({entryPoints:['src/local/storage/authorization-queue.ts'],outfile:'.local/contracts/authorization-queue.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 
 await build({entryPoints:['src/local/delivery/intents.ts'],outfile:'.local/contracts/delivery-intents.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+
+await build({entryPoints:['src/local/storage/outbox-control.ts'],outfile:'.local/contracts/outbox-control.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});

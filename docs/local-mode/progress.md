@@ -1235,3 +1235,19 @@ L9 remains in progress: persist immutable intent/attempt before dispatch, verify
 unknown outcomes, enforce durable writer ownership/backoff and add the scheduler.
 No financial SDK dispatch/product local routing, live API/data, push, tags or
 publication.
+
+### L9.4 — durable outbox and single-use dispatch authority
+
+- Attempts, exact payloads, actual target proofs and a private bounded manifest
+  commit atomically before any possible SDK write. A dispatch grant is single-use;
+  expired/crashed attempts become verification-only with unchanged UUID/payload.
+- Fixed initial matching-stamp race, stale scoped errors and an expired-outbox
+  migration deadlock found by independent review. Final API/adversarial passes
+  have no remaining findings; see reviews/l9-outbox-2026-10-21.md.
+- Docker: 221 unit/contracts; 18 native outbox cases (31.10s); 43 Python/source/SDK
+  cases (57.00s); 57 authority/mirror/reconciliation regressions (311.64s);
+  18 minimum Chrome 140 cases (155.51s); actual Python portable archive graph
+  validation (3.68s). Logs: /tmp/zenimport-l9-outbox-*.log.
+
+L9 remains in progress. No financial SDK dispatch/product local routing, live
+API/data, push, tags or publication.

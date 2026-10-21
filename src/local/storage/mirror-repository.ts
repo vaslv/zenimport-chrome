@@ -1,3 +1,4 @@
+import {readOutbox,outboxActive} from './outbox-control.js';
 /** Named mirror repository; all Root, lease, cursor and projection commits are atomic. */
 import Dexie from 'dexie';
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
@@ -105,6 +106,7 @@ export class MirrorRepository{
   async claim(root:RuntimeControl,hash:string,now:string,force=false,transactions=false):Promise<MirrorLease|null>{
     int64(now);requireStorage(/^[0-9a-f]{64}$/.test(hash),'invalid_row');
     return this.#finance(root,async view=>{
+      if(outboxActive(await readOutbox(this.db,root.activeGeneration!),now))throw new LocalZenMoneyError('mirror_busy');
       let state=(await view.get('zen_mirror_state',one))!;const control=await this.#control(root);
       if(control.lease&&BigInt(control.lease.deadline)>BigInt(now))throw new LocalZenMoneyError('mirror_busy');
       if(BigInt(control.nextAt)>BigInt(now))throw new LocalZenMoneyError('mirror_cooldown');

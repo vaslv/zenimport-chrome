@@ -1,3 +1,4 @@
+import {readOutbox} from './outbox-control.js';
 /** Existing-store control owner. Never exposed to bank/page messages. */
 import Dexie from 'dexie';
 import {sha256} from '@noble/hashes/sha2.js';
@@ -168,6 +169,9 @@ export class MigrationOwner{
       if(verified)requireParticipant(current.credentialEpoch===credentialEpoch&&(await this.#db.switches.get(request.switch_id as string))?.credentialRef===credentialRef,'migration_busy');
       let updated={...dataset,participantEpoch:int64(next.control.epoch)};
       if(command==='source_start'){
+        const outbox=await readOutbox(this.#db,control.generation);
+        // An expired request still needs verification-only recovery before hold.
+        requireParticipant(outbox===null||outbox.phase==='settled','migration_busy');
         const epoch=increment(current.epoch);updated={...updated,lifecycle:'held',holdId:request.switch_id as string};
         await this.#db.switches.add({id:request.switch_id as string,generation:control.generation,role:'source',previousMode:'local',previousGeneration:control.generation,
           state:'pending',peerId:next.operation.peerId,credentialRef:null,routingEpoch:epoch});

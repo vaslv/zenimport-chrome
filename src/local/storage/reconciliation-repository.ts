@@ -1,6 +1,7 @@
 /** Persist complete matching facts in small, revision-fenced native transactions. */
 import type {ContextFence,SentinelPort} from '../../control/types.js';
 import {RepositoryOwner} from './repository-owner.js';
+import type {FinancialSnapshot} from './source-stamp.js';
 import type {RepositorySession} from './kernel.js';
 import {readSource} from '../reconciliation/source.js';
 import {sourceFacts} from '../reconciliation/facts.js';
@@ -25,8 +26,9 @@ async function delivered(view:RepositorySession,bank:string,origin:string,now:st
 export class ReconciliationRepository{
   private constructor(private owner:RepositoryOwner){}
   static async open(name:string,sentinel:SentinelPort,fence:ContextFence){return new ReconciliationRepository(await RepositoryOwner.open(name,sentinel,fence));}
-  async run(choices:readonly ReconcileChoice[],now:string){
+  async run(choices:readonly ReconcileChoice[],now:string,expected?:FinancialSnapshot){
     int64(now);let source=await readSource(this.owner),facts=sourceFacts(source);
+    if(expected)requireStorage(JSON.stringify(source.stamp)===JSON.stringify(expected),'stale_epoch');
     if(!sourceFresh(source,now))throw new CaptureError('zenmoney_unavailable',true);
     const current=await this.owner.knownMirrorCurrent(source.stamp),known=current?[]:knownReconciliation(source,facts,now);let knownStamp=source.stamp;
     for(const fact of known)for(let offset=0;offset<Math.max(1,fact.receipts.length);offset+=200)knownStamp=(await this.owner.apply(knownStamp,async view=>{

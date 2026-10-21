@@ -31,7 +31,7 @@ export function deliveryCandidates(source:SourceSnapshot,facts:Facts,now:string)
     const current=facts.banks.get(authorization.bank_id),physical=current&&facts.accounts.get(current.account_id);
     try{
       requireCapture(current&&physical,'history_incomplete');
-      requireCapture(physical.selection==='enabled','account_disabled');
+      requireCapture(physical.selection==='enabled'&&physical.supported==='1','account_disabled');
       requireCapture(physical.settings_version===authorization.settings_version&&physical.zenmoney_account_id===authorization.target_id,'settings_conflict');
       requireCapture(authorization.source_hash!==null&&authorization.source_hash===rows.zen_mirror_state[0]?.source_hash,'zenmoney_unavailable');
       const bank=facts.revisions.get(revisionKey(authorization.bank_id,authorization.revision)),interval=intervals.get(authorization.interval_id),proof=proofs.get(JSON.stringify([authorization.interval_id,authorization.bank_id]));

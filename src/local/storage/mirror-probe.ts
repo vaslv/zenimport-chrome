@@ -1,3 +1,4 @@
+import {OutboxRepository} from './outbox-repository.js';
 import {DeliveryAuthorizationRepository} from './delivery-authorization-repository.js';
 /** Private native fixture. Synthetic responses only; never bundled in product. */
 import {LocalDatabase} from './bootstrap.js';
@@ -31,6 +32,8 @@ import {sourceFacts} from '../reconciliation/facts.js';
 import {RepositoryOwner} from './repository-owner.js';
 import type {FinancialSnapshot} from './repository-owner.js';
 import {CaptureRepository} from './capture-repository.js';
+let releaseOutbox:(()=>void)|undefined;
+export const resumeOutbox=()=>{releaseOutbox?.();releaseOutbox=undefined;};
 let releaseAuthorization:(()=>void)|undefined;
 export const resumeAuthorization=()=>{releaseAuthorization?.();releaseAuthorization=undefined;};
 let releaseCategories:(()=>void)|undefined;
@@ -70,6 +73,20 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action.startsWith('outbox-')&&!['outbox-seed-error','outbox-evidence'].includes(action)){
+      const {root}=await store.context(),repository=await OutboxRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put,reconcile=ReconciliationRepository.prototype.run;let armed=true;
+      if(args.mode==='pause-before-reconcile')ReconciliationRepository.prototype.run=async function(...parameters){if(!paused){paused=true;await new Promise<void>(resolve=>{releaseOutbox=resolve;});}return reconcile.apply(this,parameters);};
+      if(args.mode==='quota-outbox')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(armed&&this.name==='f_delivery_attempts'){armed=false;throw new DOMException('private-outbox-fixture','QuotaExceededError');}return add.apply(this,values);};
+      if(args.mode==='quota-outbox-control')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(armed&&this.name==='application_state'&&String(values[0]?.scope).startsWith('outbox:')){armed=false;throw new DOMException('private-outbox-fixture','QuotaExceededError');}return put.apply(this,values);};
+      try{
+        if(action==='outbox-prepare')result=await repository.prepare(String(now));
+        else if(action==='outbox-status')result=await repository.status();
+        else if(action==='outbox-recover')result=await repository.recover(String(now));
+        else if(action==='outbox-dispatch')result=await repository.dispatch(args.id!,String(now));
+        else if(action==='outbox-finish')result=await repository.finish(args.id!,'write_outcome_unknown',String(now));
+      }finally{repository.close();IDBObjectStore.prototype.add=add;IDBObjectStore.prototype.put=put;ReconciliationRepository.prototype.run=reconcile;}
+    }
     if(['authorize-job','authorize-drain','authorize-pending'].includes(action)){
       const {root}=await store.context(),repository=await DeliveryAuthorizationRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       const acknowledge=RepositoryOwner.prototype.acknowledgeAuthorization;
@@ -77,6 +94,14 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
         if(!paused){paused=true;await new Promise<void>(resolve=>{releaseAuthorization=resolve;});}return acknowledge.call(this,task);
       };
       try{result=action==='authorize-job'?await repository.authorize(args.id!,String(now)):action==='authorize-drain'?await repository.drain(String(now)):await repository.pending();}finally{repository.close();RepositoryOwner.prototype.acknowledgeAuthorization=acknowledge;}
+    }
+    if(action==='outbox-evidence'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{result=await owner.read(async view=>({attempts:await view.rows('delivery_attempts'),deliveries:await view.rows('deliveries'),targets:await view.rows('processing_targets')}));}finally{owner.close();}
+    }
+    if(action==='outbox-seed-error'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{await owner.write(view=>view.insert('capture_errors',{id:crypto.randomUUID(),job_id:args.id!,account_id:args.accountId!,code:args.label!,retryable:int64('1'),resolved:int64('0'),created_at:int64(String(now))}));result=true;}finally{owner.close();}
     }
     if(action==='authorization-state'){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
@@ -294,6 +319,13 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       try{const current=await owner.current(),switchId=crypto.randomUUID();
         await owner.command(current.participantId!,'source_start',{request_id:crypto.randomUUID(),switch_id:switchId,expected_epoch:'1',peer_id:crypto.randomUUID()},String(now));
         result=await owner.snapshotSource(current.participantId!,switchId,String(now));
+        if(args.mode==='archive-bytes'){
+          const receipt=result as {archive_size:string},chunks:string[]=[];
+          for(let number=0;number<Math.ceil(Number(receipt.archive_size)/262144);number++){
+            const bytes=await owner.download(current.participantId!,switchId,number);let binary='';
+            for(let offset=0;offset<bytes.length;offset+=32768)binary+=String.fromCharCode(...bytes.subarray(offset,offset+32768));chunks.push(btoa(binary));
+          }result={receipt,chunks};
+        }
       }finally{owner.close();}
       return {ok:true,result,calls};
     }

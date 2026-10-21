@@ -1,3 +1,7 @@
+import {readOutbox,outboxActive,outboxControl,outboxValue} from './outbox-control.js';
+import type {OutboxItem,OutboxControl} from './outbox-control.js';
+import {DeliveryError} from '../delivery/errors.js';
+import {mirrorFresh} from '../reconciliation/freshness.js';
 import {queueAuthorization,pendingAuthorizations,acknowledgeAuthorization} from './authorization-queue.js';
 import type {AuthorizationTask} from './authorization-queue.js';
 /** Internal transaction owner for named local repositories, never a UI service. */
@@ -60,6 +64,50 @@ export class RepositoryOwner{
     return this.write(async view=>{await this.#unchanged(view,stamp);const result=await operation(view);return {result,stamp:await this.#stamp(view)};});
   }
 
+  async outbox(){return this.read(()=>readOutbox(this.db,this.fence.generation));}
+  async recoverOutbox(now:string,work:(view:RepositorySession,control:OutboxControl|null)=>Promise<void>){
+    return this.write(async view=>{
+      const control=await readOutbox(this.db,this.fence.generation);if(outboxActive(control,now))throw new DeliveryError('delivery_busy');
+      await work(view,control);if(control&&control.phase!=='settled')await this.db.applicationState.put(outboxValue({...control,phase:'settled'}));
+    });
+  }
+  async prepareOutbox(stamp:FinancialSnapshot,items:OutboxItem[],now:string,work:(view:RepositorySession)=>Promise<void>){
+    const proposed=outboxControl({id:crypto.randomUUID(),deadline:int64(String(BigInt(int64(now))+60n)),source:stamp,items,phase:'prepared'});
+    return this.write(async view=>{
+      await this.#unchanged(view,stamp);const old=await readOutbox(this.db,this.fence.generation);
+      if(outboxActive(old,now))throw new DeliveryError('delivery_busy');
+      if(old)for(const item of old.items)requireStorage((await view.get('deliveries',[['text',item.zen_id]]))?.state!=='attempting','invariant_violation');
+      await work(view);const control={...proposed,source:await this.#stamp(view)};await this.db.applicationState.put(outboxValue(control));return control;
+    });
+  }
+  async dispatchOutbox(id:string,now:string){
+    return this.write(async view=>{
+      const control=await readOutbox(this.db,this.fence.generation);
+      if(!control||control.id!==id||control.phase!=='prepared'||!outboxActive(control,now))throw new DeliveryError('delivery_unknown');
+      // Progress/capture writes may advance the financial revision after intent.
+      // The exact mirror/credential/authority and this immutable authorization
+      // must still match; unrelated progress cannot strand a never-sent intent.
+      const current=await this.#stamp(view);requireStorage(JSON.stringify({...control.source,revision:current.revision})===JSON.stringify(current),'stale_epoch');
+      requireStorage(mirrorFresh(await view.get('zen_mirror_state',[['integer',int64('1')]])??undefined,control.source,now),'stale_epoch');
+      for(const item of control.items){
+        const row=await view.get('deliveries',[['text',item.zen_id]]);requireStorage(row?.bank_id===item.bank_id&&row.ever_attempted==='1'&&row.state==='attempting'&&row.payload===item.payload,'invariant_violation');
+        const bank=await view.get('bank_transactions',[['text',item.bank_id]]),authorization=await view.get('delivery_authorizations',[['text',item.bank_id]]),processing=await view.get('bank_processing',[['text',item.bank_id]]);
+        requireStorage(bank&&authorization&&processing?.state==='uncertain'&&row.authorized_job_id===authorization.job_id,'stale_epoch');
+        const account=await view.get('bank_accounts',[['text',bank.account_id]]),proof=await view.get('captured_records',[['text',authorization.interval_id],['text',item.bank_id]]),interval=await view.get('capture_intervals',[['text',authorization.interval_id]]),snapshot=await view.get('job_accounts',[['text',authorization.job_id],['text',bank.account_id]]);
+        requireStorage(account?.selection==='enabled'&&account.supported==='1'&&account.settings_version===authorization.settings_version&&account.zenmoney_account_id===authorization.target_id&&proof?.revision===authorization.revision&&interval?.state==='complete'&&interval.account_id===bank.account_id&&snapshot?.settings_version===authorization.settings_version&&snapshot.target_id===authorization.target_id,'stale_epoch');
+        requireStorage(await view.count('processing_receipts',[['text',item.bank_id]])===0&&await view.find('link_bank_members',['bank_id'],[['text',item.bank_id]])===null&&await view.get('bank_exclusions',[['text',item.bank_id]])===null&&await view.get('zen_exclusions',[['text',item.zen_id]])===null,'stale_epoch');
+      }
+      const next={...control,phase:'dispatching' as const,deadline:int64(String(BigInt(int64(now))+60n))};await this.db.applicationState.put(outboxValue(next));return next;
+    });
+  }
+  async finishOutbox(id:string,work:(view:RepositorySession,control:OutboxControl)=>Promise<void>){
+    return this.write(async view=>{
+      const control=await readOutbox(this.db,this.fence.generation);
+      if(!control||control.id!==id||control.phase==='settled')throw new DeliveryError('delivery_unknown');
+      await work(view,control);await this.db.applicationState.put(outboxValue({...control,phase:'settled'}));
+    });
+  }
+
   /** Called within the same command transaction that accepts a click/page end. */
   async queueAuthorization(view:RepositorySession,jobId:string,now:string){
     requireStorage(await view.get('capture_jobs',[['text',jobId]])!==null,'invariant_violation');
@@ -104,9 +152,9 @@ export class RepositoryOwner{
   }
 
   async write<T>(operation:(view:RepositorySession)=>Promise<T>){
-    let rejection:CaptureError|undefined;
+    let rejection:CaptureError|DeliveryError|undefined;
     try{return await writeTransaction(this.db,this.sentinel,this.fence,async view=>{
-      try{return await operation(view);}catch(error){if(error instanceof CaptureError)rejection=error;throw error;}
+      try{return await operation(view);}catch(error){if(error instanceof CaptureError||error instanceof DeliveryError)rejection=error;throw error;}
     });}catch(error){throw rejection??error;}
   }
   /** A business failure may intentionally commit its paused/failed evidence. */
