@@ -12,6 +12,7 @@ import type {Scalar,TaggedRow} from './types.js';
 import type {FinancialDatabase,FinancialEnvelope} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
+import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 
 const immutableUpdate=new Set<TableName>(['bank_versions','capture_pages','captured_records','delivery_attempts',
   'job_accounts','job_context','job_requests','processing_receipts','processing_targets']);
@@ -26,7 +27,15 @@ export class RepositorySession{
   #generation:string;
   #owner:Transaction;
   #live=true;
-  constructor(db:FinancialDatabase,generation:string,owner:Transaction){this.#db=db;this.#generation=generation;this.#owner=owner;}
+  #mirrorGeneration:string;
+  #mirrorOnly:boolean;
+  constructor(db:FinancialDatabase,generation:string,owner:Transaction,mirrorGeneration=generation,mirrorOnly=false){this.#db=db;this.#generation=generation;this.#owner=owner;this.#mirrorGeneration=mirrorGeneration;this.#mirrorOnly=mirrorOnly;}
+  #scope(table:TableName){return isMirrorTable(table)?this.#mirrorGeneration:this.#generation;}
+  #writeScope(table:TableName,key?:readonly Scalar[]){
+    if(!this.#mirrorOnly)return;
+    requireStorage(isMirrorTable(table)||table==='zen_mirror_state'||table==='category_predictions'||
+      table==='dataset_metadata'&&key?.[0]?.[0]==='text'&&key[0][1]==='zenmoney_refreshed_at','dataset_not_writable');
+  }
 
   close():void{this.#live=false;}
   #assert():void{requireStorage(this.#live && Dexie.currentTransaction===this.#owner,'stale_epoch');}
@@ -39,24 +48,35 @@ export class RepositorySession{
 
   #checked(table:TableName,value:FinancialEnvelope|undefined):TaggedRow|null{
     if(value===undefined)return null;
-    requireStorage(value.generation===this.#generation && rowKey(table,value.row)===value.key,'storage_corrupt');
+    requireStorage(value.generation===this.#scope(table) && rowKey(table,value.row)===value.key,'storage_corrupt');
     return validateCells(table,value.row);
   }
 
   async get<K extends TableName>(table:K,primary:readonly Scalar[]):Promise<RowByTable[K]|null>{
     return this.#guard(async()=>{
-      const row=this.#checked(table,await this.#db.financial(table).get([this.#generation,encodeKey(primary)]));
+      const row=this.#checked(table,await this.#db.financial(table).get([this.#scope(table),encodeKey(primary)]));
       return row===null?null:unpackRow(table,row);
+    });
+  }
+
+  /** Storage-private snapshot enumeration, bounded by the caller's operation. */
+  async rows<K extends TableName>(table:K,prefix:readonly Scalar[]=[]):Promise<RowByTable[K][]> {
+    return this.#guard(async()=>{
+      requireStorage(prefix.length<=SCHEMA[table].primary.length,'schema_unsupported');
+      const key=prefix.length?encodeKey(prefix):null,whole=prefix.length===SCHEMA[table].primary.length;
+      const values=key===null?await this.#db.financial(table).where('generation').equals(this.#scope(table)).toArray():
+        await this.#db.financial(table).where('[generation+key]').between([this.#scope(table),key+(whole?'':'/')],[this.#scope(table),key+(whole?'':'/\uffff')],true,true).toArray();
+      return values.map(value=>unpackRow(table,this.#checked(table,value)!));
     });
   }
 
   async #lookup(table:TableName,columns:readonly string[],values:readonly Scalar[]):Promise<TaggedRow|null>{
     this.#assert();
     const key=encodeKey(values),definition=SCHEMA[table];
-    if(same(columns,definition.primary))return this.#checked(table,await this.#db.financial(table).get([this.#generation,key]));
+    if(same(columns,definition.primary))return this.#checked(table,await this.#db.financial(table).get([this.#scope(table),key]));
     const index=definition.indexes.find(index=>index.unique && !index.partial && same(index.columns,columns));
     requireStorage(index!==undefined,'schema_unsupported');
-    return this.#checked(table,await this.#db.financial(table).where('[generation+'+index.key+']').equals([this.#generation,key]).first());
+    return this.#checked(table,await this.#db.financial(table).where('[generation+'+index.key+']').equals([this.#scope(table),key]).first());
   }
 
   async #foreignKeys(table:TableName,row:TaggedRow):Promise<void>{
@@ -126,7 +146,8 @@ export class RepositorySession{
 
   async insert<K extends TableName>(table:K,fields:RowByTable[K]):Promise<void>{
     return this.#guard(async()=>{
-      const value=envelope(this.#generation,table,packRow(table,fields));
+      this.#writeScope(table,table==='dataset_metadata'?[['text',(fields as RowByTable['dataset_metadata']).key]]:undefined);
+      const value=envelope(this.#scope(table),table,packRow(table,fields));
       await this.#foreignKeys(table,value.row);await this.#inserting(table,value.row);
       this.#assert();await this.#db.financial(table).add(value);
     });
@@ -134,9 +155,10 @@ export class RepositorySession{
 
   async replace<K extends TableName>(table:K,primary:readonly Scalar[],fields:RowByTable[K]):Promise<void>{
     return this.#guard(async()=>{
-      const value=envelope(this.#generation,table,packRow(table,fields));
+      this.#writeScope(table,primary);
+      const value=envelope(this.#scope(table),table,packRow(table,fields));
       requireStorage(value.key===encodeKey(primary),'invariant_violation');
-      const old=this.#checked(table,await this.#db.financial(table).get([this.#generation,value.key]));
+      const old=this.#checked(table,await this.#db.financial(table).get([this.#scope(table),value.key]));
       requireStorage(old!==null,'constraint_violation');
       await this.#changing(table,old,value.row);await this.#foreignKeys(table,value.row);
       this.#assert();await this.#db.financial(table).put(value);
@@ -145,7 +167,8 @@ export class RepositorySession{
 
   async remove(table:TableName,primary:readonly Scalar[]):Promise<void>{
     return this.#guard(async()=>{
-      const key=encodeKey(primary),old=this.#checked(table,await this.#db.financial(table).get([this.#generation,key]));
+      this.#writeScope(table,primary);
+      const key=encodeKey(primary),old=this.#checked(table,await this.#db.financial(table).get([this.#scope(table),key]));
       if(old===null)return;
       await this.#changing(table,old,null);
       for(const [name,definition]of Object.entries(SCHEMA)){
@@ -153,7 +176,7 @@ export class RepositorySession{
         for(let i=0;i<definition.foreignKeys.length;i++){
           const foreign=definition.foreignKeys[i];if(foreign.table!==table)continue;
           const parentKey=valuesKey(table,old,foreign.target,true);if(parentKey===undefined)continue;
-          const dependants=this.#db.financial(child).where('[generation+fk'+i+']').equals([this.#generation,parentKey]);
+          const dependants=this.#db.financial(child).where('[generation+fk'+i+']').equals([this.#scope(child),parentKey]);
           if(foreign.onDelete==='CASCADE'){
             const rows=await dependants.toArray();
             for(const dependant of rows){
@@ -163,13 +186,24 @@ export class RepositorySession{
           }else requireStorage(await dependants.first()===undefined,'constraint_violation');
         }
       }
-      this.#assert();await this.#db.financial(table).delete([this.#generation,key]);
+      this.#assert();await this.#db.financial(table).delete([this.#scope(table),key]);
     });
   }
 }
 
 /** Only typed storage repositories may call this callback-based internal API. */
 export async function writeTransaction<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>):Promise<T>{
+  return transact(db,sentinel,fence,operation,false);
+}
+
+/** Read-mirror initialization is allowed while awaiting explicit sending consent.
+ * The session cannot mutate bank/delivery facts or release the participant fence.
+ */
+export async function writeMirrorTransaction<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>):Promise<T>{
+  return transact(db,sentinel,fence,operation,true);
+}
+
+async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession)=>Promise<T>,mirrorOnly:boolean):Promise<T>{
   const scope={...fence};
   try{
     await sentinel.markFinancialActivity(scope.installationId);
@@ -182,10 +216,10 @@ export async function writeTransaction<T>(db:FinancialDatabase,sentinel:Sentinel
       requireStorage(dataset.lifecycle==='active' && dataset.holdId===null,'dataset_not_writable');
       const authority=participantControl(await db.participants.get(dataset.participantId));
       requireStorage(authority.generation===scope.generation&&authority.epoch===dataset.participantEpoch&&
-        authority.state==='active'&&!authority.awaitingSync,'dataset_not_writable');
+        authority.state==='active'&&(mirrorOnly||!authority.awaitingSync),'dataset_not_writable');
       await db.runtime.put({...runtime,financialMayHaveStarted:true});
       const owner=Dexie.currentTransaction;requireStorage(owner!==undefined,'storage_corrupt');
-      const view=new RepositorySession(db,scope.generation,owner);
+      const view=new RepositorySession(db,scope.generation,owner,await mirrorScope(db,scope.generation),mirrorOnly);
       try{return await operation(view);}finally{view.close();}
     });
   }catch(error){throw storageFailure(error);}

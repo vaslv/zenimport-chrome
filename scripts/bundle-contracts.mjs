@@ -1,4 +1,6 @@
 import {build} from 'esbuild';
+for(const name of ['projection','reader','credentials','mirror','catalog'])await build({entryPoints:['src/local/zenmoney/'+name+'.ts'],outfile:'.local/contracts/zenmoney-'+name+'.mjs',
+  bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['extension/background-runtime.js'],outfile:'.local/contracts/background.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/application/runtime.ts'],outfile:'.local/contracts/application-runtime.mjs',

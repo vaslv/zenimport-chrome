@@ -831,3 +831,59 @@ private CA, real browser permissions/TLS and network-disabled Docker containers.
 Status: L5 complete. L6 next implements private read-only SDK mirror and token
 identity; L7–L12 remain pending. Production data/services and live accounts were
 not used. No push, tag or publication.
+
+## L6 — direct read-only mirror, identity and catalogs
+
+Status: complete as a private read-only gate. No product local adapter or API
+create transport is enabled. See local-mirror.md, ADR 005 and the independent
+review in reviews/l6-mirror-2026-10-21.md.
+
+- Implemented the published SDK gateway, exact raw full/diff projections,
+  owner verification, trusted secret storage, epoch-fenced rotation/removal,
+  drafts/candidate cleanup, catalogs, durable refresh lease and retry deadlines.
+- Large projections use bounded unpublished construction and an atomic pointer
+  publication. The first 100k atomic implementation exceeded the 10-second
+  transaction budget (42.2s) and was rejected. The replacement passed the same
+  asserted budget without relaxing the threshold. Old complete data and
+  permanent evidence survive construction, interruption and collection.
+- Inspection, ordinary sessions and held source export resolve the published
+  view. Imported awaiting-sync participants may initialize only the read mirror;
+  ordinary bank/delivery writes and participant release stay blocked.
+- Specialist and adversarial findings were fixed, including large raw copies,
+  old tag deletion, stale secret candidates, permission/fresh-cache handling,
+  same-token full rebind and bounded prediction invalidation/collection. The
+  final red-team recheck found no further confirmed defect in its correction.
+- The real Python mirror revealed incorrect reminder flag checks in both archive
+  validators. Backend commit `23ae6e9` corrects them with regression fixtures;
+  Chrome uses the same rule. Legacy evidence interpretation is unchanged.
+
+Executed isolated Docker gates:
+
+| Gate | Result |
+| --- | --- |
+| Strict types/generated checks/unit/contracts | 183 passed |
+| Product browser regression | 14 passed, 2 backend-only modules intentionally skipped |
+| Native mirror/kernel/authority/application/storage/validation, Chromium 145 | 75 passed in 328.81s |
+| Native mirror, Chrome 140 linux/amd64 | 25 passed in 453.31s |
+| Actual Python mirror versus installed MV3 raw/projection/delete/full-reset parity | 1 passed, one existing dependency deprecation warning |
+| Backend full suite after the flag correction | 762 passed, existing warnings only |
+
+Native cases include 1k/10k/100k mirror updates, 100k derived predictions and
+bounded collection, 10k old tags, both worker-stop boundaries, quota at data and
+publication, restart-persisted 401/403/429/503 delays, late responses after token
+rotation/removal, wrong owner, missing collection, source-held graph export and
+the imported awaiting-sync write fence. The initial awaiting-sync fixture omitted
+everActivated and correctly failed validation; fixing the fixture to represent a
+real activated import passed without weakening the production invariant.
+
+Logs: /tmp/zenimport-l6-final-native.log,
+/tmp/zenimport-l6-final-minimum.log, /tmp/zenimport-l6-final-product.log,
+/tmp/zenimport-l6-unit-last.log, /tmp/zenimport-l6-final-parity.log and
+/tmp/zenimport-l6-backend-full.log. A final narrow prediction readiness guard
+also reruns the 100k prediction case separately. The extra external CLI reviewer
+could not start inside its sandbox and is not counted as a successful review;
+the independent specialist/adversarial agents did complete.
+
+L7 is next: local connection/account settings and complete bank capture. L8–L12
+remain pending. No live account or production service was touched. No push, tag
+or publication was performed.

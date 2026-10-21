@@ -22,6 +22,7 @@ import {discardStage,acknowledgeStageBackup,collectDiscardedStage} from './stage
 import {assertAnchor} from './anchor.js';
 import {participantControl} from './participant-validation.js';
 import {serializeOpen} from './bootstrap-lock.js';
+import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 
 /** L4 owns initialization only. Financial write repositories are added separately. */
 export class LocalDatabase{
@@ -72,11 +73,13 @@ export class LocalDatabase{
   }
 
   async inspect():Promise<{runtime:RuntimeControl;tables:number;rows:Record<string,number>}>{
-    const runtime=runtimeControl(await this.#db.runtime.get('runtime'));
-    const rows:Record<string,number>={};
-    for(const table of this.#db.tables)if(table.name.startsWith('f_'))rows[table.name.slice(2)]=runtime.activeGeneration===null?0:
-      await table.where('generation').equals(runtime.activeGeneration).count();
-    return {runtime,tables:Object.keys(rows).length,rows};
+    return this.#db.transaction('r',this.#db.tables,async()=>{
+      const runtime=runtimeControl(await this.#db.runtime.get('runtime')),rows:Record<string,number>={};
+      const scope=runtime.activeGeneration===null?null:await mirrorScope(this.#db,runtime.activeGeneration);
+      for(const table of this.#db.tables)if(table.name.startsWith('f_'))rows[table.name.slice(2)]=runtime.activeGeneration===null?0:
+        await table.where('generation').equals(isMirrorTable(table.name.slice(2) as TableName)?scope!:runtime.activeGeneration).count();
+      return {runtime,tables:Object.keys(rows).length,rows};
+    });
   }
 
   async stageArchive(blob:Blob,fence:ContextFence,now:string):Promise<StageSummary>{

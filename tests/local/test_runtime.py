@@ -19,9 +19,11 @@ import * as domain from './domain.mjs';globalThis.domain=domain;
 import * as storageProbe from './storage.mjs';globalThis.storageProbe=storageProbe;
 import * as authorityProbe from './authority.mjs';globalThis.authorityProbe=authorityProbe;
 import * as applicationProbe from './application.mjs';globalThis.applicationProbe=applicationProbe;
+import * as mirrorProbe from './mirror.mjs';globalThis.mirrorProbe=mirrorProbe;
 import * as portableProbe from './portable.mjs';globalThis.portableProbe=portableProbe;
 globalThis.probe=probe;globalThis.boot=crypto.randomUUID();
 chrome.runtime.onMessage.addListener((data,sender,reply)=>{
+  if(data.type==='mirror-probe'){mirrorProbe.run(data.action,data.args).then(reply);return true;}
   if(data.type==='authority-probe'){authorityProbe.run(data.action,data.args).then(reply);return true;}
   if(data.type==='storage-probe'){storageProbe.run(data.action,data.args).then(reply);return true;}
   if(data.type==='probe-wake'){reply({boot:globalThis.boot});return;}
@@ -53,6 +55,7 @@ def prepare_extension(path, *, hosts=()):
     shutil.copyfile('/app/.local/probes/storage.mjs',path/'storage.mjs')
     shutil.copyfile('/app/.local/probes/authority.mjs',path/'authority.mjs')
     shutil.copyfile('/app/.local/probes/application.mjs',path/'application.mjs')
+    shutil.copyfile('/app/.local/probes/mirror.mjs',path/'mirror.mjs')
     shutil.copyfile('/app/.local/probes/portable.mjs',path/'portable.mjs')
 
 

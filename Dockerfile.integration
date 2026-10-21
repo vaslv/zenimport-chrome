@@ -36,3 +36,10 @@ COPY --from=backend scripts/migration_lab.py scripts/migration_history.py ./scri
 COPY scripts/browser_migration.py ./scripts/browser_migration.py
 ENV PYTHONPATH=/app:/app/fixture_helpers:/app/tests/browser:/app/scripts
 CMD ["xvfb-run", "-a", "python", "scripts/browser_migration.py", "--fake"]
+
+# Native local engine compared with the isolated Python reference implementation.
+FROM migration-acceptance AS local-integration
+COPY --from=compiled /app/.local/probes ./.local/probes
+COPY contracts ./contracts
+COPY tests/local ./tests/local
+CMD ["xvfb-run", "-a", "python", "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/local/test_mirror_parity.py"]

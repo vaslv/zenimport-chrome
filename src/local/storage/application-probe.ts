@@ -9,8 +9,8 @@ const runtimes=new Map<string,ApplicationRuntime>();let reads=0;
 function area(name:string):StorageArea{
   const prefix='l5-runtime:'+name+':',source=native();return {
     setAccessLevel:options=>source.setAccessLevel(options),
-    async get(keys){const list=typeof keys==='string'?[keys]:keys,values=await source.get(list.map(key=>prefix+key));
-      return Object.fromEntries(Object.entries(values).map(([key,value])=>[key.slice(prefix.length),value]));},
+    async get(keys){const list=typeof keys==='string'?[keys]:keys,values=await source.get(list===null?null:list.map(key=>prefix+key));
+      return Object.fromEntries(Object.entries(values).filter(([key])=>key.startsWith(prefix)).map(([key,value])=>[key.slice(prefix.length),value]));},
     set:values=>source.set(Object.fromEntries(Object.entries(values).map(([key,value])=>[prefix+key,value]))),
     remove:keys=>source.remove((typeof keys==='string'?[keys]:keys).map(key=>prefix+key)),
   };

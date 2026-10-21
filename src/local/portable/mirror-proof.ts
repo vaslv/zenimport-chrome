@@ -55,7 +55,7 @@ export async function validateMirror(reader:GraphReader,manifest:PortableManifes
     if(day!==null){requirePortable(typeof day==='string','invalid_mirror_projection');calendarDate(day);}
     const expected=[day,...['incomeAccount','outcomeAccount','incomeInstrument','outcomeInstrument'].map(field=>data[field]===null||data[field]===undefined?null:scalarText(data[field],'invalid_mirror_projection')),
       ...['income','outcome'].map(field=>mirrorAmountText(data[field])),
-      ...['viewed','hold'].map(field=>{const value=row.kind==='transaction'?mirrorFlagText(data[field]):null;return value===null?null:BigInt(value);})];
+      ...['viewed','hold'].map(field=>{const value=mirrorFlagText(data[field]);return value===null?null:BigInt(value);})];
     requirePortable(jsonEqual(expected,actual),'invalid_mirror_projection');
     const rawTags=data.tag??[];requirePortable(Array.isArray(rawTags)&&rawTags.every(tag=>typeof tag==='string'),'invalid_mirror_tags');
     requirePortable(jsonEqual(actualTags,rawTags.map((tag,i)=>[tag,BigInt(i)])),'invalid_mirror_tags');

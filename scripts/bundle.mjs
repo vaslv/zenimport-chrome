@@ -12,6 +12,7 @@ for(const [entry,outfile] of [
   ['src/local/storage/probe.ts','.local/probes/storage.mjs'],
   ['src/local/storage/authority-probe.ts','.local/probes/authority.mjs'],
   ['src/local/storage/application-probe.ts','.local/probes/application.mjs'],
+  ['src/local/storage/mirror-probe.ts','.local/probes/mirror.mjs'],
   ['src/local/portable/probe.ts','.local/probes/portable.mjs'],
 ]) {
   const result=await build({entryPoints:[entry],outfile,bundle:true,platform:'browser',

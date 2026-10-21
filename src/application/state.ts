@@ -1,6 +1,6 @@
 /** Context-scoped transient state; top-level keys are a compatibility projection. */
 export interface StorageArea{
-  get(keys:string|readonly string[]):Promise<Record<string,unknown>>;
+  get(keys:string|readonly string[]|null):Promise<Record<string,unknown>>;
   set(values:Record<string,unknown>):Promise<void>;
   remove(keys:string|readonly string[]):Promise<void>;
   setAccessLevel(options:{accessLevel:'TRUSTED_CONTEXTS'}):Promise<void>;

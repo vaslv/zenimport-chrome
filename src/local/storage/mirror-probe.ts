@@ -1,0 +1,141 @@
+/** Private native fixture. Synthetic responses only; never bundled in product. */
+import {LocalDatabase} from './bootstrap.js';
+import {FinancialDatabase} from './database.js';
+import type {FinancialEnvelope} from './database.js';
+import {unpackRow,packRow} from './cells.js';
+import {SCHEMA} from './schema.generated.js';
+import type {TableName,RowByTable} from './schema.generated.js';
+import {envelope} from './envelope.js';
+import {MirrorRepository} from './mirror-repository.js';
+import {trustedSentinel} from '../../control/sentinel.js';
+import type {StorageArea} from '../../application/state.js';
+import {LocalCredentials} from '../zenmoney/credentials.js';
+import {mirrorReader} from '../zenmoney/reader.js';
+import {LocalMirror} from '../zenmoney/mirror.js';
+import {LocalCatalog} from '../zenmoney/catalog.js';
+import type {MirrorLease} from './mirror-repository.js';
+import type {RuntimeControl} from '../../control/types.js';
+import {mirrorScope,isMirrorTable} from './mirror-scope.js';
+import {MigrationOwner} from './migration-owner.js';
+import {writeTransaction,writeMirrorTransaction} from './kernel.js';
+let paused=false;
+export const checkpoint=()=>paused;
+let networkSerial=0,releaseRead:(()=>void)|undefined;
+export const networkCount=()=>networkSerial;
+export const releaseNetwork=()=>{releaseRead?.();releaseRead=undefined;};
+
+const native=()=> (globalThis as unknown as {chrome:{storage:{local:StorageArea;session:StorageArea}}}).chrome.storage;
+function area(name:string,session=false):StorageArea{
+  const prefix='l6:'+name+':',source=native()[session?'session':'local'];return {
+    setAccessLevel:value=>source.setAccessLevel(value),
+    async get(keys){const list=typeof keys==='string'?[keys]:keys,values=await source.get(list===null?null:list.map(key=>prefix+key));return Object.fromEntries(Object.entries(values).filter(([key])=>key.startsWith(prefix)).map(([key,value])=>[key.slice(prefix.length),value]));},
+    set:values=>source.set(Object.fromEntries(Object.entries(values).map(([key,value])=>[prefix+key,value]))),
+    remove:keys=>source.remove((typeof keys==='string'?[keys]:keys).map(key=>prefix+key)),
+  };
+}
+export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number}){
+  const storage=area(args.name),sentinel=trustedSentinel(storage),now=args.now??1000;let store:MirrorRepository|undefined,calls=0,maxTransactionMs=0;
+  const nativeTransaction=IDBDatabase.prototype.transaction;
+  IDBDatabase.prototype.transaction=function(...values:Parameters<IDBDatabase['transaction']>){
+    const start=performance.now(),tx=nativeTransaction.apply(this,values);
+    const finished=()=>{maxTransactionMs=Math.max(maxTransactionMs,performance.now()-start);};
+    tx.addEventListener('complete',finished,{once:true});tx.addEventListener('abort',finished,{once:true});return tx;
+  };
+  try{
+    if(action==='init'){const db=await LocalDatabase.open(args.name,sentinel,String(now));db.close();}
+    store=await MirrorRepository.open(args.name,sentinel,()=>now);
+    const reader=mirrorReader({clock:()=>now,permission:async()=>args.permission!==false,fetch:async(_,options)=>{
+      calls++;const body=JSON.parse(String(options?.body));if(body.transaction||body.deletion)throw Error('fixture_write_forbidden');
+      networkSerial++;
+      if(args.mode==='pause-network')await new Promise<void>(resolve=>{releaseRead=resolve;});
+      if(args.delay)await new Promise(resolve=>setTimeout(resolve,args.delay));
+      return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
+    }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
+    let result:unknown;
+    if(action==='verify'){
+      const original=MirrorRepository.prototype.adopt;
+      if(args.mode==='pause-adopt')MirrorRepository.prototype.adopt=new Proxy(original,{apply(){paused=true;return new Promise(()=>{});}});
+      try{result=await credentials.verify(args.token??'synthetic-token');}finally{MirrorRepository.prototype.adopt=original;}
+    }
+    if(action==='remove')await credentials.remove();
+    if(action==='cleanup-credentials')await credentials.cleanupCandidates();
+    if(action==='collect')result=await store.collect(String(now));
+    if(action==='prediction')result=await store.prediction((await store.context()).root,'b-0','1');
+    if(action==='seed-predictions'){
+      const db=new FinancialDatabase(args.name,false);await db.open();
+      try{const {root}=await store.context(),generation=root.activeGeneration!,state=await db.financial('zen_mirror_state').where('generation').equals(generation).first();
+        const mirrorGeneration=unpackRow('zen_mirror_state',state!.row).generation;
+        function row<K extends TableName>(table:K,changes:Record<string,unknown>){
+          const fields=Object.fromEntries(SCHEMA[table].columns.map(column=>[column.name,column.required?column.type==='INTEGER'?'0':'':null]));
+          return envelope(generation,table,packRow(table,{...fields,...changes} as RowByTable[K]));
+        }
+        await db.financial('bank_accounts').add(row('bank_accounts',{id:'pred-account',bank:'fixture',identity_scope:'bank',source_key:'primary',currency:'VND',scale:'0',supported:'1',selection:'enabled',zenmoney_account_id:'a',import_start:'2026-10-01'}));
+        for(let start=0;start<(args.size??10000);start+=500){
+          const banks:FinancialEnvelope[]=[],versions:FinancialEnvelope[]=[],predictions:FinancialEnvelope[]=[];
+          for(let i=start;i<Math.min(start+500,args.size??10000);i++){
+            const id='b-'+i;banks.push(row('bank_transactions',{id,account_id:'pred-account',external_id:id,identity_kind:'bank',identity_version:'v1',local_date:'2026-10-20',direction:'expense',amount:'1',currency:'VND',raw_json:'{}',revision:'1'}));
+            versions.push(row('bank_versions',{bank_id:id,revision:'1',data_json:'{}',raw_json:'{}'}));
+            predictions.push(row('category_predictions',{bank_id:id,bank_revision:'1',category_id:null,source:'unknown',reason:'fixture',candidates_json:'[]',mirror_generation:mirrorGeneration}));
+          }
+          await db.transaction('rw',db.tables,async()=>{await db.financial('bank_transactions').bulkAdd(banks);await db.financial('bank_versions').bulkAdd(versions);await db.financial('category_predictions').bulkAdd(predictions);});
+        }
+      }finally{db.close();}
+    }
+    if(action==='awaiting'){
+      const db=new FinancialDatabase(args.name,false);await db.open();try{const {root}=await store.context();
+        const dataset=await db.datasets.get(root.activeGeneration!);await db.participants.update(dataset!.participantId,{awaitingSync:true,everActivated:true});
+      }finally{db.close();}
+    }
+    if(action==='write-fences'){
+      const db=new FinancialDatabase(args.name,false);await db.open();try{const {root}=await store.context(),fence={installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch};
+        result=await Promise.all([
+          writeTransaction(db,sentinel,fence,view=>view.insert('dataset_metadata',{key:'must-not-write',value:'blocked'})).then(()=> 'unexpected',error=>(error as {code:string}).code),
+          writeMirrorTransaction(db,sentinel,fence,view=>view.remove('deliveries',[['text','absent']])).then(()=> 'unexpected',error=>(error as {code:string}).code),
+        ]);
+      }finally{db.close();}
+    }
+    if(action==='inspect'){const db=await LocalDatabase.open(args.name,sentinel,String(now));try{result=await db.inspect();}finally{db.close();}}
+    if(action==='draft')await credentials.saveDraft(args.token??'synthetic-draft');
+    if(action==='draft-read')result=await credentials.draft();
+    if(action==='claim'){const credential=await credentials.current();result={root:credential.root,lease:await store.claim(credential.root,credential.hash,String(now),true)};}
+    if(action==='apply')await store.apply(args.root!,args.lease!,args.raw!,String(now));
+    if(action==='refresh'||action==='concurrent'){
+      const original=IDBObjectStore.prototype.put,native=FinancialDatabase.prototype.transaction;let armed=!!args.quota,stageWritten=false,published=false;
+      const root=(await store.context()).root;
+      if(armed||args.mode)IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){
+        const value=values[0] as {generation?:string;scope?:string;value?:{state?:string}};
+        if(this.name==='f_zen_entities'&&value.generation!==root.activeGeneration)stageWritten=true;
+        if(this.name==='application_state'&&value.scope?.startsWith('mirror-view:')&&value.value?.state==='active'){
+          published=true;if(args.mode==='quota-publish')throw new DOMException('private-fixture','QuotaExceededError');
+        }
+        if(armed&&this.name==='f_zen_entities'){armed=false;throw new DOMException('private-fixture','QuotaExceededError');}return original.apply(this,values);
+      };
+      if(args.mode==='pause-stage'||args.mode==='lost-reply')FinancialDatabase.prototype.transaction=new Proxy(native,{
+        apply(target,db,parameters){const result=Reflect.apply(target,db,parameters) as Promise<unknown>;
+          return result.then(value=>{if(!paused&&(args.mode==='pause-stage'?stageWritten:published)){paused=true;return new Promise(()=>{});}return value;});},
+      });
+      try{result=action==='concurrent'?await Promise.allSettled([mirror.refresh({force:true}),mirror.refresh({force:true})]).then(rows=>rows.map(row=>row.status==='fulfilled'?'ok':(row.reason as {code:string}).code)):
+        await mirror.refresh({force:args.force??true});}finally{IDBObjectStore.prototype.put=original;FinancialDatabase.prototype.transaction=native;}
+    }
+    if(action==='catalog')result=await new LocalCatalog(store,credentials,mirror,()=>now).get();
+    if(action==='export'){
+      const owner=await MigrationOwner.open(args.name,sentinel,{readPeer:async()=>{throw Error('No peer read in a source export');},verifyOwner:async()=>({ownerIds:['1'],sourceHash:'f'.repeat(64)})});
+      try{const current=await owner.current(),switchId=crypto.randomUUID();
+        await owner.command(current.participantId!,'source_start',{request_id:crypto.randomUUID(),switch_id:switchId,expected_epoch:'1',peer_id:crypto.randomUUID()},String(now));
+        result=await owner.snapshotSource(current.participantId!,switchId,String(now));
+      }finally{owner.close();}
+      return {ok:true,result,calls};
+    }
+    const db=new FinancialDatabase(args.name,false);await db.open();
+    try{
+      const root=await db.runtime.get('runtime'),generation=root!.activeGeneration!,projection=await mirrorScope(db,generation);
+      const tables:Record<string,unknown>={};for(const name of ['zen_mirror_state','zen_entities','zen_movements','zen_sync_runs','zen_tags','zen_tombstones','zen_deletions'] as TableName[])
+        tables[name]=args.summary?await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).count():
+          (await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).toArray()).map(row=>unpackRow(name,row.row));
+      return {ok:true,result,root,projection,readiness:await mirror.readiness(),tables,calls,maxTransactionMs,sentinel:await sentinel.read(),
+        participants:await db.participants.toArray(),predictionCount:await db.financial('category_predictions').where('generation').equals(generation).count(),
+        versions:(await db.applicationState.toArray()).filter(row=>row.scope.startsWith('mirror-view:')).map(row=>({scope:row.scope,state:row.value.state})),
+        credentialCount:Object.keys(await storage.get(null)).filter(key=>key.startsWith('localCredential:')).length};
+    }finally{db.close();}
+  }catch(error){return {ok:false,code:(error as {code?:string}).code??'fixture_failure',calls};}finally{store?.close();IDBDatabase.prototype.transaction=nativeTransaction;}
+}
