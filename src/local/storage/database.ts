@@ -10,6 +10,7 @@ import {requireStorage} from './types.js';
 import {runtimeControl,datasetControl} from '../../control/validation.js';
 import type {StageRecord} from './stage-types.js';
 import {upgradeStageV3} from './stage-types.js';
+import type {ParticipantControl,ParticipantOperation,ParticipantReceiptRow,ParticipantChunk,ModeSwitch} from './participant-model.js';
 
 export interface FinancialEnvelope{
   readonly generation:string;
@@ -34,6 +35,11 @@ export class FinancialDatabase extends Dexie{
   readonly runtime:Table<RuntimeControl,string>;
   readonly datasets:Table<DatasetControl,string>;
   readonly stages:Table<StageRecord,string>;
+  readonly participants:Table<ParticipantControl,string>;
+  readonly migrationOperations:Table<ParticipantOperation,[string,string]>;
+  readonly migrationReceipts:Table<ParticipantReceiptRow,[string,string]>;
+  readonly migrationChunks:Table<ParticipantChunk,[string,string,number]>;
+  readonly switches:Table<ModeSwitch,string>;
   constructor(name:string,allowCreate:boolean){
     super(name,{autoOpen:false,chromeTransactionDurability:'strict',cache:'disabled'});
     this.version(1).stores(storeDefinitions());
@@ -55,8 +61,21 @@ export class FinancialDatabase extends Dexie{
     this.version(3).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'});
     this.version(4).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt'}).upgrade(transaction=>
       transaction.table('portable_stages').toCollection().modify(value=>{Object.assign(value,upgradeStageV3(value));}));
+    this.version(5).stores({...storeDefinitions(true),portable_stages:'id,state,createdAt',
+      participant_controls:'id,&generation',participant_operations:'[participantId+switchId],switchId',
+      participant_receipts:'[participantId+requestId],[participantId+switchId]',
+      participant_chunks:'[participantId+switchId+number],[participantId+switchId]',mode_switches:'id,state'}).upgrade(async transaction=>{
+        for(const input of await transaction.table('datasets').toArray()){
+          const dataset=datasetControl(input);
+          requireStorage(['active','staging','validated','discarded'].includes(dataset.lifecycle)&&dataset.holdId===null&&dataset.participantEpoch==='1','storage_corrupt');
+          await transaction.table('participant_controls').add({id:dataset.participantId,generation:dataset.generation,epoch:'1',
+            state:'active',operationId:null,everActivated:false,awaitingSync:false});
+        }
+      });
     this.runtime=this.table('runtime');this.datasets=this.table('datasets');
     this.stages=this.table('portable_stages');
+    this.participants=this.table('participant_controls');this.migrationOperations=this.table('participant_operations');
+    this.migrationReceipts=this.table('participant_receipts');this.migrationChunks=this.table('participant_chunks');this.switches=this.table('mode_switches');
     this.on('versionchange',()=>{this.close();return false;});
     this.on('populate',()=>{if(!allowCreate)throw Error('storage_missing');});
   }

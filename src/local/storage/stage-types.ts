@@ -8,7 +8,7 @@ export interface StageRecord{
   readonly writerId:string;
   readonly installationId:string;
   readonly routingEpoch:Int64Text;
-  readonly state:'loading'|'format_valid'|'graph_valid'|'failed'|'discarded';
+  readonly state:'loading'|'format_valid'|'graph_valid'|'activated'|'failed'|'discarded';
   readonly manifest:string;
   readonly archiveSha256:string|null;
   readonly rowCount:Int64Text;
@@ -51,11 +51,11 @@ export function stageRecord(input:unknown):StageRecord{
   requireStorage(typeof value.manifest==='string'&&new TextEncoder().encode(value.manifest).length<=LIMITS.manifest_bytes,'storage_corrupt');
   requireStorage(value.archiveSha256===null||typeof value.archiveSha256==='string'&&/^[0-9a-f]{64}$/.test(value.archiveSha256),'storage_corrupt');
   requireStorage(value.errorCode===null||typeof value.errorCode==='string'&&/^[a-z_]{1,64}$/.test(value.errorCode),'storage_corrupt');
-  requireStorage(typeof value.state==='string'&&['loading','format_valid','graph_valid','failed','discarded'].includes(value.state),'storage_corrupt');
+  requireStorage(typeof value.state==='string'&&['loading','format_valid','graph_valid','activated','failed','discarded'].includes(value.state),'storage_corrupt');
   if(value.state==='loading')requireStorage(value.archiveSha256===null&&value.errorCode===null,'storage_corrupt');
   if(value.state==='format_valid')requireStorage(value.archiveSha256!==null&&value.errorCode===null,'storage_corrupt');
   if(value.state==='failed')requireStorage(value.errorCode!==null,'storage_corrupt');
-  if(value.state==='graph_valid'){
+  if(value.state==='graph_valid'||value.state==='activated'){
     requireStorage(value.archiveSha256!==null&&value.errorCode===null&&value.graphVersion==='1'&&
       typeof value.graphDigest==='string'&&/^[0-9a-f]{64}$/.test(value.graphDigest),'storage_corrupt');
     try{requireStorage(BigInt(int64(value.graphVerifiedAt))>=0n,'storage_corrupt');}catch{requireStorage(false,'storage_corrupt');}

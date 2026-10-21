@@ -653,3 +653,33 @@ No archive validity is presented as financial graph or activation authority.
   protected active-source export and atomic activation/retirement are still next.
   Their owner must support held and remote control contexts; ordinary local
   storage fences must continue to reject pending switches and inactive histories.
+
+### L4.18 — durable participant and one transactional writer decision
+
+- Physical schema 5 stores generation participants, immutable request/receipt and
+  chunk journals, and mode switches beside the financial Root. Version-4 upgrade
+  seeds only known unpublished idle states; unknown authority aborts the upgrade.
+- Protected source export freezes a generation, checks quiescence, streams bounded
+  chunks and proves the complete graph before sealing. Unsealed chunks cannot be
+  downloaded. A restart rebuilds partial source chunks with a new private nonce.
+- Destination reservation binds a fresh peer before source export. Upload ACKs
+  follow immutable chunk commits. Full graph and fresh owner checks precede arm
+  and activation; credential changes fence the result. Root, active participant,
+  retired generation and exact permanent reply activate in one native transaction.
+- Cancellation races source handoff through one CAS. Resume requires the peer's
+  durable discard receipt and authenticated status. Handoff is irreversible;
+  reverse transfer uses a fresh generation, retaining the old participant journal.
+  Activation preserves all archived financial rows and blocks ordinary writers
+  with awaiting-sync. L6/L7/L9 still own first-sync initialization and release.
+- ADR 004 clarifies the immutable external loss-detection anchor. The original
+  header survives retirement; Root selects the writer without rewriting another
+  storage area's generation pointer. No remote outage can select retained data.
+- Docker: strict typing and 168 unit/contract cases passed. The 22 dedicated native
+  authority cases passed on Chromium 145 in 45.07s, including quota rollback, worker
+  death before/after activation commit, lost replies, cancelled late imports,
+  partial snapshot recovery, reverse generation, fresh owner at both checkpoints,
+  nonquiescent history and failed version-5 upgrade. Wider final gates are pending.
+- Independent read-only review found two issues (late importer deleting a discard
+  header; download of unsealed chunks). Both were fixed with native regressions;
+  the reviewer found no further actionable issue on the final implementation pass.
+  Product handlers remain remote-only. No live request or production data used.

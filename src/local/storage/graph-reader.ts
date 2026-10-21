@@ -1,6 +1,6 @@
 /** Private, bounded read view over an immutable inactive format-valid stage. */
 import Dexie from 'dexie';
-import type {ContextFence,SentinelPort} from '../../control/types.js';
+import type {ContextFence,SentinelPort,DatasetSentinel} from '../../control/types.js';
 import {runtimeControl,datasetControl} from '../../control/validation.js';
 import type {GraphReader} from '../portable/relations.js';
 import {SCHEMA} from './schema.generated.js';
@@ -13,40 +13,39 @@ import {stageRecord} from './stage-types.js';
 import type {FinancialDatabase,FinancialEnvelope} from './database.js';
 import type {PortableManifest} from '../portable/format.js';
 import {parseJson,validateManifest,TableScanner,rowBytes} from '../portable/format.js';
+import {readAnchor} from './anchor.js';
+import {assertImportScope,scopeTables} from './import-scope.js';
+import type {ImportPermit} from './import-scope.js';
 
 const same=(left:readonly string[],right:readonly string[])=>left.length===right.length&&left.every((value,i)=>value===right[i]);
 
 export class StageGraphReader implements GraphReader{
   #db:FinancialDatabase;#sentinel:SentinelPort;#fence:ContextFence;#id:string;#writerId:string;#manifest:PortableManifest;
   #manifestText:string;#archiveSha256:string;
-  private constructor(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,id:string,writerId:string,manifest:PortableManifest,archiveSha256:string){
+  #anchor!:DatasetSentinel;#permit:ImportPermit|undefined;
+  private constructor(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,id:string,writerId:string,manifest:PortableManifest,archiveSha256:string,permit?:ImportPermit){
     this.#db=db;this.#sentinel=sentinel;this.#fence={...fence};this.#id=id;this.#writerId=writerId;this.#manifest=manifest;
     this.#manifestText=JSON.stringify(manifest)+'\n';this.#archiveSha256=archiveSha256;
+    this.#permit=permit?{...permit}:undefined;
   }
-  static async open(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,id:string):Promise<StageGraphReader>{
+  static async open(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,id:string,permit?:ImportPermit):Promise<StageGraphReader>{
     const stage=stageRecord(await db.stages.get(id));
     requireStorage(['format_valid','graph_valid'].includes(stage.state)&&stage.archiveSha256!==null,'dataset_not_writable');
     const manifest=validateManifest(parseJson(new TextEncoder().encode(stage.manifest)));
-    const view=new StageGraphReader(db,sentinel,fence,id,stage.writerId,manifest,stage.archiveSha256);
-    await view.#marker();await db.transaction('r',db.runtime,db.datasets,db.stages,()=>view.#routing());
+    const view=new StageGraphReader(db,sentinel,fence,id,stage.writerId,manifest,stage.archiveSha256,permit);
+    await view.#marker();await db.transaction('r',[...scopeTables(db),db.stages],()=>view.#routing());
     return view;
   }
   get manifest():PortableManifest{return structuredClone(this.#manifest);}
   async #marker():Promise<void>{
-    const marker=await this.#sentinel.read();
-    requireStorage(marker!==null&&marker.state==='ready'&&marker.installationId===this.#fence.installationId&&marker.financialMayHaveStarted,'recovery_required');
-    requireStorage(marker.generation===this.#fence.generation,'stale_epoch');
+    this.#anchor=await readAnchor(this.#sentinel,this.#fence.installationId,true);
   }
   async #routing():Promise<void>{
-    const runtime=runtimeControl(await this.#db.runtime.get('runtime'));
-    requireStorage(runtime.installationId===this.#fence.installationId&&runtime.activeMode==='local'&&runtime.activeGeneration===this.#fence.generation&&
-      runtime.epoch===this.#fence.epoch&&runtime.pendingSwitchId===null,'stale_epoch');
-    const active=datasetControl(await this.#db.datasets.get(this.#fence.generation));
-    requireStorage(active.lifecycle==='active'&&active.holdId===null,'dataset_not_writable');
+    const runtime=await assertImportScope(this.#db,this.#fence,this.#anchor,this.#permit);
     const stage=stageRecord(await this.#db.stages.get(this.#id)),dataset=datasetControl(await this.#db.datasets.get(this.#id));
     requireStorage(this.#id!==runtime.activeGeneration&&stage.writerId===this.#writerId&&stage.installationId===runtime.installationId&&
       stage.routingEpoch===runtime.epoch&&((stage.state==='format_valid'&&dataset.lifecycle==='staging')||
-        (stage.state==='graph_valid'&&dataset.lifecycle==='validated'&&stage.graphDigest===this.#manifest.dataset_digest))&&dataset.holdId===null&&
+        (stage.state==='graph_valid'&&(dataset.lifecycle==='validated'||!!this.#permit&&dataset.lifecycle==='armed')&&stage.graphDigest===this.#manifest.dataset_digest))&&dataset.holdId===(this.#permit?.switchId??null)&&
       dataset.datasetId===this.#manifest.dataset_id&&same(dataset.ownerIds,this.#manifest.zenmoney_identity.owner_ids)&&
       stage.manifest===this.#manifestText&&stage.archiveSha256===this.#archiveSha256,'dataset_not_writable');
     requireStorage(BigInt(stage.rowCount)===this.#manifest.tables.reduce((sum,item)=>sum+BigInt(item.rows),0n)&&
@@ -67,7 +66,7 @@ export class StageGraphReader implements GraphReader{
     const scanner=prefix===null?new TableScanner(table,async()=>{}):null;let after:string|null=null;
     while(true){
       await this.#marker();
-      const values=await this.#db.transaction('r',this.#db.runtime,this.#db.datasets,this.#db.stages,this.#db.financial(table),async()=>{
+      const values=await this.#db.transaction('r',[...scopeTables(this.#db),this.#db.stages,this.#db.financial(table)],async()=>{
         await this.#routing();
         return this.#db.financial(table).where('[generation+key]').between([this.#id,after??lower],[this.#id,upper],after===null,true).limit(500).toArray();
       });
@@ -82,7 +81,7 @@ export class StageGraphReader implements GraphReader{
     const definition=SCHEMA[table],primary=same(columns,definition.primary),index=definition.indexes.find(index=>index.unique&&!index.partial&&same(columns,index.columns));
     requireStorage(primary||index!==undefined,'schema_unsupported');
     await this.#marker();
-    return this.#db.transaction('r',this.#db.runtime,this.#db.datasets,this.#db.stages,this.#db.financial(table),async()=>{
+    return this.#db.transaction('r',[...scopeTables(this.#db),this.#db.stages,this.#db.financial(table)],async()=>{
       await this.#routing();const key=encodeKey(values);
       const value=primary?await this.#db.financial(table).get([this.#id,key]):
         await this.#db.financial(table).where('[generation+'+index!.key+']').equals([this.#id,key]).first();

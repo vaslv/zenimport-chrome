@@ -6,14 +6,12 @@ import {stageRecord} from './stage-types.js';
 import {stageSummary} from './staging.js';
 import {TABLES} from '../portable/format.js';
 import {int64,requireStorage} from './types.js';
+import {readAnchor,assertAnchor} from './anchor.js';
+import Dexie from 'dexie';
 
 const RETENTION_SECONDS=86400n;
 
-async function marker(port:SentinelPort,fence:ContextFence){
-  const value=await port.read();
-  requireStorage(value!==null&&value.state==='ready'&&value.installationId===fence.installationId&&value.financialMayHaveStarted,'recovery_required');
-  requireStorage(value.generation===fence.generation,'stale_epoch');
-}
+const marker=(port:SentinelPort,fence:ContextFence)=>readAnchor(port,fence.installationId,true);
 
 async function owned(db:FinancialDatabase,fence:ContextFence,id:string){
   const root=runtimeControl(await db.runtime.get('runtime'));
@@ -32,8 +30,9 @@ async function owned(db:FinancialDatabase,fence:ContextFence,id:string){
 }
 
 export async function discardStage(db:FinancialDatabase,port:SentinelPort,context:ContextFence,id:string):Promise<void>{
-  const fence={...context};await marker(port,fence);
+  const fence={...context},anchor=await marker(port,fence);requireStorage(id!==anchor.generation,'dataset_not_writable');
   await db.transaction('rw',db.runtime,db.datasets,db.stages,async()=>{
+    await assertAnchor(db,anchor);
     const {stage,dataset}=await owned(db,fence,id);
     requireStorage(['loading','format_valid','graph_valid','failed','discarded'].includes(stage.state),'dataset_not_writable');
     await db.stages.put(stageRecord({...stage,state:'discarded',graphVersion:null,graphDigest:null,graphVerifiedAt:null}));
@@ -43,8 +42,10 @@ export async function discardStage(db:FinancialDatabase,port:SentinelPort,contex
 
 /** A trusted user acknowledgment, not a claim that a download implies a backup. */
 export async function acknowledgeStageBackup(db:FinancialDatabase,port:SentinelPort,context:ContextFence,id:string,now:string):Promise<void>{
-  const fence={...context},stamp=int64(now);requireStorage(BigInt(stamp)>=0n);await marker(port,fence);
+  const fence={...context},stamp=int64(now);requireStorage(BigInt(stamp)>=0n);const anchor=await marker(port,fence);
+  requireStorage(id!==anchor.generation,'dataset_not_writable');
   await db.transaction('rw',db.runtime,db.datasets,db.stages,async()=>{
+    await assertAnchor(db,anchor);
     const {stage,dataset}=await owned(db,fence,id);
     requireStorage(stage.state==='discarded'&&dataset.lifecycle==='discarded'&&BigInt(stamp)>=BigInt(dataset.createdAt),'dataset_not_writable');
     if(dataset.backupAcknowledgedAt===null)await db.datasets.put({...dataset,backupAcknowledgedAt:stamp});
@@ -58,9 +59,12 @@ function retained(dataset:DatasetControl,now:bigint):boolean{
 
 /** One bounded resumable batch. Retirement/participant receipt GC is out of scope. */
 export async function collectDiscardedStage(db:FinancialDatabase,port:SentinelPort,context:ContextFence,id:string,now:string):Promise<{removedRows:string;complete:boolean}>{
-  const fence={...context},stamp=BigInt(int64(now));requireStorage(stamp>=0n);await marker(port,fence);
-  return db.transaction('rw',[db.runtime,db.datasets,db.stages,...TABLES.map(name=>db.financial(name))],async()=>{
+  const fence={...context},stamp=BigInt(int64(now));requireStorage(stamp>=0n);const anchor=await marker(port,fence);
+  requireStorage(id!==anchor.generation,'dataset_not_writable');
+  return db.transaction('rw',[db.runtime,db.datasets,db.stages,db.participants,db.migrationOperations,...TABLES.map(name=>db.financial(name))],async()=>{
+    await assertAnchor(db,anchor);
     const {stage,dataset}=await owned(db,fence,id);
+    requireStorage(await db.migrationOperations.where('[participantId+switchId]').between([dataset.participantId,Dexie.minKey],[dataset.participantId,Dexie.maxKey]).count()===0,'dataset_not_writable');
     requireStorage(stage.state==='discarded'&&dataset.lifecycle==='discarded'&&!retained(dataset,stamp),'dataset_not_writable');
     let removed=0;
     for(const name of TABLES){
@@ -69,7 +73,7 @@ export async function collectDiscardedStage(db:FinancialDatabase,port:SentinelPo
       if(removed===500)return {removedRows:String(removed),complete:false};
     }
     // Financial rows and their stage/control journal disappear in the same commit.
-    await db.stages.delete(id);await db.datasets.delete(id);
+    await db.stages.delete(id);await db.datasets.delete(id);await db.participants.delete(dataset.participantId);
     return {removedRows:String(removed),complete:true};
   });
 }

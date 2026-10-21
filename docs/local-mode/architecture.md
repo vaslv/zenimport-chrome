@@ -117,7 +117,7 @@ removal cannot retract them. Same-owner rotation verifies original UUIDs using
 the new context without mutating attempted payloads.
 
 Maintain a separate nonsecret `localDatasetSentinel` in trusted
-`chrome.storage.local`: installation ID, expected dataset lineage/generation,
+`chrome.storage.local`: installation ID, original anchor lineage/generation,
 initialization state and whether financial activity may have started. Persist and
 acknowledge it **before** initializing a writable financial dataset or dispatching
 any local write. It survives token removal and mode switches. A crash between
@@ -125,6 +125,10 @@ sentinel creation and IDB initialization enters explicit setup/recovery; it cann
 silently claim to be a new installation. IDB-only control state cannot detect its
 own disappearance. Clearing both extension stores or uninstalling is outside this
 detection guarantee and requires a user backup.
+
+The original anchor header is retained permanently. Root and per-generation
+participant state select the actual writer atomically inside IDB; the sentinel
+never becomes a second active-generation pointer. See [ADR 004](adr-004-immutable-recovery-anchor.md).
 
 Boot rules:
 

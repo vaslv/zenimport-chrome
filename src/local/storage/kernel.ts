@@ -10,6 +10,8 @@ import {packRow,unpackRow,encodeKey,rowKey,validateCells} from './cells.js';
 import {requireStorage,storageFailure} from './types.js';
 import type {Scalar,TaggedRow} from './types.js';
 import type {FinancialDatabase,FinancialEnvelope} from './database.js';
+import {readAnchor,assertAnchor} from './anchor.js';
+import {participantControl} from './participant-validation.js';
 
 const immutableUpdate=new Set<TableName>(['bank_versions','capture_pages','captured_records','delivery_attempts',
   'job_accounts','job_context','job_requests','processing_receipts','processing_targets']);
@@ -171,16 +173,16 @@ export async function writeTransaction<T>(db:FinancialDatabase,sentinel:Sentinel
   const scope={...fence};
   try{
     await sentinel.markFinancialActivity(scope.installationId);
-    const marker=await sentinel.read();
-    requireStorage(marker!==null && marker.state==='ready' && marker.financialMayHaveStarted &&
-      marker.installationId===scope.installationId,'recovery_required');
-    requireStorage(marker.generation===scope.generation,'stale_epoch');
+    const marker=await readAnchor(sentinel,scope.installationId,true);
     return await db.transaction('rw',db.tables,async()=>{
-      const runtime=runtimeControl(await db.runtime.get('runtime'));
+      const runtime=await assertAnchor(db,marker);
       const dataset=datasetControl(await db.datasets.get(scope.generation));
       requireStorage(runtime.installationId===scope.installationId && runtime.activeMode==='local' && runtime.activeGeneration===scope.generation &&
         runtime.epoch===scope.epoch && runtime.pendingSwitchId===null,'stale_epoch');
       requireStorage(dataset.lifecycle==='active' && dataset.holdId===null,'dataset_not_writable');
+      const authority=participantControl(await db.participants.get(dataset.participantId));
+      requireStorage(authority.generation===scope.generation&&authority.epoch===dataset.participantEpoch&&
+        authority.state==='active'&&!authority.awaitingSync,'dataset_not_writable');
       await db.runtime.put({...runtime,financialMayHaveStarted:true});
       const owner=Dexie.currentTransaction;requireStorage(owner!==undefined,'storage_corrupt');
       const view=new RepositorySession(db,scope.generation,owner);

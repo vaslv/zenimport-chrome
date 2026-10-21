@@ -19,6 +19,8 @@ import {validateFinancialGraph} from '../portable/graph.js';
 import type {GraphSummary} from '../portable/graph.js';
 import {validateStageGraph} from './graph-validation.js';
 import {discardStage,acknowledgeStageBackup,collectDiscardedStage} from './stage-cleanup.js';
+import {assertAnchor} from './anchor.js';
+import {participantControl} from './participant-validation.js';
 
 const opening=new Map<string,Promise<void>>();
 
@@ -58,9 +60,12 @@ export class LocalDatabase{
         if(creating)await initialize(db,marker,now);
         const runtime=runtimeControl(await db.runtime.get('runtime'));
         requireStorage(await db.runtime.count()===1 && runtime.installationId===marker.installationId,'storage_corrupt');
-        requireStorage(runtime.activeMode==='local' && runtime.activeGeneration===marker.generation,'recovery_required');
-        const dataset=datasetControl(await db.datasets.get(marker.generation));
-        requireStorage(dataset.datasetId===marker.datasetId && dataset.lifecycle==='active','storage_corrupt');
+        if(!creating)await db.transaction('r',db.runtime,db.datasets,()=>assertAnchor(db,marker!));
+        requireStorage(runtime.activeMode==='local'&&runtime.activeGeneration!==null,'recovery_required');
+        const dataset=datasetControl(await db.datasets.get(runtime.activeGeneration));
+        requireStorage(dataset.lifecycle==='active','dataset_not_writable');
+        const authority=participantControl(await db.participants.get(dataset.participantId));
+        requireStorage(authority.generation===dataset.generation&&authority.state==='active','dataset_not_writable');
         requireStorage(!runtime.financialMayHaveStarted || marker.financialMayHaveStarted,'recovery_required');
         if(creating)await sentinel.acknowledgeReady({...marker,state:'ready'});
         return new LocalDatabase(db,sentinel);
@@ -138,12 +143,15 @@ export class LocalDatabase{
   /** Persist outside IDB before the first financial mutation/dispatch claim. */
   async markFinancialActivity(fence:ContextFence):Promise<void>{
     await this.#sentinel.markFinancialActivity(fence.installationId);
-    await this.#db.transaction('rw',this.#db.runtime,this.#db.datasets,async()=>{
-      const runtime=runtimeControl(await this.#db.runtime.get('runtime'));
+    const marker=await this.#sentinel.read();requireStorage(marker!==null,'recovery_required');
+    await this.#db.transaction('rw',this.#db.runtime,this.#db.datasets,this.#db.participants,async()=>{
+      const runtime=await assertAnchor(this.#db,marker);
       requireStorage(runtime.installationId===fence.installationId && runtime.activeGeneration===fence.generation &&
         runtime.epoch===fence.epoch && runtime.activeMode==='local' && runtime.pendingSwitchId===null,'stale_epoch');
       const dataset=datasetControl(await this.#db.datasets.get(fence.generation));
       requireStorage(dataset.lifecycle==='active' && dataset.holdId===null,'dataset_not_writable');
+      const authority=participantControl(await this.#db.participants.get(dataset.participantId));
+      requireStorage(authority.state==='active'&&!authority.awaitingSync&&authority.generation===dataset.generation,'dataset_not_writable');
       await this.#db.runtime.put({...runtime,financialMayHaveStarted:true});
     });
   }
@@ -157,8 +165,10 @@ async function initialize(db:FinancialDatabase,marker:DatasetSentinel,now:string
     requireStorage(await db.runtime.count()===0 && await db.datasets.count()===0,'storage_corrupt');
     await db.runtime.add({id:'runtime',installationId:marker.installationId,activeMode:'local',activeGeneration:marker.generation,
       epoch:int64('1'),pendingSwitchId:null,credentialRef:null,credentialEpoch:int64('1'),financialMayHaveStarted:false});
-    await db.datasets.add({generation:marker.generation,datasetId:marker.datasetId,participantId:crypto.randomUUID(),participantEpoch:int64('1'),
+    const participantId=crypto.randomUUID();
+    await db.datasets.add({generation:marker.generation,datasetId:marker.datasetId,participantId,participantEpoch:int64('1'),
       logicalSchemaVersion:'1',lifecycle:'active',ownerIds:[],holdId:null,createdAt:int64(now),backupAcknowledgedAt:null});
+    await db.participants.add({id:participantId,generation:marker.generation,epoch:'1',state:'active',operationId:null,everActivated:false,awaitingSync:false});
     async function add<K extends TableName>(table:K,fields:RowByTable[K]){
       const row=packRow(table,fields);await db.financial(table).add({generation:marker.generation,key:rowKey(table,row),row});
     }

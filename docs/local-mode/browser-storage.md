@@ -2,8 +2,8 @@
 
 The extension's local financial mode is still disabled in product handlers.
 L4 uses actual IndexedDB/Dexie with the 49 typed financial tables and independent
-runtime/dataset/import control. Physical IDB version 4 is independent of financial
-schema 1 and archive version 2. Versions 1–3 are unpublished development layouts.
+runtime/dataset/import control. Physical IDB version 5 is independent of financial
+schema 1 and archive version 2. Versions 1–4 are unpublished development layouts.
 
 ## Inactive format staging
 
@@ -26,7 +26,7 @@ leaves a failed or still-loading inactive generation. Killing the worker leaves 
 durable loading journal; reopening never promotes it or silently initializes a
 replacement active history. A retry creates a separate inactive stage. Financial
 application handlers have no native database handles or arbitrary mutation API.
-Activation and protected handoff remain unimplemented at this checkpoint and
+Activation and protected handoff are separate from format staging and
 must be completed before product exposure.
 
 ## Persistent facts-only validation
