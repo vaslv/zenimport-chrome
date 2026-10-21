@@ -1687,3 +1687,24 @@ is disabled. No live API/data, push, tags or publication.
 
 L10 major gate remains open for the stale-initial-Root race and broad verification.
 Product local routing remains disabled. No live API/data, push, tags or publication.
+
+### L10 major review correction — fence native holds to the saved initial Root
+
+- Native source hold and destination reservation now validate the coordinator's
+  exact initial Root and participant/credential bindings inside their final IDB
+  transaction. Rotation before dispatch cannot bind a different Root. Held
+  coordinator destination credentials remain immutable until cancellation.
+- An unused local source_start made permanently impossible by epoch advancement
+  can cancel only its journal after committing its exact rejected-request audit.
+  Root and unrelated holds remain untouched; a real native hold still requires
+  the normal receipt cancellation path. Audit quota failure rolls back the abort.
+- Independent adversarial focused reread: no findings. See
+  reviews/l10-initial-root-2026-10-22.md. Cross-model CLI unavailable.
+- Docker strict/generated/bundle and 256 unit/contracts passed (1510.14ms).
+  Native journals/authority/fence budgets: 66 passed in 179.52s. Minimum Chrome
+  140: four targeted stale-Root/real-hold cases passed in 37.90s.
+  Logs: /tmp/zenimport-l10-initial-root-{unit,native,minimum}.log.
+
+All identified L10 major-review defects are corrected. Connector fixture clock
+repair and consolidated L10 gate evidence follow before product integration.
+No live API/data, push, tags or publication.

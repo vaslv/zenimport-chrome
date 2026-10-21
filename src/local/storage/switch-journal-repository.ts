@@ -130,8 +130,22 @@ export class SwitchJournalRepository{
       const previous=(await this.db.applicationState.get(cancelScope(id)))?.value;
       if(previous)requireParticipant(['requested','forward','finished'].includes(previous.state as string));
       const native=await this.db.switches.get(id);let unused=value.commands.length===0&&value.receipts.length===0&&native===undefined&&root.pendingSwitchId!==id;
-      if(!unused)await this.#root(value,root);
       const start=value.commands.length===1&&value.commands[0].side==='source'&&value.commands[0].command==='source_start'?value.commands[0]:null;
+      const initial=value.initialRoot;
+      const staleLocalStart=value.plan.direction==='local-to-remote'&&start!==null&&native===undefined&&value.receipts.length===0&&root.pendingSwitchId!==id&&
+        root.installationId===initial.installationId&&BigInt(root.epoch)>=BigInt(initial.epoch)&&BigInt(root.credentialEpoch)>=BigInt(initial.credentialEpoch)&&
+        (BigInt(root.epoch)>BigInt(initial.epoch)||BigInt(root.credentialEpoch)>BigInt(initial.credentialEpoch));
+      if(staleLocalStart){
+        // The native initial-Root fence makes the saved command permanently
+        // impossible. Keep its audit before retiring only this unused journal.
+        requireParticipant(await this.db.migrationOperations.where('switchId').equals(id).count()===0&&
+          await this.db.migrationReceipts.where('[participantId+switchId]').equals([value.plan.sourceId,id]).count()===0&&
+          await this.db.migrationChunks.where('[participantId+switchId]').equals([value.plan.sourceId,id]).count()===0,'migration_paused');
+        await this.db.applicationState.add({scope:'mode-switch-rejected:'+id+':'+start.request.request_id,
+          value:{side:'source',command:'source_start',request:start.request,reason:'stale_initial_root',initialRoot:initial,observedRoot:root,replacementId:null}});
+        unused=true;
+      }
+      if(!unused)await this.#root(value,root);
       const observed=authenticatedSource===undefined?null:checkedStatus(authenticatedSource,id);
       const rejected=start!==null&&observed!==null&&observed.installation_id===value.plan.sourceId&&observed.operation_id!==id&&observed.operation===null&&observed.receipts.length===0&&BigInt(observed.participant_epoch)>BigInt(start.request.expected_epoch as string);
       if((value.commands.length===0||rejected)&&value.receipts.length===0&&native?.role==='destination'&&native.state==='pending'){

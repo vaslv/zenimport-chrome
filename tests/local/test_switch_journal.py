@@ -383,3 +383,50 @@ def test_replacement_rejects_corrupted_backup_evidence_before_reserving_a_writer
     assert not result['ok'],result
     assert ok(worker,'current')['root']==before
     assert ok(worker,'journal-current') is None
+
+
+def test_saved_local_start_cannot_hold_a_rotated_root_and_can_be_cancelled(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        switch,plan=start(worker);lease=ok(worker,'journal-claim',switchId=switch)
+        request=ok(worker,'journal-command',lease=lease)
+        ok(worker,'credential',credentialRef=str(uuid4()))
+        before=ok(worker,'current');facts=ok(worker,'inspect')
+        assert call(worker,'command',participantId=plan['plan']['sourceId'],command='source_start',request=request)['code']=='migration_busy'
+        assert ok(worker,'current')==before and ok(worker,'inspect')==facts
+        assert call(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()),mode='quota-rejected')['code']=='quota_exceeded'
+        assert ok(worker,'journal-current')['commands'][0]['request']==request
+        assert ok(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()))=='cancelled'
+        audit=ok(worker,'journal-rejected',switchId=switch)
+        assert len(audit)==1 and audit[0]['value']['reason']=='stale_initial_root'
+        assert audit[0]['value']['request']==request and audit[0]['value']['observedRoot']==before['root']
+        assert ok(worker,'journal-cancellation',switchId=switch)['state']=='finished'
+        assert call(worker,'command',participantId=plan['plan']['sourceId'],command='source_start',request=request)['code']=='migration_paused'
+        assert ok(worker,'current')==before and ok(worker,'inspect')==facts
+
+
+def test_remote_destination_cannot_reserve_after_its_saved_root_rotates(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        ok(worker,'create-remote',credentialRef=str(uuid4()),peerId=str(uuid4()),url='https://fixture.invalid')
+        switch,source,credential=str(uuid4()),str(uuid4()),str(uuid4())
+        ok(worker,'journal-create',switchId=switch,peerId=source,credentialRef=credential,mode='remote-to-local')
+        ok(worker,'credential',credentialRef=str(uuid4()));before=ok(worker,'current');facts=ok(worker,'inspect',generation=before['anchorGeneration'])
+        assert call(worker,'reserve',switchId=switch,peerId=source,credentialRef=credential)['code']=='migration_busy'
+        assert ok(worker,'current')==before
+        assert ok(worker,'inspect',generation=before['anchorGeneration'])==facts
+        assert ok(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()))=='cancelled'
+        assert call(worker,'reserve',switchId=switch,peerId=source,credentialRef=credential)['code']=='migration_paused'
+        assert ok(worker,'current')==before
+
+
+def test_coordinator_destination_credentials_are_immutable_until_cancelled(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        ok(worker,'create-remote',credentialRef=str(uuid4()),peerId=str(uuid4()),url='https://fixture.invalid')
+        switch,source,credential=str(uuid4()),str(uuid4()),str(uuid4())
+        ok(worker,'journal-create',switchId=switch,peerId=source,credentialRef=credential,mode='remote-to-local')
+        slot=ok(worker,'reserve',switchId=switch,peerId=source,credentialRef=credential);before=ok(worker,'current')
+        assert call(worker,'credential',credentialRef=str(uuid4()))['code']=='migration_paused'
+        assert ok(worker,'current')==before
+        # The existing correctly bound slot remains idempotent and cancellable.
+        assert ok(worker,'reserve',switchId=switch,peerId=source,credentialRef=credential)==slot
+        assert ok(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()))=='cancelled'
+        assert ok(worker,'current')['root']['pendingSwitchId'] is None

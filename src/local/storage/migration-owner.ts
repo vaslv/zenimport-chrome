@@ -1,3 +1,4 @@
+import {switchJournal,sameJournal} from '../migration/journal.js';
 import {transferBudget} from './transfer-budget.js';
 import {readOutbox} from './outbox-control.js';
 /** Existing-store control owner. Never exposed to bank/page messages. */
@@ -121,6 +122,19 @@ export class MigrationOwner{
     const metadata=await this.#db.financial('dataset_metadata').where('generation').equals(generation).toArray();
     return !metadata.some(value=>{const row=value.row;return row[0][0]==='text'&&['sync_ever_started','migration_import_sha256','portable_imports'].includes(row[0][1]);});
   }
+  /** The coordinator's saved Root and the native hold must share one CAS. */
+  async #initialJournal(switchId:string,root:RuntimeControl,role:'source'|'destination',peerId:string,credentialRef:string|null,participantId?:string){
+    const raw=(await this.#db.applicationState.get('mode-switch:'+switchId))?.value;
+    if(raw===undefined)return; // Independent peer primitives have no coordinator journal.
+    const value=switchJournal(raw),plan=value.plan,initial=value.initialRoot;
+    requireParticipant(!['cancelled','complete'].includes(value.phase),'migration_paused');
+    requireParticipant((await this.#db.applicationState.get('mode-switch-head'))?.value.id===switchId&&
+      (!initial.financialMayHaveStarted||root.financialMayHaveStarted)&&
+      sameJournal({...root,financialMayHaveStarted:initial.financialMayHaveStarted},initial),'migration_busy');
+    requireParticipant(role==='source'
+      ?plan.direction==='local-to-remote'&&plan.sourceId===participantId&&plan.destinationId===peerId&&plan.localCredentialRef===root.credentialRef
+      :plan.direction==='remote-to-local'&&plan.sourceId===peerId&&plan.localCredentialRef===credentialRef,'migration_busy');
+  }
   async reserveDestination(switchId:string,peerId:string,credentialRef:string,now:string){
     participantUuid(switchId);participantUuid(peerId);participantUuid(credentialRef);const stamp=int64(now);requireStorage(BigInt(stamp)>=0n);
     const generation=crypto.randomUUID(),participantId=crypto.randomUUID(),datasetId=crypto.randomUUID(),anchor=await this.#anchor();
@@ -131,6 +145,7 @@ export class MigrationOwner{
         const dataset=datasetControl(await this.#db.datasets.get(existing.generation));return {participantId:dataset.participantId,generation:dataset.generation};
       }
       requireParticipant((await this.#db.applicationState.get('mode-switch:'+switchId))?.value.phase!=='cancelled','migration_paused');
+      await this.#initialJournal(switchId,root,'destination',peerId,credentialRef);
       requireParticipant(root.pendingSwitchId===null,'migration_busy');
       if(root.activeMode==='local'){
         const active=datasetControl(await this.#db.datasets.get(root.activeGeneration!)),control=participantControl(await this.#db.participants.get(active.participantId));
@@ -148,9 +163,12 @@ export class MigrationOwner{
   }
   async updateCredential(credentialRef:string){
     participantUuid(credentialRef);const anchor=await this.#anchor();
-    await this.#db.transaction('rw',this.#db.runtime,this.#db.datasets,this.#db.switches,async()=>{
+    await this.#db.transaction('rw',this.#db.runtime,this.#db.datasets,this.#db.switches,this.#db.applicationState,async()=>{
       const root=await assertAnchor(this.#db,anchor);
       if(root.pendingSwitchId){
+        // A coordinator owns immutable credential references until cancellation.
+        const journal=(await this.#db.applicationState.get('mode-switch:'+root.pendingSwitchId))?.value;
+        requireParticipant(journal===undefined||['complete','cancelled'].includes(switchJournal(journal).phase),'migration_paused');
         const transfer=await this.#db.switches.get(root.pendingSwitchId);requireParticipant(transfer?.role==='destination'&&transfer.state==='pending','migration_paused');
         // Token repair must leave one final increment for destination activation.
         increment(increment(root.credentialEpoch));
@@ -206,6 +224,7 @@ export class MigrationOwner{
       if(verified)requireParticipant(current.credentialEpoch===credentialEpoch&&(await this.#db.switches.get(request.switch_id as string))?.credentialRef===credentialRef,'migration_busy');
       let updated={...dataset,participantEpoch:int64(next.control.epoch)};
       if(command==='source_start'){
+        await this.#initialJournal(request.switch_id as string,current,'source',next.operation.peerId,null,control.id);
         transferBudget(current);
         requireParticipant((await this.#db.applicationState.get('mode-switch:'+request.switch_id))?.value.phase!=='cancelled','migration_paused');
         const outbox=await readOutbox(this.#db,control.generation);
