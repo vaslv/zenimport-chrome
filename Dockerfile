@@ -11,7 +11,8 @@ COPY src ./src
 COPY tsconfig.json ./
 COPY scripts/bundle-contracts.mjs scripts/run-business-contracts.mjs scripts/build-storage-schema.mjs scripts/portable-format-interop.mjs ./scripts/
 COPY scripts/portable-values-budget.mjs ./scripts/
-RUN npm run typecheck && node scripts/build-storage-schema.mjs --check && node scripts/bundle-contracts.mjs
+COPY scripts/build-application-types.mjs ./scripts/
+RUN npm run typecheck && node scripts/build-storage-schema.mjs --check && node scripts/build-application-types.mjs --check && node scripts/bundle-contracts.mjs
 USER node
 CMD ["node", "--test", "tests/*.test.mjs"]
 

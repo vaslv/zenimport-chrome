@@ -8,6 +8,7 @@
 !scripts/bundle.mjs
 !scripts/bundle-contracts.mjs
 !scripts/build-storage-schema.mjs
+!scripts/build-application-types.mjs
 !scripts/run-business-contracts.mjs
 !scripts/portable-format-interop.mjs
 !scripts/portable-values-budget.mjs

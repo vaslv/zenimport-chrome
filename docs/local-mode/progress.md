@@ -755,3 +755,18 @@ L6/L7 must guard imported mirror/source initialization and L9 must implement
 explicit awaiting-sync release. L10/L11 then connect authenticated transfer and
 setup UI; L12 remains the installed-product acceptance gate. L4 alone does not
 enable a local financial send or a mode-switch button.
+
+## L5 — unified application service (in progress)
+
+### L5.1 — named typed remote boundary
+
+- Generated all named DTOs from pinned wire-v1.json, including nested definitions,
+  with deterministic regeneration and conflicting-definition rejection. The Docker
+  unit image checks generated types against the frozen source contract.
+- Added the transport-independent application interface and a remote adapter for
+  current connection/account/capture/report/archive operations. Only this adapter
+  maps named operations to HTTP paths. Product handlers are not switched yet.
+- Review checked every route, method, body, query order, identifier escaping,
+  opaque archive handling and error propagation. The adapter neither mutates a
+  command nor schedules an additional request. Docker typing/generated checks and
+  170 unit/contract tests passed. Production and live accounts were not used.
