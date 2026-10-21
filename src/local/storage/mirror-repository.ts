@@ -15,6 +15,8 @@ import {mirrorScope,MIRROR_TABLES} from './mirror-scope.js';
 import {stageMirror} from './mirror-stage.js';
 import {envelope} from './envelope.js';
 import {packRow,unpackRow,encodeKey} from './cells.js';
+import {financialStamp} from './source-stamp.js';
+import {categoriesReady} from './category-control.js';
 import {LocalZenMoneyError} from '../zenmoney/errors.js';
 import type {ZenMoneyCode} from '../zenmoney/errors.js';
 
@@ -194,6 +196,7 @@ export class MirrorRepository{
       const now=BigInt(Math.floor(this.clock()));
       if(root.credentialRef===null||control.forceFull||control.lease!==null||state.ready!=='1'||state.needs_full!=='0'||
         state.refreshed_at===null||now<BigInt(state.refreshed_at)||now-BigInt(state.refreshed_at)>300n)return null;
+      if(!await categoriesReady(this.db,await financialStamp(this.db,root,view)))return null;
       const row=await view.get('category_predictions',[text(bankId)]);
       return row?.mirror_generation===state.generation&&row.bank_revision===revision?row:null;
     });

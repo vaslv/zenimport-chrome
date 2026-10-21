@@ -248,7 +248,7 @@ def test_native_imported_awaiting_sync_can_read_mirror_without_releasing_any_wri
 def test_native_large_predictions_invalidate_atomically_and_collect_in_bounded_pages(tmp_path):
     with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
         ready(worker)
-        seeded=call(worker,'seed-predictions',size=100000,summary=True);assert seeded['ok'],seeded
+        seeded=call(worker,'seed-predictions',size=100000,mode='published-cache',summary=True);assert seeded['ok'],seeded
         assert seeded['predictionCount']==100000 and seeded['maxTransactionMs']<10000
         assert call(worker,'prediction')['result']['bank_id']=='b-0'
         failed=call(worker,'refresh',status=429,summary=True);assert failed['code']=='zenmoney_rate_limited'

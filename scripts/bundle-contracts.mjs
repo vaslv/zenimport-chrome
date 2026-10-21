@@ -30,3 +30,5 @@ await build({entryPoints:['src/local/reconciliation/facts.ts'],outfile:'.local/c
 await build({entryPoints:['src/local/reports/build.ts'],outfile:'.local/contracts/discrepancy-report.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/local/reconciliation/plan.ts'],outfile:'.local/contracts/reconciliation-plan.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/local/reconciliation/known.ts'],outfile:'.local/contracts/reconciliation-known.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+
+await build({entryPoints:['src/local/storage/category-control.ts'],outfile:'.local/contracts/category-control.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});

@@ -20,6 +20,7 @@ import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
 import {AccountRepository} from './account-repository.js';
+import {CategoryRepository} from './category-repository.js';
 import {ReconciliationRepository} from './reconciliation-repository.js';
 import type {ReconcileChoice} from '../reconciliation/plan.js';
 import {ReportRepository} from './report-repository.js';
@@ -29,6 +30,8 @@ import {sourceFacts} from '../reconciliation/facts.js';
 import {RepositoryOwner} from './repository-owner.js';
 import type {FinancialSnapshot} from './repository-owner.js';
 import {CaptureRepository} from './capture-repository.js';
+let releaseCategories:(()=>void)|undefined;
+export const resumeCategories=()=>{releaseCategories?.();releaseCategories=undefined;};
 let paused=false,releaseKnown:(()=>void)|undefined;
 export const resumeKnown=()=>{releaseKnown?.();releaseKnown=undefined;};
 export const checkpoint=()=>paused;
@@ -64,6 +67,21 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action==='categories-build'){
+      const {root}=await store.context(),repository=await CategoryRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put,native=FinancialDatabase.prototype.transaction;let wrotePrediction=false,armed=true;
+      const intercept=function(store:IDBObjectStore){if(store.name==='f_category_predictions'){wrotePrediction=true;if(armed&&args.mode==='quota-category'){armed=false;throw new DOMException('private-category-fixture','QuotaExceededError');}}};
+      if(['quota-category','pause-category'].includes(args.mode??'')){
+        IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){intercept(this);return add.apply(this,values);};
+        IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){intercept(this);return put.apply(this,values);};
+      }
+      if(args.mode==='pause-category')FinancialDatabase.prototype.transaction=new Proxy(native,{apply(target,db,parameters){return (Reflect.apply(target,db,parameters) as Promise<unknown>).then(value=>{if(wrotePrediction&&!paused){paused=true;return new Promise(resolve=>{releaseCategories=()=>resolve(value);});}return value;});}});
+      try{result=await repository.build(String(now));}finally{repository.close();IDBObjectStore.prototype.add=add;IDBObjectStore.prototype.put=put;FinancialDatabase.prototype.transaction=native;}
+    }
+    if(action==='categories-state'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{const stamp=await owner.snapshot();result={ready:await owner.categoriesReady(stamp),stamp,...await owner.read(async view=>({evidence:await view.rows('category_evidence'),payments:await view.rows('category_payments'),predictions:await view.rows('category_predictions')}))};}finally{owner.close();}
+    }
     if(action==='seed-reconcile-group'){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       try{await owner.write(async view=>{
@@ -178,7 +196,7 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
     if(action==='remove')await credentials.remove();
     if(action==='cleanup-credentials')await credentials.cleanupCandidates();
     if(action==='collect')result=await store.collect(String(now));
-    if(action==='prediction')result=await store.prediction((await store.context()).root,'b-0','1');
+    if(action==='prediction')result=await store.prediction((await store.context()).root,args.id??'b-0',args.version??'1');
     if(action==='seed-predictions'){
       const db=new FinancialDatabase(args.name,false);await db.open();
       try{const {root}=await store.context(),generation=root.activeGeneration!,state=await db.financial('zen_mirror_state').where('generation').equals(generation).first();
@@ -194,14 +212,21 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
             const id='b-'+i;banks.push(row('bank_transactions',{id,account_id:args.accountId??'pred-account',external_id:id,identity_kind:'bank',identity_version:'v1',local_date:'2026-10-20',direction:'expense',amount:'1',currency:'VND',raw_json:'{}',revision:'1'}));
             versions.push(row('bank_versions',{bank_id:id,revision:'1',data_json:'{}',raw_json:'{}'}));
             predictions.push(row('category_predictions',{bank_id:id,bank_revision:'1',category_id:null,source:'unknown',reason:'fixture',candidates_json:'[]',mirror_generation:mirrorGeneration}));
+            if(args.mode==='pending')processing.push(row('bank_processing',{bank_id:id,state:'pending',reason:'fixture',updated_at:String(now)}));
             if(args.mode==='prepared'){
               deliveries.push(row('deliveries',{bank_id:id,zen_id:crypto.randomUUID(),payload:'{}',state:'prepared',ever_attempted:'0',origin:'created',authorized_job_id:null,updated_at:String(now),needs_rebuild:'0'}));
               processing.push(row('bank_processing',{bank_id:id,state:'prepared',reason:'fixture',updated_at:String(now)}));
             }
           }
-          await db.transaction('rw',db.tables,async()=>{await db.financial('bank_transactions').bulkAdd(banks);await db.financial('bank_versions').bulkAdd(versions);await db.financial('category_predictions').bulkAdd(predictions);if(deliveries.length){await db.financial('deliveries').bulkAdd(deliveries);await db.financial('bank_processing').bulkAdd(processing);}});
+          await db.transaction('rw',db.tables,async()=>{await db.financial('bank_transactions').bulkAdd(banks);await db.financial('bank_versions').bulkAdd(versions);await db.financial('category_predictions').bulkAdd(predictions);if(deliveries.length)await db.financial('deliveries').bulkAdd(deliveries);if(processing.length)await db.financial('bank_processing').bulkAdd(processing);});
         }
       }finally{db.close();}
+      if(args.mode==='published-cache'){
+        // Volume-only fixture: publish the preseeded null-category rows so this
+        // old mirror test measures invalidation/GC, not model-building behavior.
+        const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+        try{const stamp=await owner.snapshot(),id=crypto.randomUUID();await owner.beginCategories(stamp,id,{category_evidence:0,category_payments:0,category_predictions:args.size??10000});await owner.completeCategories(stamp,id);}finally{owner.close();}
+      }
     }
     if(action==='seed-delivery'){
       const db=new FinancialDatabase(args.name,false);await db.open();try{const {root}=await store.context();

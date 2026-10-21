@@ -8,16 +8,16 @@ import {participantControl} from './participant-validation.js';
 import {RepositorySession,writeTransaction} from './kernel.js';
 import {mirrorScope} from './mirror-scope.js';
 import {requireStorage} from './types.js';
-import {financialRevision,isDerivedCache} from './revisions.js';
+import {isDerivedCache} from './revisions.js';
+import {financialStamp} from './source-stamp.js';
+import type {FinancialSnapshot} from './source-stamp.js';
+export type {FinancialSnapshot} from './source-stamp.js';
+import {categoryControl,categoryScope,CATEGORY_TABLES,categoriesReady} from './category-control.js';
+import type {CategoryCounts} from './category-control.js';
 import {int64} from './types.js';
 import type {TableName} from './schema.generated.js';
 import {CaptureError} from '../capture/errors.js';
 
-/** Storage-only consistency token; never sent to a bank page or popup. */
-export interface FinancialSnapshot{
-  generation:string;epoch:string;credentialEpoch:string;credentialRef:string|null;
-  participantId:string;participantEpoch:string;revision:string;projection:string;mirror:string;mirrorControl:string;
-}
 export class RepositoryOwner{
   private constructor(private db:FinancialDatabase,private sentinel:SentinelPort,readonly fence:ContextFence){}
   static async open(name:string,sentinel:SentinelPort,fence:ContextFence,allowSettings=false){
@@ -43,11 +43,7 @@ export class RepositoryOwner{
     });
   }
   async #stamp(view:RepositorySession):Promise<FinancialSnapshot>{
-    const root=runtimeControl(await this.db.runtime.get('runtime')),generation=this.fence.generation,dataset=datasetControl(await this.db.datasets.get(generation));
-    const mirror=await view.get('zen_mirror_state',[['integer',int64('1')]]);
-    return {generation,epoch:root.epoch,credentialEpoch:root.credentialEpoch,credentialRef:root.credentialRef,
-      participantId:dataset.participantId,participantEpoch:dataset.participantEpoch,revision:await financialRevision(this.db,generation),
-      projection:await mirrorScope(this.db,generation),mirror:JSON.stringify(mirror),mirrorControl:JSON.stringify((await this.db.applicationState.get('mirror:'+generation))?.value??null)};
+    return financialStamp(this.db,runtimeControl(await this.db.runtime.get('runtime')),view);
   }
   async #unchanged(view:RepositorySession,expected:FinancialSnapshot){
     requireStorage(JSON.stringify(await this.#stamp(view))===JSON.stringify(expected),'stale_epoch');
@@ -60,6 +56,29 @@ export class RepositoryOwner{
   async check(stamp:FinancialSnapshot){return this.read(view=>this.#unchanged(view,stamp));}
   async apply<T>(stamp:FinancialSnapshot,operation:(view:RepositorySession)=>Promise<T>){
     return this.write(async view=>{await this.#unchanged(view,stamp);const result=await operation(view);return {result,stamp:await this.#stamp(view)};});
+  }
+
+  async categoriesReady(stamp:FinancialSnapshot){
+    return this.read(async view=>{await this.#unchanged(view,stamp);return categoriesReady(this.db,stamp);});
+  }
+  async beginCategories(stamp:FinancialSnapshot,id:string,counts:CategoryCounts){
+    const control=categoryControl({id,state:'building',source:stamp,counts});
+    return this.write(async view=>{await this.#unchanged(view,stamp);await this.db.applicationState.put({scope:categoryScope(stamp.generation),value:control as unknown as Record<string,unknown>});});
+  }
+  async categoryUnit<T>(stamp:FinancialSnapshot,id:string,work:(view:RepositorySession)=>Promise<T>){
+    return this.write(async view=>{
+      await this.#unchanged(view,stamp);const scope=categoryScope(stamp.generation),control=categoryControl((await this.db.applicationState.get(scope))?.value);
+      requireStorage(control.id===id&&control.state==='building'&&JSON.stringify(control.source)===JSON.stringify(stamp),'stale_epoch');
+      const result=await work(view),next=await this.#stamp(view);await this.db.applicationState.put({scope,value:{...control,source:next}});return {result,stamp:next};
+    });
+  }
+  async completeCategories(stamp:FinancialSnapshot,id:string){
+    return this.write(async view=>{
+      await this.#unchanged(view,stamp);const scope=categoryScope(stamp.generation),control=categoryControl((await this.db.applicationState.get(scope))?.value);
+      requireStorage(control.id===id&&control.state==='building'&&JSON.stringify(control.source)===JSON.stringify(stamp),'stale_epoch');
+      for(const table of CATEGORY_TABLES)requireStorage(await this.db.financial(table).where('generation').equals(stamp.generation).count()===control.counts[table],'invariant_violation');
+      await this.db.applicationState.put({scope,value:{...control,state:'ready'}});
+    });
   }
 
   async knownMirrorCurrent(stamp:FinancialSnapshot){

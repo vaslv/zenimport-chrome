@@ -84,3 +84,6 @@ export {uniqueSubset,unmatchedSides} from '../domain/reconciliation/subsets.js';
 export {singleMatches,groupMatches} from '../domain/reconciliation/matching.js';
 export {backfillOwnership,recoverTransferOwnership,blockedOwnership,ownershipClaims} from '../domain/reconciliation/ownership.js';
 export {buildCategoryEvidence,categoryContext,predictCategory} from '../domain/prediction/categories.js';
+// Private contract adapters; this runner is excluded from the product bundle.
+export {categoryPlan} from '../local/reconciliation/categories.js';
+export {sourceFacts} from '../local/reconciliation/facts.js';

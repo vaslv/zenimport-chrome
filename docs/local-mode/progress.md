@@ -1153,3 +1153,28 @@ financial routing/writer, live data/API, push, tags or publication.
 L8 still needs atomic derived category cache publication/invalidation and its exit
 integration gates. L9–L12 remain pending. New SDK financial requests and product
 local routing remain disabled. No live API/data, push, tags or publication.
+
+
+### L8.8 — atomic category cache publication
+
+- Added the raw-source category plan, bounded 200-row cache builder and private
+  publication marker. Readers require a complete ready cache for the exact current
+  source/authority stamp. Imported cache rows alone never grant readiness.
+- Cache changes preserve delivery identity/payload and mark only changed
+  never-attempted prepared intents for rebuilding. Own invalidation flags and
+  source/build revisions commit together.
+- Added real worker-death, quota, changed-source and superseding-builder tests;
+  partial cache data remains unreadable. 100k pending rows build within the
+  per-native-transaction 10-second guard; unchanged-source retry reuses results.
+- Independent final reviews are clean; see reviews/l8-category-cache-2026-10-21.md.
+  Docker: 216 unit/contracts with strict/generated checks; eight native cases in
+  167.58s; 42 source/native parity cases in 82.38s; 30 additional actual Python
+  contracts in 49.24s. Logs: /tmp/zenimport-l8-category-*.log.
+
+Final gates: mirror/snapshot 36 passed in 267.86s; minimum Chrome 140 seven
+cache cases passed in 54.02s (100k volume already passed on current browser);
+current product browser regressions 14 passed, two preexisting environment skips
+in 90.14s. Both skipped cases remain skips, not evidence of successful coverage.
+
+L8 is complete. L9–L12 remain pending. No local product routing/writer or live
+data/API, push, tags or publication.

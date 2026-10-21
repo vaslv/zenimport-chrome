@@ -103,10 +103,11 @@ export class RepositorySession{
     });
   }
   /** Bounded primary-key page for private optimistic snapshot readers. */
-  async page<K extends TableName>(table:K,after:string|null=null){
+  async page<K extends TableName>(table:K,after:string|null=null,size=500){
     return this.#guard(async()=>{
+      requireStorage(Number.isInteger(size)&&size>0&&size<=500,'invariant_violation');
       const scope=this.#scope(table),values=await this.#db.financial(table).where('[generation+key]')
-        .between([scope,after??Dexie.minKey],[scope,Dexie.maxKey],after===null,true).limit(500).toArray();
+        .between([scope,after??Dexie.minKey],[scope,Dexie.maxKey],after===null,true).limit(size).toArray();
       return {after:values.at(-1)?.key??null,rows:values.map(value=>unpackRow(table,this.#checked(table,value)!))};
     });
   }

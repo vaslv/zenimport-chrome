@@ -114,4 +114,32 @@ def test_actual_python_and_browser_evidence_and_prediction_match(tmp_path,case):
             }''',payload)
             assert actual['predictions']==expected['predictions']
             for table in ('payments','evidence'):assert sorted(actual[table],key=lambda r:json.dumps(r,sort_keys=True))==sorted(expected[table],key=lambda r:json.dumps(r,sort_keys=True)),(case,table)
+            # Compare the new raw-row category adapter independently of the older
+            # manually normalized domain fixture above. All SQLite INTEGER cells
+            # use the frozen exact int64 storage codec; embedded raw JSON stays
+            # byte-for-byte intact and is decoded by the published TypeScript SDK.
+            tables=('bank_accounts','bank_transactions','bank_versions','bank_processing','bank_exclusions','zen_exclusions','zen_entities','zen_tombstones','zen_mirror_state','account_bindings','category_choices','recipient_rules','deliveries','processing_receipts','link_groups','link_bank_members','link_zen_members')
+            with storage.transaction(f.path) as db:
+                predictions.prepare(db,now)
+                rows={}
+                for table in tables:
+                    integers={r[1] for r in db.execute('PRAGMA table_info('+table+')') if r[2].upper()=='INTEGER'}
+                    rows[table]=[{k:str(v) if k in integers and v is not None else v for k,v in dict(r).items()} for r in db.execute('SELECT * FROM '+table)]
+                expected_cache={key:[dict(r) for r in db.execute('SELECT * FROM category_'+table)] for key,table in [('evidence','evidence'),('payments','payments'),('predictions','predictions')]}
+                for values in expected_cache.values():
+                    for row in values:
+                        for key in ('eligible','bank_revision','mirror_generation','updated_at'):
+                            if key in row:row[key]=str(row[key])
+            source=dict(rows=rows,stamp=dict(credentialRef='fixture',mirrorControl=json.dumps(dict(lease=None,forceFull=False,error=None,failures='0',nextAt='0',projectionGeneration=None))))
+            cache=worker.evaluate('args=>domain.categoryPlan(args.source,domain.sourceFacts(args.source),String(args.now))',dict(source=source,now=now))
+            def canonical_rows(values):
+                result=[]
+                for row in values:
+                    row=dict(row)
+                    for field in ('zen_ids_json','candidates_json'):
+                        if field in row:row[field]=json.loads(row[field])
+                    result.append(row)
+                return sorted(result,key=lambda r:json.dumps(r,sort_keys=True))
+            for table in ('evidence','payments','predictions'):assert canonical_rows(cache[table])==canonical_rows(expected_cache[table]),(case,table)
+
     finally:f.close()
