@@ -1301,3 +1301,23 @@ unreachable through product local routing; only isolated private fixtures can us
 it until later gates pass. No production API/data, push, Git tags or publication.
 Final strict/generated checks and all 224 unit/contract tests passed on the final
 L9 source (923.66ms test execution); no unit skips or failures.
+
+### L10.1 — fresh server identity and authenticated portable transport
+
+- Added a read-only fresh server identity check without publishing a mirror cursor
+  or clearing holds. The shared portable-v2 HTTP contract adds this route; existing
+  commands and ordinary API v1 remain unchanged.
+- Added bounded, permission-checked participant transport with exact receipt/task
+  context binding, checksum-verified chunks and no automatic command retry.
+- Independent API/adversarial final reviews are clean after context-binding fixes.
+  Native Chrome exposed and verified a fetch receiver fix absent from Node mocks.
+  See reviews/l10-transport-2026-10-21.md.
+- Docker: 231 unit/contracts with strict/generated checks; 32 Python portable API/
+  service/contracts tests (11.98s); actual installed Chrome to isolated Python
+  HTTP API identity/auth/permission test (3.29s). One preexisting Starlette warning
+  in Python runs. Logs: /tmp/zenimport-l10-identity*.log and
+  /tmp/zenimport-l10-remote-*.log.
+
+L10 remains in progress: durable mode-switch orchestration, verified transfer,
+first-sync gate and archive-only recovery. No product local routing, production
+API/data, push, Git tags or publication.

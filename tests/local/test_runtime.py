@@ -21,6 +21,7 @@ import * as authorityProbe from './authority.mjs';globalThis.authorityProbe=auth
 import * as applicationProbe from './application.mjs';globalThis.applicationProbe=applicationProbe;
 import * as mirrorProbe from './mirror.mjs';globalThis.mirrorProbe=mirrorProbe;
 import * as portableProbe from './portable.mjs';globalThis.portableProbe=portableProbe;
+import * as migrationProbe from './migration.mjs';globalThis.migrationProbe=migrationProbe;
 globalThis.probe=probe;globalThis.boot=crypto.randomUUID();
 chrome.runtime.onMessage.addListener((data,sender,reply)=>{
   if(data.type==='mirror-probe'){mirrorProbe.run(data.action,data.args).then(reply);return true;}
@@ -57,6 +58,7 @@ def prepare_extension(path, *, hosts=()):
     shutil.copyfile('/app/.local/probes/application.mjs',path/'application.mjs')
     shutil.copyfile('/app/.local/probes/mirror.mjs',path/'mirror.mjs')
     shutil.copyfile('/app/.local/probes/portable.mjs',path/'portable.mjs')
+    shutil.copyfile('/app/.local/probes/migration.mjs',path/'migration.mjs')
 
 
 @contextmanager

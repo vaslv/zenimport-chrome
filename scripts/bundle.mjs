@@ -14,6 +14,7 @@ for(const [entry,outfile] of [
   ['src/local/storage/application-probe.ts','.local/probes/application.mjs'],
   ['src/local/storage/mirror-probe.ts','.local/probes/mirror.mjs'],
   ['src/local/portable/probe.ts','.local/probes/portable.mjs'],
+  ['src/local/migration/probe.ts','.local/probes/migration.mjs'],
 ]) {
   const result=await build({entryPoints:[entry],outfile,bundle:true,platform:'browser',
     format:'esm',target:'chrome120',metafile:true,legalComments:'inline'});
