@@ -110,20 +110,38 @@ export class SwitchJournalRepository{
       return value as {requestId:string;state:'requested'|'forward'|'finished'};
     });
   }
-  async requestCancel(id:string,requestId:string){
+  async requestCancel(id:string,requestId:string,authenticatedSource?:unknown){
     participantUuid(id);participantUuid(requestId);const marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant((await this.db.applicationState.get(head))?.value.id===id,'migration_busy');
       const value=switchJournal((await this.db.applicationState.get(scope(id)))?.value);
       if(['complete','cancelled'].includes(value.phase))return value.phase;
       const previous=(await this.db.applicationState.get(cancelScope(id)))?.value;
-      if(previous){requireParticipant(['requested','forward','finished'].includes(previous.state as string));return previous.state;}
-      const native=await this.db.switches.get(id),unused=value.commands.length===0&&value.receipts.length===0&&native===undefined&&root.pendingSwitchId!==id;
+      if(previous)requireParticipant(['requested','forward','finished'].includes(previous.state as string));
+      const native=await this.db.switches.get(id);let unused=value.commands.length===0&&value.receipts.length===0&&native===undefined&&root.pendingSwitchId!==id;
       if(!unused)await this.#root(value,root);
+      const start=value.commands.length===1&&value.commands[0].side==='source'&&value.commands[0].command==='source_start'?value.commands[0]:null;
+      const observed=authenticatedSource===undefined?null:checkedStatus(authenticatedSource,id);
+      const rejected=start!==null&&observed!==null&&observed.installation_id===value.plan.sourceId&&observed.operation_id!==id&&observed.operation===null&&observed.receipts.length===0&&BigInt(observed.participant_epoch)>BigInt(start.request.expected_epoch as string);
+      if((value.commands.length===0||rejected)&&value.receipts.length===0&&native?.role==='destination'&&native.state==='pending'){
+        // Either no command could have dispatched, or authenticated permanent
+        // source status proves our saved CAS was not accepted and can never be
+        // accepted at the now higher epoch. Revoke only our unused native slot;
+        // never modify the foreign source operation or fabricate a peer receipt.
+        const dataset=datasetControl(await this.db.datasets.get(native.generation)),participant=participantControl(await this.db.participants.get(dataset.participantId));
+        requireParticipant(dataset.lifecycle==='staging'&&dataset.holdId===id&&participant.state==='active'&&participant.operationId===null&&!participant.everActivated&&
+          (await this.db.migrationOperations.get([participant.id,id]))===undefined&&await this.db.stages.get(dataset.generation)===undefined&&
+          await this.db.migrationChunks.where('[participantId+switchId]').equals([participant.id,id]).count()===0,'migration_paused');
+        if(rejected)await this.db.applicationState.add({scope:'mode-switch-rejected:'+id+':'+start!.request.request_id,
+          value:{side:'source',command:'source_start',request:start!.request,reason:'foreign_source_epoch',observedEpoch:observed!.participant_epoch,proof:observed!,replacementId:null}});
+        await this.db.datasets.put({...dataset,lifecycle:'discarded',holdId:null});await this.db.switches.put({...native,state:'cancelled'});
+        await this.db.runtime.put({...root,pendingSwitchId:null,epoch:int64(String(BigInt(root.epoch)+1n))});unused=true;
+      }
+      if(previous&&!unused)return previous.state;
       const forward=value.receipts.some(proof=>proof.command==='source_handoff');
-      const next=switchJournal({...value,phase:unused?'cancelled':value.phase,lease:null,revision:String(BigInt(value.revision)+1n)});
+      const next=switchJournal({...value,commands:unused?[]:value.commands,phase:unused?'cancelled':value.phase,lease:null,revision:String(BigInt(value.revision)+1n)});
       await this.db.applicationState.put({scope:scope(id),value:cloneRecord(next)});
-      await this.db.applicationState.put({scope:cancelScope(id),value:{requestId,state:unused?'finished':forward?'forward':'requested'}});
+      await this.db.applicationState.put({scope:cancelScope(id),value:{requestId:previous?.requestId??requestId,state:unused?'finished':forward?'forward':'requested'}});
       return unused?'cancelled':forward?'forward':'requested';
     });
   }

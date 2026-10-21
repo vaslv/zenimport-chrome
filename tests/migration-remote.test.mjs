@@ -76,3 +76,15 @@ test('a reply cannot substitute another peer with an otherwise valid receipt',as
   const client=new RemoteParticipant(config,async()=>true,async()=>json({receipt:wrong,work:null}));
   await assert.rejects(client.command('destination_start',request),code('migration_invalid'));
 });
+
+test('quiescence replies bind the physical participant and exact observed epoch',async()=>{
+  let reply={installation_id:id(1),participant_epoch:'7',ready:false},requests=0;
+  const client=new RemoteParticipant(config,async()=>true,async(url,options)=>{
+    requests++;assert.ok(url.endsWith('/quiesce'));assert.equal(options.method,'POST');
+    assert.deepEqual(JSON.parse(options.body),{installation_id:id(1),expected_epoch:'7'});return json(reply);
+  });
+  assert.equal(await client.quiesce(id(1),'7'),false);reply={...reply,ready:true};assert.equal(await client.quiesce(id(1),'7'),true);
+  reply={...reply,participant_epoch:'8'};await assert.rejects(client.quiesce(id(1),'7'),code('migration_invalid'));
+  reply={...reply,participant_epoch:'7',installation_id:id(2)};await assert.rejects(client.quiesce(id(1),'7'),code('migration_invalid'));
+  assert.equal(requests,4);
+});

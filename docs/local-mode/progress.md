@@ -1448,3 +1448,33 @@ No live API/data, push, Git tags or publication.
 L10 production transfer ports, used-server joins, backups and archive-only restore
 remain in progress; local product routing is still disabled. No live API/data,
 push, Git tags or publication.
+
+### L10.8 — production live-transfer controller and source quiescence
+
+- Connected protected local/server candidates, fresh physical/owner verification,
+  journal and real participant adapters through ModeTransfers. Native quiescence
+  stops a capture or recovers an expired outbox, never dispatching a new send.
+  The server's additive authenticated /quiesce stops one capture under its writer
+  gate. Final source_start still checks all capture/outbox conditions.
+- Remote descriptor/Root selection commit atomically. A lost source-start reply
+  recovers its receipt through the existing hold. Imported server sources must
+  receive an explicit Sync before reverse migration can reserve anything.
+- API/adversarial reviews fixed monotonic Root activity, awaiting-Sync eligibility
+  and a competing-client hold stranding a native reservation. The latter requires
+  either no saved command or authenticated proof the exact old CAS was rejected
+  forever; retained audit, cancellation and Root/lease restoration are atomic.
+  Adapter construction is also bound to the same journal ID before claiming work.
+  Final reviews are clean; see reviews/l10-controller-2026-10-21.md.
+- Docker strict/generated/bundle checks and all 247 unit/contracts passed in
+  1226.80ms. Combined actual Python HTTP/native journal/authority/first-Sync:
+  62 passed in 182.11s, one existing Starlette warning. Final actual controller
+  HTTP gate after the adapter-ID fence: nine passed in 26.87s. Minimum Chrome 140:
+  27 native journal/cancellation/quiescence cases passed in 207.52s, including
+  unused reservation cancellation before/after acknowledgment and quota rollback.
+  Real controller browser→Python→fresh browser roundtrip preserves exact graph,
+  awaiting-Sync and zero SDK financial writes. Foreign-source holds stay untouched.
+  Logs: /tmp/zenimport-l10-controller-*.log. Synthetic isolated services only.
+
+L10 remains in progress: used-server/no-import joins, backup/export, replacement
+consent and archive-only restore. Local product routing remains disabled until
+L10/L11 gates. No live API/data, push, Git tags or publication.

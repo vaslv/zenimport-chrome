@@ -36,6 +36,12 @@ export class RemoteParticipant{
   }
   async capabilities(){return capabilities(await this.#request('/capabilities'));}
   async identity(){return identity(await this.#request('/identity','POST',{}));}
+  async quiesce(installationId:string,epoch:string){
+    participantUuid(installationId);participantInteger(epoch);
+    const value=object(await this.#request('/quiesce','POST',{installation_id:installationId,expected_epoch:epoch}));
+    requireParticipant(Object.keys(value).sort().join(',')==='installation_id,participant_epoch,ready'&&value.installation_id===installationId&&value.participant_epoch===epoch&&typeof value.ready==='boolean');
+    return value.ready;
+  }
   async status(switchId:string){participantUuid(switchId);return status(await this.#request('/switches/'+switchId),switchId);}
   async command(command:Exclude<ParticipantCommand,'source_seal'>,input:unknown){
     requireParticipant((command as string)!=='source_seal');const {request}=participantRequest(command,input),value=object(await this.#request('/commands/'+command,'POST',request));

@@ -1,5 +1,8 @@
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
+import {ModeTransfers} from '../migration/controller.js';
+import {mirrorReader} from '../zenmoney/reader.js';
+import type {StorageArea} from '../../application/state.js';
 import {trustedSentinel} from '../../control/sentinel.js';
 import {MigrationOwner} from './migration-owner.js';
 import type {PeerStatus} from './migration-owner.js';
@@ -75,7 +78,36 @@ export async function run(action:string,args:Arguments){
     else if(action==='drop-marker'){await native().remove(['l4-authority:'+args.name+':localDatasetSentinel']);value=true;}
     else{
       const owner=owners.get(args.name);if(!owner)throw Error('missing_fixture_owner');
-      if(action==='remote-peer'){
+      if(action.startsWith('transfer-')){
+        const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
+        const transfer=await ModeTransfers.open({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,clock:()=>Number(args.now??now),
+          serverPermission:url=>chrome.permissions.contains({origins:[new URL(url).origin+'/*']}),
+          reader:mirrorReader({permission:async()=>true,fetch:async(_url,options)=>{
+            const body=JSON.parse(String(options?.body));if(body.transaction||body.deletion)throw Error('fixture_financial_write_forbidden');
+            return Response.json({serverTimestamp:1792540800,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
+          }}),
+        });
+        try{
+          if(action==='transfer-credential'){
+            const candidate=await transfer.localCredentials.verifyToken('synthetic-local-sdk-token'),mirror=await MirrorRepository.open(args.name,port(args.name));
+            try{const {root}=await mirror.context();await mirror.adopt(root,candidate.ref,candidate.owners);}finally{mirror.close();}value=candidate;
+          }else if(action==='transfer-candidate')value=await transfer.serverCredentials.verify({url:args.url!,token:args.token!},['1']);
+          else if(action==='transfer-to-server')value=await transfer.toServer(args.credentialRef!);
+          else if(action==='transfer-to-browser'){
+            const candidate=await transfer.localCredentials.verifyToken('synthetic-local-sdk-token');value=await transfer.toBrowser(candidate.ref,{pauseSharedServer:args.mode!=='no-consent'});
+          }else if(action==='transfer-step')value=await transfer.run();
+          else if(action==='transfer-current')value=await transfer.current();
+          else if(action==='transfer-cancel'){
+            const add=IDBObjectStore.prototype.add;
+            if(args.mode==='quota-cancel')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-switch-rejected:'))throw new DOMException('synthetic-cancel-audit-quota','QuotaExceededError');return add.apply(this,values);};
+            try{value=await transfer.cancel(args.switchId!,args.requestId!);}finally{IDBObjectStore.prototype.add=add;}
+          }
+          else throw Error('unknown_transfer_fixture');
+        }finally{transfer.close();}
+      }else if(action==='quiesce-local')value=await owner.quiesceLocal(args.request as Parameters<MigrationOwner['quiesceLocal']>[0],args.now??now);
+      else if(action==='remote-context'){
+        const control=await RemoteControl.open(args.name,port(args.name));try{value=await control.remoteContext(await control.read());}finally{control.close();}
+      }else if(action==='remote-peer'){
         const client=new RemoteParticipant({url:args.url!,token:args.token!},async()=>{
           const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
           return chrome.permissions.contains({origins:[new URL(args.url!).origin+'/*']});

@@ -321,3 +321,34 @@ def test_rejected_cas_audit_and_replacement_roll_back_together(pair):
         if result['state']=='cancelled':break
     else:raise AssertionError(result)
     assert len(ok(worker,'journal-rejected',switchId=pair.switch))==1
+
+
+def test_quiescence_accepts_only_monotonic_financial_activity(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        initial=ok(worker,'create')['root'];assert not initial['financialMayHaveStarted']
+        ok(worker,'seed',fixture=FIXTURE)
+        assert ok(worker,'current')['root']['financialMayHaveStarted']
+        assert ok(worker,'quiesce-local',request=initial)
+        ok(worker,'credential',credentialRef=str(uuid4()))
+        assert call(worker,'quiesce-local',request=initial)['code']=='migration_busy'
+
+
+@pytest.mark.parametrize('acknowledged',[False,True])
+def test_unused_remote_destination_abort_fences_late_coordinator(pair,acknowledged):
+    pair,_,_=pair;worker=pair.worker;proof=pair.handoff();pair.command('target','destination_activate',peer_receipt=proof)
+    ok(worker,'select-remote',participantId=pair.source,switchId=pair.switch,credentialRef=str(uuid4()))
+    before=ok(worker,'current')['root'];switch,credential=str(uuid4()),str(uuid4())
+    ok(worker,'journal-create',switchId=switch,peerId=pair.target,credentialRef=credential,mode='remote-to-local')
+    lease=ok(worker,'journal-claim',switchId=switch)
+    slot=ok(worker,'reserve',switchId=switch,peerId=pair.target,credentialRef=credential)
+    if acknowledged:ok(worker,'journal-reserve',lease=lease,participantId=slot['participantId'],generation=slot['generation'])
+    reserved=ok(worker,'current')['root']
+    assert call(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()),mode='quota')['code']=='quota_exceeded'
+    assert ok(worker,'current')['root']==reserved
+    assert ok(worker,'journal-current')['lease']['id']==lease['id']
+    assert ok(worker,'journal-cancel',switchId=switch,requestId=str(uuid4()))=='cancelled'
+    root=ok(worker,'current')['root'];assert root['activeMode']=='remote' and root['credentialRef']==before['credentialRef'] and root['pendingSwitchId'] is None
+    assert int(root['epoch'])==int(before['epoch'])+2
+    assert call(worker,'journal-command',lease=lease)['code']=='migration_busy'
+    assert call(worker,'reserve',switchId=switch,peerId=pair.target,credentialRef=credential)['code']=='migration_invalid'
+    assert pair.status('target')['state']=='active' and pair.status('source')['state']=='handed_off'

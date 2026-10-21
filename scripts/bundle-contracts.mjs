@@ -44,3 +44,4 @@ await build({entryPoints:['src/local/migration/wire.ts'],outfile:'.local/contrac
 
 await build({entryPoints:['src/local/migration/journal.ts'],outfile:'.local/contracts/migration-journal.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/local/migration/credentials.ts'],outfile:'.local/contracts/migration-credentials.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+await build({entryPoints:['src/local/migration/runner.ts'],outfile:'.local/contracts/migration-runner.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});

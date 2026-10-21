@@ -1,6 +1,10 @@
 import {readOutbox} from './outbox-control.js';
 /** Existing-store control owner. Never exposed to bank/page messages. */
 import Dexie from 'dexie';
+import {CaptureRepository} from './capture-repository.js';
+import {OutboxRepository} from './outbox-repository.js';
+import {unpackRow} from './cells.js';
+import type {RemoteDescriptor} from './remote-control.js';
 import {sha256} from '@noble/hashes/sha2.js';
 import {bytesToHex} from '@noble/hashes/utils.js';
 import type {SentinelPort,DatasetSentinel,RuntimeControl,DatasetControl} from '../../control/types.js';
@@ -81,6 +85,26 @@ export class MigrationOwner{
       const root=await assertAnchor(this.#db,anchor);const dataset=root.activeGeneration?datasetControl(await this.#db.datasets.get(root.activeGeneration)):null;
       return {root,participantId:dataset?.participantId??null,anchorGeneration:anchor.generation};
     });
+  }
+  /** One bounded pre-hold unit; stopping a capture never invents completeness. */
+  async quiesceLocal(expected:RuntimeControl,now:string){
+    const anchor=await this.#anchor();
+    const pending=await this.#db.transaction('r',this.#db.tables,async()=>{
+      const root=await assertAnchor(this.#db,anchor);
+      requireParticipant((!expected.financialMayHaveStarted||root.financialMayHaveStarted)&&same({...root,financialMayHaveStarted:expected.financialMayHaveStarted},expected)&&root.activeMode==='local'&&root.activeGeneration!==null&&root.pendingSwitchId===null,'migration_busy');
+      const capture=await this.#db.financial('capture_jobs').where('[generation+i0]')
+        .between([root.activeGeneration,Dexie.minKey],[root.activeGeneration,Dexie.maxKey],true,true).first();
+      return {job:capture?unpackRow('capture_jobs',capture.row).id:null,outbox:await readOutbox(this.#db,root.activeGeneration)};
+    });
+    const fence={installationId:expected.installationId,generation:expected.activeGeneration!,epoch:expected.epoch};
+    if(pending.job){const capture=await CaptureRepository.open(this.#db.name,this.#port,fence);
+      try{await capture.stop(pending.job,now);}finally{capture.close();}return false;}
+    if(pending.outbox&&pending.outbox.phase!=='settled'){
+      if(BigInt(pending.outbox.deadline)>BigInt(now))return false;
+      const outbox=await OutboxRepository.open(this.#db.name,this.#port,fence);
+      try{await outbox.recover(now);}finally{outbox.close();}return false;
+    }
+    return true;
   }
   async #empty(generation:string){
     for(const name of ['capture_jobs','bank_transactions','deliveries','processing_receipts','processing_targets'] as const)
@@ -340,8 +364,9 @@ export class MigrationOwner{
     return this.#command(participantId,'source_seal',{request_id:op.archiveId,switch_id:switchId,expected_epoch:snapshot.control.epoch,
       dataset_digest:result.manifest.dataset_digest,archive_sha256:result.archiveSha256,archive_size:String(result.bytes)},now,{sha256:archived.sha256,size:archived.size,nonce});
   }
-  async selectRemote(participantId:string,switchId:string,remoteContextRef:string){
-    participantUuid(remoteContextRef);const snapshot=await this.#snapshot(participantId,switchId);
+  async selectRemote(participantId:string,switchId:string,remoteContextRef:string,descriptor?:RemoteDescriptor){
+    participantUuid(remoteContextRef);if(descriptor){participantUuid(descriptor.contextId);requireParticipant(typeof descriptor.url==='string'&&typeof descriptor.legacy==='boolean');}
+    const snapshot=await this.#snapshot(participantId,switchId);
     if(snapshot.transfer?.state==='remote'){
       requireParticipant(snapshot.transfer.credentialRef===remoteContextRef);return;
     }
@@ -349,6 +374,7 @@ export class MigrationOwner{
     const anchor=await this.#anchor();await this.#db.transaction('rw',this.#db.tables,async()=>{
       const root=await assertAnchor(this.#db,anchor);requireParticipant(same(root,snapshot.root)&&same(await this.#db.participants.get(participantId),snapshot.control),'migration_busy');
       const epoch=increment(root.epoch);
+      if(descriptor){const saved=await this.#db.remoteContexts.get(remoteContextRef);requireParticipant(saved===undefined||same(saved,{id:remoteContextRef,...descriptor}));if(!saved)await this.#db.remoteContexts.add({id:remoteContextRef,...descriptor});}
       await this.#db.runtime.put({...root,activeMode:'remote',activeGeneration:null,pendingSwitchId:null,credentialRef:remoteContextRef,credentialEpoch:increment(root.credentialEpoch),epoch});
       await this.#db.switches.put({...snapshot.transfer!,state:'remote',credentialRef:remoteContextRef,routingEpoch:epoch});
     });

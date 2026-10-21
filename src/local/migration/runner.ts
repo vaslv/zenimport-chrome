@@ -99,6 +99,10 @@ export class SwitchRunner{
   }
   async #cancel(value:SwitchJournal,lease:SwitchLease):Promise<SwitchProgress['state']>{
     const plan=value.plan,status=await this.#status(value,'source');
+    if(plan.direction==='remote-to-local'&&status.operation_id!==plan.id&&value.receipts.length===0){
+      const cancellation=await this.journal.cancellation(plan.id);requireParticipant(cancellation!==null);
+      if(await this.journal.requestCancel(plan.id,cancellation.requestId,status)==='cancelled')return 'cancelled';
+    }
     const intended=value.commands.find(row=>row.command==='source_handoff');
     const handed=intended?status.receipts.find(proof=>proof.request_id===intended.request.request_id):undefined;
     if(handed){
@@ -130,8 +134,9 @@ export class SwitchRunner{
     if(!value.receipts.some(proof=>proof.command==='source_resume'))return await this.#command(value,lease,'source','source_resume',this.#proof(value,'destination_discard'))?'progress':'waiting';
     await this.journal.finishCancel(lease,this.#now());return 'cancelled';
   }
-  async run():Promise<SwitchProgress>{
+  async run(expectedId?:string):Promise<SwitchProgress>{
     const value=await this.journal.current();if(!value)return {state:'idle'};
+    if(expectedId!==undefined&&value.plan.id!==expectedId)return {state:'busy',code:'migration_busy'};
     if(value.phase==='complete'||value.phase==='cancelled')return {state:value.phase,phase:value.phase};
     const lease=await this.journal.claim(value.plan.id,this.#now());if(!lease)return {state:'busy',phase:value.phase};
     let error:string|null=null;
