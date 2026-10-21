@@ -40,5 +40,13 @@ export class RepositoryOwner{
       try{return await operation(view);}catch(error){if(error instanceof CaptureError)rejection=error;throw error;}
     });}catch(error){throw rejection??error;}
   }
+  /** A business failure may intentionally commit its paused/failed evidence. */
+  async command<T>(operation:(view:RepositorySession)=>Promise<T>):Promise<T>{
+    const result=await this.write(async view=>{
+      try{return {ok:true as const,value:await operation(view)};}
+      catch(error){if(error instanceof CaptureError&&error.persist)return {ok:false as const,error};throw error;}
+    });
+    if(!result.ok)throw result.error;return result.value;
+  }
   close(){this.db.close();}
 }

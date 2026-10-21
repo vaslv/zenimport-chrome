@@ -43,7 +43,8 @@ export function discovery(input:unknown):DiscoverConnection{
     if(row.supported)requireCapture(caps.currencies.includes(currency)&&({VND:0,USD:2,EUR:2} as Record<string,number>)[currency]===scale&&(bank!=='bidv'||currency==='VND'&&scale===0),'unsupported_currency');
     return {source_key,identity_scope,currency,scale,supported:row.supported,label:text(row.label,0,2000),masked_number:text(row.masked_number,0,120),unsupported_reason:reason};
   });
-  return {bank,connector_version:text(value.connector_version,1,40),profile_key:text(value.profile_key),profile_identity:value.profile_identity,
+  const version=text(value.connector_version,1,40);requireCapture(version!=='legacy-v12');
+  return {bank,connector_version:version,profile_key:text(value.profile_key),profile_identity:value.profile_identity,
     capabilities:caps,accounts_complete:value.accounts_complete,accounts,label:value.label==null?null:name(value.label)};
 }
 export type LocalSettings=Omit<AccountSettings,'expected_version'>&{expected_version:string};

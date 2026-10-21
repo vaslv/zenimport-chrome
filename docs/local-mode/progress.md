@@ -955,3 +955,40 @@ L7 remains in progress. The next point is durable local capture requests,
 immutable account/plan snapshots, leases, pages and completion. Ordinary imported
 awaiting-sync writes are still blocked; the later first-sync wiring must release
 that fence explicitly. Local product routing and L8–L12 are not enabled.
+
+### L7.3 — durable capture and existing connector acceptance
+
+- Added normalized local start/status/lease/page/completion/pause/stop commands.
+  Request IDs, immutable job context/account plans, physical-account locks and
+  120-second lease epochs survive worker death. Repeated page ACKs return the
+  stored receipt even after expiry; changed bodies/totals cannot advance coverage.
+- Page facts/revisions/aliases and captured revision references commit before ACK.
+  Explicit completion alone advances coverage/frontier and satisfies reimport
+  obligations. Failure/cancellation retains already captured facts. Count-based
+  completeness avoids materializing raw payloads for all pages.
+- Added derived delivery state without financial API access. Capture can finish
+  with no configured ZenMoney credential, while downstream delivery remains pending.
+- Independent API and adversarial rechecks closed UUID normalization, state priority
+  and reserved legacy-marker findings. Backend fix 40f89dd passed 766 Docker tests.
+  See reviews/l7-capture-2026-10-21.md for the remaining large-view performance gate.
+- Actual Python/native browser parity: 15 passed in 20.73s (one existing dependency
+  warning), comprising the parity sequence plus the initial 14 capture regressions.
+  The adapter compares all 18 capture/account tables across two observations.
+- Current Chromium: the expanded 17 native capture checks passed in 35.61s before
+  the connector fixture failed on a test-only dynamic service-worker import. The
+  fixture now uses static imports; all four real driver/coordinator/local-IDB
+  acceptance cases passed in 11.90s. No production worker behavior was changed.
+- Strict typing/generated-schema checks and all 186 unit/contracts passed. Further
+  minimum-browser and existing product regression results follow below.
+
+Logs: /tmp/zenimport-l7-capture-parity.log, /tmp/zenimport-l7-capture-final.log,
+/tmp/zenimport-l7-connector.log and /tmp/zenimport-l7-capture-unit.log. No live API,
+production data/service changes, push, tags or publication.
+
+Final L7 regression gates: minimum Chrome 140 passed all 21 capture/connector cases
+in 160.16s. Current-browser settings/connections/kernel passed 22 cases in 123.72s,
+including the unchanged 100k settings budget. Existing packaged popup/connector/
+report browser suite passed 14 cases with two Python-only modules skipped in
+90.41s; those modules run separately in the Python integration target. Logs:
+/tmp/zenimport-l7-capture-minimum-final.log, /tmp/zenimport-l7-capture-regression.log,
+/tmp/zenimport-l7-product.log. Full remote HTTP integration is recorded next.

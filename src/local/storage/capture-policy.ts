@@ -5,12 +5,12 @@ import {CaptureError} from '../capture/errors.js';
 import {capabilities} from '../capture/validation.js';
 import type {RowByTable} from './schema.generated.js';
 export function connectionCapabilities(row:RowByTable['connections']){
-  try{const value=capabilities(JSON.parse(row.capabilities_json));if(!['bidv','vietinbank'].includes(row.bank)||value.details==='unavailable')throw new Error();return value;}
+  try{const value=capabilities(JSON.parse(row.capabilities_json));if(!['bidv','vietinbank'].includes(row.bank)||value.details==='unavailable'||row.connector_version==='legacy-v12')throw new Error();return value;}
   catch{throw new CaptureError('capture_context_changed');}
 }
 export const text=(value:string)=>['text',value] as const;
 export const ACTIVE=['planned','collecting','paused'];
-export function aggregate(states:readonly string[]){for(const state of [...ACTIVE,'failed','cancelled'])if(states.includes(state))return state;return 'complete';}
+export function aggregate(states:readonly string[]){for(const state of ['collecting','planned','paused','failed','cancelled'])if(states.includes(state))return state;return 'complete';}
 export async function get<K extends 'bank_accounts'|'connections'|'capture_jobs'|'capture_intervals'|'bank_transactions'>(view:RepositorySession,table:K,id:string){
   const row=await view.get(table,[text(id)]);if(!row)throw new CaptureError('not_found');return row;
 }

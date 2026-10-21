@@ -95,6 +95,26 @@ export class RepositorySession{
       return values.map(value=>unpackRow(table,this.#checked(table,value)!));
     });
   }
+  async count(table:TableName,prefix:readonly Scalar[]=[]):Promise<number>{
+    return this.#guard(async()=>{
+      requireStorage(prefix.length<=SCHEMA[table].primary.length,'schema_unsupported');const key=prefix.length?encodeKey(prefix):null,whole=prefix.length===SCHEMA[table].primary.length;
+      return key===null?this.#db.financial(table).where('generation').equals(this.#scope(table)).count():
+        this.#db.financial(table).where('[generation+key]').between([this.#scope(table),key+(whole?'':'/')],[this.#scope(table),key+(whole?'':'/\uffff')],true,true).count();
+    });
+  }
+  /** Fixed planned intervals reference immutable snapshots proved once per account. */
+  async insertCapturePlan(rows:readonly RowByTable['capture_intervals'][]){
+    return this.#guard(async()=>{
+      requireStorage(!this.#mirrorOnly&&rows.length<=500,'dataset_not_writable');const checked=new Set<string>(),values:FinancialEnvelope[]=[];
+      for(const row of rows){
+        requireStorage(row.state==='planned'&&row.total_pages===null&&row.total_records===null,'invariant_violation');
+        const key=JSON.stringify([row.job_id,row.account_id,row.settings_version]);
+        if(!checked.has(key)){const snapshot=await this.get('job_accounts',[['text',row.job_id],['text',row.account_id]]);requireStorage(snapshot!==null&&snapshot.settings_version===row.settings_version,'invariant_violation');checked.add(key);}
+        values.push(envelope(this.#generation,'capture_intervals',packRow('capture_intervals',row)));
+      }
+      if(values.length)await this.#db.financial('capture_intervals').bulkAdd(values);
+    });
+  }
 
   async #lookup(table:TableName,columns:readonly string[],values:readonly Scalar[]):Promise<TaggedRow|null>{
     this.#assert();

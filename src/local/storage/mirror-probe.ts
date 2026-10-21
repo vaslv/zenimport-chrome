@@ -20,6 +20,7 @@ import {mirrorScope,isMirrorTable} from './mirror-scope.js';
 import {MigrationOwner} from './migration-owner.js';
 import {writeTransaction,writeMirrorTransaction} from './kernel.js';
 import {AccountRepository} from './account-repository.js';
+import {CaptureRepository} from './capture-repository.js';
 let paused=false;
 export const checkpoint=()=>paused;
 let networkSerial=0,releaseRead:(()=>void)|undefined;
@@ -35,7 +36,7 @@ function area(name:string,session=false):StorageArea{
     remove:keys=>source.remove((typeof keys==='string'?[keys]:keys).map(key=>prefix+key)),
   };
 }
-export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number;data?:unknown;id?:string;accountId?:string;label?:string;version?:string}){
+export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number;data?:unknown;id?:string;accountId?:string;label?:string;version?:string;intervalId?:string;number?:number}){
   const storage=area(args.name),sentinel=trustedSentinel(storage),now=args.now??1000;let store:MirrorRepository|undefined,calls=0,maxTransactionMs=0;
   const nativeTransaction=IDBDatabase.prototype.transaction;
   IDBDatabase.prototype.transaction=function(...values:Parameters<IDBDatabase['transaction']>){
@@ -54,6 +55,22 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       return new Response(args.raw??'{"serverTimestamp":100,"user":[{"id":1}],"instrument":[{"id":2,"shortTitle":"VND"}],"account":[{"id":"a","title":"Fixture","type":"checking","instrument":2}],"tag":[],"transaction":[]}',{status:args.status??200});
     }}),credentials=new LocalCredentials(storage,area(args.name,true),store,reader,()=>now),mirror=new LocalMirror(store,credentials,reader,()=>now);
     let result:unknown;
+    if(action.startsWith('capture-')&&action!=='capture-state'){
+      const {root}=await store.context(),capture=await CaptureRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      const add=IDBObjectStore.prototype.add,put=IDBObjectStore.prototype.put;let armed=true;
+      if(args.mode==='quota-capture')IDBObjectStore.prototype.add=function(...values:Parameters<IDBObjectStore['add']>){if(armed&&this.name==='f_captured_records'){armed=false;throw new DOMException('private-capture-fixture','QuotaExceededError');}return add.apply(this,values);};
+      if(args.mode==='quota-complete')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(armed&&this.name==='f_bank_accounts'){armed=false;throw new DOMException('private-capture-fixture','QuotaExceededError');}return put.apply(this,values);};
+      try{
+        if(action==='capture-start')result=await capture.start(args.data,String(now));
+        else if(action==='capture-get')result=await capture.get(args.id!,String(now));
+        else if(action==='capture-lease')result=await capture.lease(args.id!,args.data,String(now));
+        else if(action==='capture-page')result=await capture.page(args.id!,args.intervalId!,args.number!,args.data,String(now));
+        else if(action==='capture-complete')result=await capture.complete(args.id!,args.intervalId!,args.data,String(now));
+        else if(action==='capture-pause')result=await capture.pause(args.id!,args.data,String(now));
+        else if(action==='capture-stop')result=await capture.stop(args.id!,String(now));
+        if(args.mode==='lost-capture-reply'){paused=true;await new Promise(()=>{});}
+      }finally{capture.close();IDBObjectStore.prototype.add=add;IDBObjectStore.prototype.put=put;}
+    }
     if(action==='accounts-state'||action==='seed-account-version'){
       const db=new FinancialDatabase(args.name,false);await db.open();try{const root=(await db.runtime.get('runtime'))!,generation=root.activeGeneration!,dataset=(await db.datasets.get(generation))!;
         if(action==='seed-account-version'){
@@ -178,6 +195,11 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
     const db=new FinancialDatabase(args.name,false);await db.open();
     try{
       const root=await db.runtime.get('runtime'),generation=root!.activeGeneration!,projection=await mirrorScope(db,generation);
+      if(action==='capture-state'){
+        const result:Record<string,unknown>={};for(const table of ['connections','bank_accounts','account_bindings','bank_transactions','bank_versions','bank_aliases','bank_processing','capture_jobs','job_accounts','job_context','job_requests','capture_intervals','capture_pages','captured_records','coverage','reimport_ranges','source_capture_leases','capture_errors'] as TableName[])
+          result[table]=args.summary?await db.financial(table).where('generation').equals(generation).count():(await db.financial(table).where('generation').equals(generation).toArray()).map(row=>unpackRow(table,row.row));
+        return {ok:true,result,maxTransactionMs};
+      }
       if(action==='delivery-state')result=(await db.financial('deliveries').where('generation').equals(generation).toArray()).map(row=>unpackRow('deliveries',row.row));
       const tables:Record<string,unknown>={};for(const name of ['zen_mirror_state','zen_entities','zen_movements','zen_sync_runs','zen_tags','zen_tombstones','zen_deletions'] as TableName[])
         tables[name]=args.summary?await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).count():
