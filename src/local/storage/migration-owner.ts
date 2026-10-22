@@ -1,3 +1,4 @@
+import {repairedTransportRef} from './transport-repair.js';
 import {switchJournal,sameJournal} from '../migration/journal.js';
 import {transferBudget} from './transfer-budget.js';
 import {readOutbox} from './outbox-control.js';
@@ -400,11 +401,18 @@ export class MigrationOwner{
     participantUuid(remoteContextRef);if(descriptor){participantUuid(descriptor.contextId);requireParticipant(typeof descriptor.url==='string'&&typeof descriptor.legacy==='boolean');if(descriptor.installationId!==undefined||descriptor.datasetId!==undefined){participantUuid(descriptor.installationId);participantUuid(descriptor.datasetId);}}
     const snapshot=await this.#snapshot(participantId,switchId);
     if(snapshot.transfer?.state==='remote'){
-      requireParticipant(snapshot.transfer.credentialRef===remoteContextRef);return;
+      if(snapshot.transfer.credentialRef!==remoteContextRef){
+        const db=this.#db,record=(await db.applicationState.get('mode-switch:'+switchId))?.value;
+        requireParticipant(record!==undefined&&remoteContextRef===await repairedTransportRef(db,'move',switchId,switchJournal(record).plan.remoteCredentialRef),'stale_context');
+      }
+      return;
     }
     requireParticipant(snapshot.control.state==='handed_off'&&snapshot.operation?.state==='handed_off'&&snapshot.root.pendingSwitchId===switchId,'migration_paused');
     const anchor=await this.#anchor();await this.#db.transaction('rw',this.#db.tables,async()=>{
       const root=await assertAnchor(this.#db,anchor);requireParticipant(same(root,snapshot.root)&&same(await this.#db.participants.get(participantId),snapshot.control),'migration_busy');
+      const journal=(await this.#db.applicationState.get('mode-switch:'+switchId))?.value;
+      if(journal){const plan=switchJournal(journal).plan;
+        requireParticipant(remoteContextRef===await repairedTransportRef(this.#db,'move',switchId,plan.remoteCredentialRef),'stale_context');}
       const epoch=increment(root.epoch);
       if(descriptor){const saved=await this.#db.remoteContexts.get(remoteContextRef);requireParticipant(saved===undefined||same(saved,{id:remoteContextRef,...descriptor}));if(!saved)await this.#db.remoteContexts.add({id:remoteContextRef,...descriptor});}
       await this.#db.runtime.put({...root,activeMode:'remote',activeGeneration:null,pendingSwitchId:null,credentialRef:remoteContextRef,credentialEpoch:increment(root.credentialEpoch),epoch});

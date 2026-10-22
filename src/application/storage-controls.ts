@@ -22,8 +22,8 @@ export class StorageControls{
     const result=await this.#unit(async owner=>{
       const journal=await owner.current(),join=await owner.joinCurrent();
       return {mode:this.app.context.mode,pending:this.app.root.pendingSwitchId!==null||await owner.pending(),
-        transfer:journal?{id:journal.plan.id,direction:journal.plan.direction,phase:journal.phase,error:journal.error,
-          canCancel:!['complete','cancelled'].includes(journal.phase)&&!journal.receipts.some(value=>value.command==='source_handoff')}:null,
+        transfer:journal?{id:journal.plan.id,direction:journal.plan.direction,phase:journal.phase,error:journal.error,finishingRepair:await owner.pendingRepair(journal.plan.id),
+          serverUrl:['complete','cancelled'].includes(journal.phase)?null:(await owner.serverCredentials.read(journal.plan.remoteCredentialRef)).url,canCancel:!['complete','cancelled'].includes(journal.phase)&&!journal.receipts.some(value=>value.command==='source_handoff')}:null,
         join:join?{id:join.id,phase:join.phase}:null};
     });
     await this.app.assert(true);return result;
@@ -54,6 +54,8 @@ export class StorageControls{
       return owner.toBrowser(candidate.ref,consent);
     });
   }
+  async repairLocal(id:string,token:string){await this.app.assert(true);return this.#unit(owner=>owner.repairLocal(id,token));}
+  async repairServer(id:string,token:string){await this.app.assert(true);return this.#unit(owner=>owner.repairServer(id,token));}
   async retry(id:string){await this.app.assert(true);return this.#unit(owner=>owner.retry(id));}
   async step(id:string){await this.app.assert(true);return this.#unit(owner=>owner.run(id));}
   async cancel(id:string,requestId:string){

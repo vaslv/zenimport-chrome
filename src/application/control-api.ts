@@ -35,6 +35,10 @@ export async function controlCommand(data:Record<string,unknown>,runtime:Applica
   if(type==='local-configure'){await runtime.configureLocal(text(data.token),app);return {configured:true};}
   if(type==='local-remove'){requireParticipant(app.local!==undefined,'stale_context');await app.assert();await app.local.remove();return {configured:false};}
   const controls=runtime.controls(app),archives=runtime.archives(app);
+  if(type==='storage-repair'){
+    requireParticipant(data.kind==='move'||data.kind==='recovery'||data.kind==='local','validation_error');
+    return {result:await (data.kind==='local'?controls.repairLocal(participantUuid(data.id),text(data.token)):data.kind==='move'?controls.repairServer(participantUuid(data.id),text(data.token)):archives.recovery.repairServer(app,participantUuid(data.id),text(data.token)))};
+  }
   if(type==='storage-candidate')return {candidate:await controls.serverCandidate({url:text(data.url),token:text(data.token)})};
   if(type==='storage-server'){
     const result=await controls.toServer(participantUuid(data.ref),{migrate:flag(data.migrate),acceptMissingDedupEvidence:flag(data.acceptMissingDedupEvidence)},participantUuid(data.id));

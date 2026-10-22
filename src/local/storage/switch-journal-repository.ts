@@ -1,3 +1,4 @@
+import {repairedTransportRef,repairedLocalEpoch} from './transport-repair.js';
 import {assertNoBackupPreparation} from './backup-preparation.js';
 import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Durable coordinator ownership. This journal never grants financial authority. */
@@ -75,16 +76,24 @@ export class SwitchJournalRepository{
       const dataset=datasetControl(await this.db.datasets.get(transfer.generation));
       requireParticipant(value.plan.destinationId===null||value.plan.destinationId===dataset.participantId&&value.destinationGeneration===transfer.generation,'migration_busy');
     }else requireParticipant(transfer.generation===initial.activeGeneration,'migration_busy');
+    const effectiveRemoteRef=transfer.state==='remote'?transfer.credentialRef:await repairedTransportRef(this.db,'move',value.plan.id,value.plan.remoteCredentialRef);
+    if(!local&&transfer.state==='remote'){
+      const context=await this.db.remoteContexts.get(effectiveRemoteRef!);
+      const sealed=value.receipts.find(proof=>proof.command==='source_seal');
+      requireParticipant(context===undefined?effectiveRemoteRef===value.plan.remoteCredentialRef:
+        context.installationId===value.plan.destinationId&&context.datasetId===sealed?.dataset_id,'migration_busy');
+    }
+    const localRef=await repairedTransportRef(this.db,'local',value.plan.id,value.plan.localCredentialRef),credentialEpoch=await repairedLocalEpoch(this.db,value.plan.id,initial.credentialEpoch);
     let expected:RuntimeControl;
-    if(transfer.state==='pending')requireParticipant(transfer.credentialRef===(local?value.plan.localCredentialRef:null),'migration_busy');
-    else if(transfer.state==='local'||transfer.state==='remote')requireParticipant(transfer.credentialRef===(local?value.plan.localCredentialRef:value.plan.remoteCredentialRef),'migration_busy');
-    if(transfer.state==='pending')expected={...initial,pendingSwitchId:value.plan.id,epoch:int64(String(BigInt(initial.epoch)+1n))};
-    else if(transfer.state==='cancelled')expected={...initial,epoch:int64(String(BigInt(initial.epoch)+2n))};
+    if(transfer.state==='pending')requireParticipant(transfer.credentialRef===(local?localRef:null),'migration_busy');
+    else if(transfer.state==='local'||transfer.state==='remote')requireParticipant(transfer.credentialRef===(local?localRef:effectiveRemoteRef),'migration_busy');
+    if(transfer.state==='pending')expected={...initial,credentialEpoch,pendingSwitchId:value.plan.id,epoch:int64(String(BigInt(initial.epoch)+1n))};
+    else if(transfer.state==='cancelled')expected={...initial,credentialEpoch,epoch:int64(String(BigInt(initial.epoch)+2n))};
     else{
       requireParticipant(transfer.state===(local?'local':'remote')&&value.receipts.some(proof=>proof.command==='source_handoff'),'migration_busy');
       expected={...initial,activeMode:local?'local':'remote',activeGeneration:local?transfer.generation:null,pendingSwitchId:null,
-        epoch:int64(String(BigInt(initial.epoch)+2n)),credentialRef:local?value.plan.localCredentialRef:value.plan.remoteCredentialRef,
-        credentialEpoch:int64(String(BigInt(initial.credentialEpoch)+1n))};
+        epoch:int64(String(BigInt(initial.epoch)+2n)),credentialRef:local?localRef:effectiveRemoteRef,
+        credentialEpoch:int64(String(BigInt(credentialEpoch)+1n))};
     }
     requireParticipant(sameJournal(comparable,expected)&&transfer.routingEpoch===(transfer.state==='pending'?expected.epoch:transfer.state==='cancelled'?int64(String(BigInt(initial.epoch)+1n)):expected.epoch),'migration_busy');
   }
@@ -261,10 +270,11 @@ export class SwitchJournalRepository{
       const next=switchJournal({...value,receipts:[...value.receipts,proof]});return {value:next,result:proof};
     });
   }
-  async advance(lease:SwitchLease,next:SwitchPhase,now:string){return this.#unit(lease,now,(value,root)=>{
+  async advance(lease:SwitchLease,next:SwitchPhase,now:string){return this.#unit(lease,now,async(value,root)=>{
     if(['active_pointer_committed','destination_activated','complete'].includes(next)){
       const local=value.plan.direction==='remote-to-local';
-      requireParticipant(root.activeMode===(local?'local':'remote')&&root.pendingSwitchId===null&&root.activeGeneration===(local?value.destinationGeneration:null)&&root.credentialRef===(local?value.plan.localCredentialRef:value.plan.remoteCredentialRef),'migration_paused');
+      const effectiveRemoteRef=(await this.db.switches.get(value.plan.id))?.credentialRef??null,localRef=await repairedTransportRef(this.db,'local',value.plan.id,value.plan.localCredentialRef);
+      requireParticipant(root.activeMode===(local?'local':'remote')&&root.pendingSwitchId===null&&root.activeGeneration===(local?value.destinationGeneration:null)&&root.credentialRef===(local?localRef:effectiveRemoteRef),'migration_paused');
     }
     return {value:advancePhase(value,next),result:true};
   });}

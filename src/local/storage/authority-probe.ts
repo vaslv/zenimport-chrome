@@ -1,3 +1,4 @@
+import {TransportRepairOwner} from './transport-repair.js';
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
 import {SyncError} from '../../../extension/backend-client.js';
@@ -176,6 +177,9 @@ export async function run(action:string,args:Arguments){
         else if(action==='remote-recovery-ordinary'){
           const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name);
           try{value=await (await runtime.current())!.service.accounts.catalog();}finally{runtime.close();}
+        }else if(action==='remote-recovery-repair'){
+          const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name);
+          try{value=await controller.repairServer((await runtime.current())!,args.requestId!,args.token!);}finally{runtime.close();}
         }else if(action==='remote-recovery-begin'){
           const runtime=new ApplicationRuntime(native() as StorageArea,port(args.name),args.name);
           try{const app=(await runtime.current())!;value=await controller.begin(app,args.requestId!,{formerWritersRetired:true,acceptPostSnapshotEvidenceLoss:true});}
@@ -254,10 +258,17 @@ export async function run(action:string,args:Arguments){
           else if(action==='backup-clean')value=await backup.clean(args.requestId!);
         }finally{backup.close();}
       }else if(action.startsWith('transfer-')){
+        if(args.mode==='pause-repair-identity')checkpoint=false;
         const chrome=(globalThis as unknown as {chrome:{permissions:{contains(value:{origins:string[]}):Promise<boolean>}}}).chrome;
         const transfer=await ModeTransfers.open({name:args.name,sentinel:port(args.name),persistent:native() as StorageArea,clock:()=>Number(args.now??now),...(args.request?{expectedRoot:args.request as Parameters<MigrationOwner['quiesceLocal']>[0]}:{}),
           serverPermission:url=>chrome.permissions.contains({origins:[new URL(url).origin+'/*']}),
+          ...(args.mode==='pause-repair-identity'?{fetch:async(input:RequestInfo|URL,init?:RequestInit)=>{
+            const response=await globalThis.fetch(input,init);
+            if(String(input).endsWith('/identity')){checkpoint=true;await new Promise<void>(resolve=>{release=resolve;});}
+            return response;
+          }}:{}),
           reader:mirrorReader({permission:async()=>true,fetch:async(_url,options)=>{
+            if(args.mode==='expired-sdk'&&new Headers(options?.headers).get('Authorization')!=='Bearer synthetic-replacement-sdk-token')return new Response('',{status:401});
             const body=JSON.parse(String(options?.body));if(body.transaction||body.deletion)throw Error('fixture_financial_write_forbidden');
             return Response.json({serverTimestamp:1792540800,user:[{id:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
           }}),
@@ -274,10 +285,14 @@ export async function run(action:string,args:Arguments){
           else if(action==='transfer-join-current')value=await transfer.joinCurrent();
           else if(action==='transfer-join-cancel')value=await transfer.cancelJoin(args.requestId!);
           else if(action==='transfer-step'){
+            const adopt=TransportRepairOwner.prototype.adoptSelected;
+            if(args.mode==='crash-before-adoption')TransportRepairOwner.prototype.adoptSelected=async()=>{};
             const put=IDBObjectStore.prototype.put;
             if(args.mode==='quota-route')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-join:')&&values[0]?.value?.phase==='complete')throw new DOMException('synthetic-route-quota','QuotaExceededError');return put.apply(this,values);};
-            try{value=await transfer.run(args.switchId);if(args.mode==='drop-join-reply'&&(value as {state:string}).state==='complete')throw new ParticipantError('backend_unavailable');}finally{IDBObjectStore.prototype.put=put;}
+            try{value=await transfer.run(args.switchId);if(args.mode==='drop-join-reply'&&(value as {state:string}).state==='complete')throw new ParticipantError('backend_unavailable');}finally{IDBObjectStore.prototype.put=put;TransportRepairOwner.prototype.adoptSelected=adopt;}
           }
+          else if(action==='transfer-repair-local')value=await transfer.repairLocal(args.switchId!,args.token!);
+          else if(action==='transfer-repair-server')value=await transfer.repairServer(args.switchId!,args.token!);
           else if(action==='transfer-retry')value=await transfer.retry(args.switchId!);
           else if(action==='transfer-current')value=await transfer.current();
           else if(action==='transfer-cancel'){

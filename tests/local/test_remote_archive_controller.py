@@ -179,3 +179,41 @@ def test_unknown_activation_cannot_revoke_its_dispatch_and_is_recovered_forward(
             assert advance(worker,page,id,'complete')['phase']=='activated'
             assert ok(worker,'remote-recovery-ordinary',NAME)['accounts'] and not target.remote.writes
     finally:target.close()
+
+
+@pytest.mark.parametrize('stage',['upload','activated','cancelled'])
+def test_replacement_server_token_resumes_same_recovery_and_terminal_cleanup(tmp_path,stage):
+    from test_migration_remote import rotate_server_token
+    from test_authority import call as authority_call
+    raw=archive(tmp_path);target=DeliveryHarness(tmp_path/'target.sqlite3');target.app.state.archives.start()
+    try:
+        with server(target) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+            id,_,_=prepare(worker,url,raw)
+            if stage=='activated':
+                preview=advance(worker,page,id,'preview')
+                ok(worker,'remote-recovery-accept',NAME,requestId=id,peerId=preview['preview']['id'])
+                advance(worker,page,id,'cleaning')
+            elif stage=='cancelled':
+                ok(worker,'remote-recovery-cancel',NAME,requestId=id)
+            root=ok(worker,'current',NAME)['root']
+            token='rotated-synthetic-recovery-token'
+            rotate_server_token(target,token)
+            blocked=ok(worker,'remote-recovery-step',NAME,requestId=id)
+            assert blocked['state']=='blocked' and blocked['error']=='unauthorized',blocked
+            denied=authority_call(worker,'remote-recovery-repair',NAME,requestId=id,token='wrong-synthetic-token')
+            assert not denied['ok'] and denied['code']=='unauthorized',denied
+            assert ok(worker,'remote-recovery-repair',NAME,requestId=id,token=token)['repaired']
+            assert ok(worker,'current',NAME)['root']==root
+            if stage=='upload':
+                preview=advance(worker,page,id,'preview')
+                ok(worker,'remote-recovery-accept',NAME,requestId=id,peerId=preview['preview']['id'])
+            if stage=='activated':
+                ok(worker,'remote-recovery-step',NAME,requestId=id)
+                rotate_server_token(target,token+'-again')
+                assert ok(worker,'remote-recovery-repair',NAME,requestId=id,token=token+'-again')['repaired']
+            result=advance(worker,page,id,'complete')
+            assert result['phase']==('cancelled' if stage=='cancelled' else 'activated')
+            assert ok(worker,'file-status',NAME,requestId=id)['phase']=='cleaned'
+            if stage!='cancelled':assert ok(worker,'remote-recovery-ordinary',NAME)['accounts']
+            assert not target.remote.writes
+    finally:target.close()

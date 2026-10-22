@@ -4,7 +4,7 @@ export const CONTROL_ALARM='zenimport-storage-control';
 const PAUSE_KEY='storageControlPause';
 export function nextControl(storage){
   const transfer=storage.controls.transfer,join=storage.controls.join,a=storage.archives;
-  if(transfer&&!['complete','cancelled'].includes(transfer.phase))return {type:'storage-step',id:transfer.id};
+  if(transfer&&(!['complete','cancelled'].includes(transfer.phase)||transfer.finishingRepair))return {type:'storage-step',id:transfer.id};
   if(join?.phase==='quiescing')return {type:'storage-step',id:join.id};
   if(a.recovery&&(a.recovery.phase==='pending'||a.recovery.cleaning)){
     if(a.recovery.awaitingConfirmation)return null;

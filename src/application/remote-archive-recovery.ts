@@ -1,3 +1,4 @@
+import {TransportRepairOwner} from '../local/storage/transport-repair.js';
 /** Recover a selected server without exposing HTTP proofs or tokens to the popup. */
 import {ServerCredentials} from '../local/migration/credentials.js';
 import {RemoteRecoverySelection,recoveryErrors} from '../local/storage/remote-recovery-selection.js';
@@ -24,13 +25,35 @@ export class RemoteArchiveRecovery{
     try{return await work(owner);}finally{owner.close();}
   }
   async #client(value:RemoteRecoveryIntent){
-    const saved=await this.credentials.read(value.initialRoot.credentialRef!);
-    requireParticipant(saved.url===value.descriptor.url&&saved.contextId===value.descriptor.contextId&&saved.legacy===value.descriptor.legacy,'recovery_required');
-    return this.credentials.client(saved.ref);
+    const ref=await this.#transportRef(value),saved=await this.credentials.read(ref);
+    requireParticipant(saved.url===value.descriptor.url,'recovery_required');
+    if(ref===value.initialRoot.credentialRef)requireParticipant(saved.contextId===value.descriptor.contextId&&saved.legacy===value.descriptor.legacy,'recovery_required');
+    return this.credentials.client(ref);
+  }
+  async #transportRef(value:RemoteRecoveryIntent){
+    const owner=await TransportRepairOwner.open(this.options.name,this.options.sentinel);
+    try{return await owner.ref('recovery',value.id,value.initialRoot.credentialRef!);}finally{owner.close();}
+  }
+  async repairServer(app:ResolvedApplication,id:string,token:string){
+    await app.assert(true);const owner=await TransportRepairOwner.open(this.options.name,this.options.sentinel);
+    try{
+      const snapshot=await owner.snapshot('recovery',id,app.root),value=await this.#selection(selection=>selection.pending(id));
+      requireParticipant(JSON.stringify(snapshot.record)===JSON.stringify(value),'stale_context');
+      const candidate=await this.credentials.verify({url:value.descriptor.url,token},value.request.owner_ids),peer=candidate.identity;
+      requireParticipant(peer.installation_id===value.request.installation_id&&[null,id].includes(peer.operation_id),'migration_invalid');
+      if(value.phase!=='pending'||peer.dataset_id!==value.descriptor.datasetId){
+        const status=await (await this.credentials.client(candidate.ref)).archiveStatus(id);
+        requireParticipant(status.kind==='recovery'&&(value.phase==='cancelled'?['cancelled','cleaned'].includes(status.phase):status.phase==='activated')&&status.installation_id===value.request.installation_id&&
+          status.initial_epoch===value.request.expected_epoch&&status.dataset_id===value.request.dataset_id&&
+          status.archive_sha256===value.request.archive_sha256&&status.archive_size===value.request.archive_size&&
+          peer.dataset_id===(value.phase==='cancelled'?value.descriptor.datasetId:value.request.dataset_id)&&peer.state==='active'&&peer.operation_id===null,'migration_invalid');
+      }
+      await owner.install(snapshot,value.initialRoot.credentialRef!,candidate.ref);return {repaired:true};
+    }finally{owner.close();}
   }
   #view(value:RemoteRecoveryIntent){
-    return {kind:'remote-recovery' as const,id:value.id,phase:value.phase,error:value.lastError,
-      uploaded:value.uploaded,chunks:Math.ceil(Number(value.request.archive_size)/262144),preview:value.preview,
+    return {kind:'remote-recovery' as const,serverUrl:value.descriptor.url,id:value.id,phase:value.phase,error:value.lastError,
+      remoteCleaned:value.remoteCleaned,uploaded:value.uploaded,chunks:Math.ceil(Number(value.request.archive_size)/262144),preview:value.preview,
       canCancel:value.phase==='pending'&&!value.cancelRequested,cancelRequested:value.cancelRequested,
       cleaning:value.phase!=='pending'&&(!value.remoteCleaned||!value.fileCleaned),activationStarted:value.activationPreview!==null,
       awaitingConfirmation:!value.cancelRequested&&value.preview!==null&&value.acceptedPreview===null};
@@ -69,7 +92,7 @@ export class RemoteArchiveRecovery{
       let status;try{status=await client.archiveStatus(id);}catch(error){if((error as {code?:string}).code!=='not_found')throw error;beginning=true;status=await client.archiveRestore(value.request);}
       if(status.phase==='activated'){
         const peer=await client.identity();
-        await this.credentials.cloneContext(value.initialRoot.credentialRef!,value.selectedRef,value.selectedContext);
+        await this.credentials.cloneContext(await this.#transportRef(value),value.selectedRef,value.selectedContext);
         const selected=await this.#selection(owner=>owner.activated(id,status,peer,value.selectedRef,value.selectedContext));
         return {state:'cleaning',...this.#view(selected)};
       }
@@ -128,6 +151,8 @@ export class RemoteArchiveRecovery{
   async #cleanup(value:RemoteRecoveryIntent){
     const id=value.id;
     try{
+      const repair=await TransportRepairOwner.open(this.options.name,this.options.sentinel);
+      try{await repair.adoptSelected('recovery',id,this.credentials);}finally{repair.close();}
       if(!value.remoteCleaned){
         const client=await this.#client(value),status=await client.archiveStatus(id);
         requireParticipant(status.installation_id===value.request.installation_id&&status.dataset_id===value.request.dataset_id&&
@@ -158,7 +183,7 @@ export class RemoteArchiveRecovery{
       // Activation is permanent; resolve it forward without issuing another one.
       const client=await this.#client(value),status=await client.archiveStatus(value.id).catch(()=>null);
       if(status?.phase==='activated'){
-        const peer=await client.identity();await this.credentials.cloneContext(value.initialRoot.credentialRef!,value.selectedRef,value.selectedContext);
+        const peer=await client.identity();await this.credentials.cloneContext(await this.#transportRef(value),value.selectedRef,value.selectedContext);
         const selected=await this.#selection(owner=>owner.activated(value.id,status,peer,value.selectedRef,value.selectedContext));
         return {state:'cleaning',...this.#view(selected)};
       }

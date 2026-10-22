@@ -1958,3 +1958,29 @@ checks. Native control coverage includes save, clear and readback; the Docker
 17-case archive/control/product run passed (42.87s), including this assertion.
 The Chrome 140 critical repeat passed 6 cases (77.36s). Product UI integration
 and held-operation credential repair remain unfinished. No publication.
+
+### L11 prerequisite: repair credentials without replacing a migration
+
+Added operation-scoped immutable credential overlays for a paused mode transfer
+and server archive recovery. Replacement server credentials must authenticate the
+saved physical server, owner and expected dataset (or the exact activated archive
+receipt). Replacement local SDK credentials require a fresh full owner read.
+Native CAS includes Root, journal/head and the previous overlay; local repair
+increments the credential fence and revokes the old coordinator lease. Neither
+path changes financial facts, participant receipts or the original request IDs.
+
+Terminal recovery remains repairable until authenticated remote cleanup finishes.
+The effective transport no longer depends on a deleted original secret. After a
+terminal transfer/recovery, a separate atomic same-context credential adoption
+preserves the verified replacement for ordinary work. Durable overlays and own
+adoption receipts permit restart and repeated rotation; a later explicit Root
+configuration wins. Cancelled reverse transfers also adopt their replacement.
+
+Independent review (l6_api_review) found and verified fixes for terminal cleanup,
+RPC context adoption, reservation replay, repeated terminal adoption, wrong-ID
+terminal calls and reverse cancellation. Final focused result: no findings.
+Docker evidence: 36 actual Python/native-browser transfer/recovery cases passed
+(229.76s), plus the reverse-cancellation test passed (22.05s); 280 unit tests passed
+with strict type/schema checks (1.96s test execution). Tests use synthetic tokens,
+isolated SQLite/IndexedDB and prohibit financial SDK writes. L11 product UI and
+L12 consolidated acceptance remain in progress; no publication.

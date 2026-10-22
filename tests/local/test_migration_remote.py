@@ -556,3 +556,138 @@ def test_explicit_transfer_retry_requeues_the_same_blocked_peer_work_without_new
             assert result['state']=='complete' and ok(worker,'transfer-current')['plan']['id']==id
             assert not harness.remote.writes
     finally:harness.close()
+
+
+def rotate_server_token(harness, token):
+    from backend.http import ApiBoundary
+    layer=harness.app.middleware_stack
+    while not isinstance(layer,ApiBoundary):layer=layer.app
+    layer.authorization=('Bearer '+token).encode('ascii')
+
+
+@pytest.mark.parametrize('phase',['source_paused','source_handed_off','active_pointer_committed'])
+def test_same_transfer_recovers_rotated_server_token_without_changing_authority(tmp_path,phase):
+    from test_authority import ok,call as authority_call,FIXTURE
+    harness=DeliveryHarness(tmp_path/'rotated-peer.sqlite3')
+    token='fixture-rotated-transfer-token-only'
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
+            ok(worker,'create');ok(worker,'seed',fixture=FIXTURE);ok(worker,'transfer-credential')
+            candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            started=ok(worker,'transfer-to-server',credentialRef=candidate['ref']);id=started['plan']['id']
+            for _ in range(200):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step',switchId=id,mode='crash-before-adoption')
+                assert result['state']!='blocked',result
+                if ok(worker,'transfer-current')['phase']==phase:break
+            assert ok(worker,'transfer-current')['phase']==phase
+            rotate_server_token(harness,token)
+            failed=authority_call(worker,'transfer-candidate',url=url,token=TOKEN)
+            assert failed==dict(ok=False,code='unauthorized')
+            before=ok(worker,'current')['root'];journal=ok(worker,'transfer-current')
+            invalid=authority_call(worker,'transfer-repair-server',switchId=id,token='fixture-rejected-token')
+            assert invalid==dict(ok=False,code='unauthorized')
+            assert ok(worker,'current')['root']==before
+            assert ok(worker,'transfer-repair-server',switchId=id,token=token)=={'repaired':True}
+            assert ok(worker,'current')['root']==before
+            unchanged=ok(worker,'transfer-current')
+            assert unchanged['plan']==journal['plan'] and unchanged['commands']==journal['commands'] and unchanged['receipts']==journal['receipts']
+            for _ in range(200):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step',switchId=id,mode='crash-before-adoption')
+                assert result['state']!='blocked',result
+                if result['state']=='complete':break
+            assert result['state']=='complete' and ok(worker,'transfer-current')['plan']['id']==id
+            before_adoption=ok(worker,'current')['root']
+            from uuid import uuid4
+            assert authority_call(worker,'transfer-step',switchId=str(uuid4()))==dict(ok=False,code='stale_context')
+            assert ok(worker,'current')['root']==before_adoption
+            assert ok(worker,'transfer-step',switchId=id)['state']=='complete'
+            assert ok(worker,'remote-recovery-ordinary')['accounts']
+            assert not harness.remote.writes
+    finally:harness.close()
+
+
+def test_late_transport_repair_cannot_replace_a_newer_verified_token(tmp_path):
+    from test_authority import ok,checkpoint,FIXTURE
+    harness=DeliveryHarness(tmp_path/'repair-race.sqlite3')
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+            ok(worker,'create');ok(worker,'seed',fixture=FIXTURE);ok(worker,'transfer-credential')
+            candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            started=ok(worker,'transfer-to-server',credentialRef=candidate['ref']);id=started['plan']['id']
+            worker.evaluate('args=>{globalThis.pending=authorityProbe.run("transfer-repair-server",args);}',
+                dict(name='source',switchId=id,token=TOKEN,mode='pause-repair-identity'))
+            checkpoint(worker,page)
+            replacement='fixture-later-verified-transport-token'
+            rotate_server_token(harness,replacement)
+            assert ok(worker,'transfer-repair-server',switchId=id,token=replacement)=={'repaired':True}
+            ok(worker,'release')
+            assert worker.evaluate('()=>pending')==dict(ok=False,code='stale_context')
+            for _ in range(200):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step',switchId=id)
+                assert result['state']!='blocked',result
+                if result['state']=='complete':break
+            assert result['state']=='complete' and not harness.remote.writes
+    finally:harness.close()
+
+
+def test_reverse_transfer_repairs_sdk_token_after_handoff_without_replaying_writes(tmp_path):
+    from test_authority import ok,call as authority_call
+    harness=DeliveryHarness(tmp_path/'local-token-peer.sqlite3')
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
+            ok(worker,'create')
+            candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            ok(worker,'create-remote','reverse',credentialRef=candidate['ref'],url=url,peerId=candidate['contextId'])
+            ok(worker,'bind-remote','reverse',request=dict(installationId=candidate['identity']['installation_id'],datasetId=candidate['identity']['dataset_id']))
+            journal=ok(worker,'transfer-to-browser','reverse');id=journal['plan']['id']
+            for _ in range(300):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step','reverse',switchId=id)
+                assert result['state']!='blocked',result
+                if ok(worker,'transfer-current','reverse')['phase']=='source_handed_off':break
+            assert ok(worker,'transfer-current','reverse')['phase']=='source_handed_off'
+            blocked=ok(worker,'transfer-step','reverse',switchId=id,mode='expired-sdk')
+            assert blocked['state']=='blocked',blocked
+            before=ok(worker,'current','reverse')['root'];saved=ok(worker,'transfer-current','reverse')
+            denied=authority_call(worker,'transfer-repair-local','reverse',switchId=id,token='wrong-synthetic-token',mode='expired-sdk')
+            assert not denied['ok'],denied
+            assert ok(worker,'current','reverse')['root']==before
+            assert ok(worker,'transfer-repair-local','reverse',switchId=id,token='synthetic-replacement-sdk-token',mode='expired-sdk')['repaired']
+            after=ok(worker,'current','reverse')['root']
+            assert after['activeMode']=='remote' and after['credentialRef']==before['credentialRef'] and int(after['credentialEpoch'])==int(before['credentialEpoch'])+1
+            changed=ok(worker,'transfer-current','reverse')
+            assert changed['plan']==saved['plan'] and changed['commands']==saved['commands'] and changed['receipts']==saved['receipts']
+            for _ in range(300):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step','reverse',switchId=id,mode='expired-sdk')
+                assert result['state']!='blocked',result
+                if result['state']=='complete':break
+            assert result['state']=='complete' and ok(worker,'current','reverse')['root']['activeMode']=='local'
+            assert not harness.remote.writes
+    finally:harness.close()
+
+
+def test_cancel_reverse_transfer_adopts_repaired_server_token(tmp_path):
+    from uuid import uuid4
+    from test_authority import ok
+    harness=DeliveryHarness(tmp_path/'cancel-rotated.sqlite3')
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,_,_):
+            ok(worker,'create');candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            ok(worker,'create-remote','reverse',credentialRef=candidate['ref'],url=url,peerId=candidate['contextId'])
+            ok(worker,'bind-remote','reverse',request=dict(installationId=candidate['identity']['installation_id'],datasetId=candidate['identity']['dataset_id']))
+            id=ok(worker,'transfer-to-browser','reverse')['plan']['id']
+            for _ in range(300):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step','reverse',switchId=id)
+                assert result['state']!='blocked',result
+                if ok(worker,'transfer-current','reverse')['phase']=='source_paused':break
+            assert ok(worker,'transfer-current','reverse')['phase']=='source_paused'
+            rotate_server_token(harness,'synthetic-cancel-replacement')
+            assert ok(worker,'transfer-repair-server','reverse',switchId=id,token='synthetic-cancel-replacement')['repaired']
+            ok(worker,'transfer-cancel','reverse',switchId=id,requestId=str(uuid4()))
+            for _ in range(300):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step','reverse',switchId=id)
+                assert result['state']!='blocked',result
+                if result['state']=='cancelled':break
+            assert result['state']=='cancelled'
+            assert 'accounts' in ok(worker,'remote-recovery-ordinary','reverse')
+            assert not harness.remote.writes
+    finally:harness.close()
