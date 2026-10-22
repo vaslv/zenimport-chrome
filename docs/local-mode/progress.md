@@ -2037,3 +2037,13 @@ candidate image is local amd64 at revision 533c8f6; image-only deployment tests
 passed on amd64 and arm64. No production data, new live financial API calls,
 push, Git tags, GitHub Release or registry publication. Optional live write/mobile
 acceptance remains explicitly deferred, not silently considered passed.
+
+### Pre-release correction 1 — published mirror backups (2026-10-23)
+
+Backup owner checks now resolve the dataset's current physical mirror projection
+inside the native transaction. Active and retained inactive copies can be exported
+after a large full refresh and collection of the old mirror. Owner validation and
+writer holds remain unchanged. Native regression tests verify all three entry
+paths and the resulting archive's owner, 1000 movements and unchanged retired Root.
+Independent source review: no findings. Docker integration build/typecheck passed;
+backup/projection/local-archive suites: 14 passed (36.56s), synthetic data only.

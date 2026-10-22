@@ -18,6 +18,7 @@ import {sameJournal} from '../migration/journal.js';
 import {createArchive} from '../portable/zip.js';
 import {validateFinancialGraph} from '../portable/graph.js';
 import type {PortableManifest} from '../portable/format.js';
+import {mirrorScope} from './mirror-scope.js';
 
 interface Backup{
   version:'1';id:string;generation:string;datasetId:string;initialRoot:RuntimeControl;
@@ -88,8 +89,9 @@ export class BackupOwner{
         if(typeof key==='string')requireParticipant(terminal.includes((await this.db.applicationState.get(prefix+key))?.value.phase as never),'migration_busy');}
       const dataset=datasetControl(await this.db.datasets.get(generation)),control=participantControl(await this.db.participants.get(dataset.participantId));
       requireParticipant(dataset.lifecycle==='active'&&dataset.holdId===null&&control.state==='active'&&!control.awaitingSync&&control.epoch===dataset.participantEpoch,'migration_paused');
+      const projection=await mirrorScope(this.db,generation);
       for(const owner of dataset.ownerIds){
-        const row=await this.db.financial('zen_entities').get([generation,encodeKey([['text','user'],['text',owner]])]);
+        const row=await this.db.financial('zen_entities').get([projection,encodeKey([['text','user'],['text',owner]])]);
         requireParticipant(row!==undefined&&unpackRow('zen_entities',row.row).deleted==='0','migration_incomplete');
       }
       const value=backupPreparation({version:'1',id,generation,initialRoot:root,phase:'quiescing'});
@@ -119,8 +121,9 @@ export class BackupOwner{
       const dataset=datasetControl(await this.db.datasets.get(generation));
       // A verified token may precede the first stored mirror. Check known
       // owners before holding it; older fact-only copies still validate at build.
+      const projection=await mirrorScope(this.db,generation);
       for(const id of dataset.ownerIds){
-        const entity=await this.db.financial('zen_entities').get([generation,encodeKey([['text','user'],['text',id]])]);
+        const entity=await this.db.financial('zen_entities').get([projection,encodeKey([['text','user'],['text',id]])]);
         requireParticipant(entity!==undefined&&unpackRow('zen_entities',entity.row).deleted==='0','migration_incomplete');
       }
       const held=root.activeMode==='local'&&root.activeGeneration===generation;
