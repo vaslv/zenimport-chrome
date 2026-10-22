@@ -1,7 +1,7 @@
 """Installed trusted background dispatch with native storage and synthetic SDK only."""
 from uuid import uuid4
 from playwright.sync_api import sync_playwright
-from test_runtime import installed
+from test_runtime import installed,prepare_extension
 
 
 def send(page,type,context=None,**fields):
@@ -10,6 +10,7 @@ def send(page,type,context=None,**fields):
 
 
 def test_trusted_background_configures_local_credentials_and_rejects_other_extension_pages(tmp_path):
+    prepare_extension(tmp_path/'ext');(tmp_path/'ext'/'popup.html').write_text('<!doctype html><title>Trusted dispatch fixture</title>')
     with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (browser,worker,page,identifier):
         result=worker.evaluate('()=>applicationProbe.run("install-background",{name:"background-local",mode:"standalone"})');assert result['ok'],result
         assert send(page,'status')==dict(ok=False,error='unauthorized')
@@ -33,6 +34,7 @@ def test_trusted_background_configures_local_credentials_and_rejects_other_exten
 
 def test_background_resumes_a_durable_backup_after_full_chrome_restart_without_acknowledging_it(tmp_path):
     extension,profile=tmp_path/'ext',tmp_path/'profile';id=str(uuid4())
+    prepare_extension(extension);(extension/'popup.html').write_text('<!doctype html><title>Trusted dispatch fixture</title>')
     with sync_playwright() as p:
         with installed(p,extension,profile) as (browser,worker,_,identifier):
             assert worker.evaluate('()=>applicationProbe.run("install-background",{name:"background-local",mode:"standalone"})')['ok']

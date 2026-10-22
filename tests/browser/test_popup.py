@@ -3,14 +3,15 @@ from uuid import uuid4
 import threading
 import pytest
 from playwright.sync_api import sync_playwright, expect
-from support import PopupBackend, http_server, installed, connect, TOKEN, run_clock, seed_application_state
+from support import PopupBackend, http_server, installed, connect, TOKEN, run_clock, seed_application_state, select_candidate, active_token_is
 
 
 def test_popup_setup_keyboard_dates_and_no_bank_ui():
     service=PopupBackend()
     with http_server(service) as url, sync_playwright() as p, installed(p,url) as (context,worker,bank,popup,identifier):
         errors=[];popup.on('pageerror',lambda error:errors.append(str(error)))
-        expect(popup.locator('#connection-settings')).to_have_attribute('open','')
+        expect(popup.locator('#local-settings')).to_have_attribute('open','')
+        expect(popup.locator('#connection-settings')).not_to_have_attribute('open','')
         expect(popup.locator('#settings')).to_have_count(0)
         expect(popup.locator('#migration-settings > summary')).to_be_visible()
         expect(popup.locator('#migration-settings')).not_to_have_attribute('open','')
@@ -101,9 +102,9 @@ def test_native_action_popup_keeps_intrinsic_width():
             return result['result']
         expression="""(() => {
             const fits=id=>{const e=document.getElementById(id);return e.scrollWidth<=e.clientWidth};
-            return {ready:document.getElementById('connection-settings').open,width:innerWidth,contentWidth:document.body.getBoundingClientRect().width,
+            return {ready:document.getElementById('local-settings').open,width:innerWidth,contentWidth:document.body.getBoundingClientRect().width,
                 fits:document.documentElement.scrollWidth<=innerWidth&&fits('sync')&&fits('refresh-accounts'),
-                input:document.getElementById('url').getBoundingClientRect().width};
+                input:document.getElementById('local-token').getBoundingClientRect().width};
         })()"""
         for _ in range(100):
             layout=command('Runtime.evaluate',{'expression':expression,'returnByValue':True})['result'].get('value',{})
@@ -124,6 +125,8 @@ def test_connection_draft_survives_popup_closure_and_failed_connection(first):
     service=PopupBackend()
     with http_server(service) as url, sync_playwright() as p, installed(p,url) as (context,worker,bank,popup,identifier):
         values={'url':url,'token':TOKEN}
+        expect(popup.locator('#connect')).to_be_enabled()
+        popup.locator('#connection-settings').evaluate('(e)=>e.open=true')
         def reopen(old):
             old.close()
             fresh=context.new_page();fresh.goto(f'chrome-extension://{identifier}/popup.html')
@@ -147,6 +150,7 @@ def test_connection_draft_survives_popup_closure_and_failed_connection(first):
         for field,value in values.items():expect(popup.locator('#'+field)).to_have_value(value)
         service.version=1
         popup.locator('#connect').click()
+        select_candidate(popup)
         expect(popup.locator('.account')).to_have_count(1)
         expect(popup.locator('#token')).to_have_value('')
         assert not worker.evaluate("async()=> (await chrome.storage.session.get('connectionDraft')).connectionDraft")
@@ -218,7 +222,7 @@ def test_account_save_shows_pending_error_and_confirmation_at_the_button():
         expect(popup.locator('.account select')).to_be_disabled()
         expect(popup.locator('#rename-profile')).to_be_disabled()
         expect(popup.locator('#sync')).to_be_disabled()
-        assert service.started.is_set()
+        assert service.started.wait(5)
         if Path('/results').is_dir():popup.screenshot(path='/results/account-saving.png')
         service.release.set()
         expect(popup.locator('.account-status')).to_have_attribute('data-tone','error')
@@ -264,7 +268,7 @@ def test_last_successful_sync_survives_reopening_failed_runs_and_is_scoped_to_co
             startedAt='2026-10-16T04:00:00Z',command={},job=dict(id='fixture-job',delivery_state='waiting'))})
         # Fire via real alarm without a long wall-clock wait.
         run_clock(popup,worker)
-        expect(popup.locator('#status')).to_contain_text('The server is sending')
+        expect(popup.locator('#status')).to_contain_text('Sending transactions: 1')
         expect(popup.locator('#last-sync')).to_be_hidden()
         service.job['delivery_state']='complete'
         service.job['delivery'].update(pending=0)
@@ -334,7 +338,7 @@ def test_paused_capture_can_repair_rotated_token_and_resume_the_same_job():
         expect(popup.locator('#status')).to_contain_text('Check the server token')
         expect(popup.locator('#connect')).to_be_enabled()
         assert worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")==paused
-        assert worker.evaluate("async()=> (await chrome.storage.local.get('config')).config.token")==TOKEN
+        assert active_token_is(worker,TOKEN)
         # Repairing a credential is not authorization to create/resume a job.
         popup.locator('#token').fill(service.token);popup.locator('#connect').click()
         expect(popup.locator('#sync')).to_be_enabled()

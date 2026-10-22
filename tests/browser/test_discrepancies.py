@@ -35,7 +35,7 @@ def test_popup_opens_read_only_bank_scoped_report_and_safe_responsive_page():
         from urllib.parse import parse_qs
         query=parse_qs(urlsplit(page.url).query)
         assert query['connection']==[service.connection_id]
-        assert query['context']==[worker.evaluate("async()=> (await chrome.storage.local.get('applicationStateContext')).applicationStateContext")]
+        assert query['context']==[service.dataset_id]
         expect(page.locator('.day-title')).to_contain_text('15 October 2026')
         expect(page.locator('.operation')).to_have_count(2)
         expect(page.locator('[data-source=bank]')).to_contain_text('Bank-only fixture')

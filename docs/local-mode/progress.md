@@ -1984,3 +1984,33 @@ Docker evidence: 36 actual Python/native-browser transfer/recovery cases passed
 with strict type/schema checks (1.96s test execution). Tests use synthetic tokens,
 isolated SQLite/IndexedDB and prohibit financial SDK writes. L11 product UI and
 L12 consolidated acceptance remain in progress; no publication.
+
+### L11 complete — standalone popup and read-only report
+
+The built product now selects browser storage on a fresh installation and retains
+an existing remote configuration. Compact peer sections expose verified local token
+setup/removal, automatic bank accounts, optional server selection, explicit data
+transfer and portable backup/recovery. Durable progress, download acknowledgement,
+activation confirmation and operation-scoped token repair survive popup closure.
+No transaction editor or bank-page overlay was added.
+
+The end-to-end local test exposed empty account/date filters being passed as actual
+report constraints. Local report filtering now mirrors remote behavior and ignores
+empty values. A real built-product/fake-HTTP-SDK run proves two unviewed writes,
+zero extra writes on repeats, no resurrection after mobile deletion, and both
+unmatched sides in a read-only report. Product plus Python report parity: 14 passed
+(249.96s); the minimum Chrome 140 product repeat passed (92.82s).
+
+Actual Python integration: all 14 scenarios passed across focused runs (first ZIP
+recovery scenario, 12 remaining scenarios, dedicated worker-stop scenario). Fixture
+backend and worker clocks now advance together; a copy-only clock module survives
+worker restart. Early alarm wakes are paced to avoid flooding the serial queue.
+The unmodified native tests separately check actual alarm/backoff deadlines.
+No production timeout or financial assertion was weakened.
+
+Candidate ZIP UI checks: 19 passed on current Chromium (498.75s), and 3 setup/
+keyboard/manifest checks on Chrome 140 (60.54s). Full native suite: 514 passed,
+4 explicit cross-process exchange skips completed by separate runners. Independent
+popup and write-boundary reviews have no remaining findings. Incognito is explicitly
+disabled by the manifest as required by the design. Version 0.3.0 is a local candidate.
+L12 release evidence/documentation follows; no production data, push or tags.

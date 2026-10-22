@@ -7,7 +7,12 @@ import platform
 import shutil
 import tempfile
 import threading
+import time
+from datetime import datetime, timezone
 from uuid import uuid4
+
+# One advancing calendar shared by the fixture server and restarted worker.
+FIXTURE_TIME_OFFSET = datetime(2026,10,16,5,tzinfo=timezone.utc).timestamp() - time.time()
 
 ORIGIN = 'https://ipay.vietinbank.vn'
 TOKEN = 'fixture-backend-token-never-real'
@@ -20,10 +25,15 @@ class PopupBackend:
         self.connection_id = str(uuid4())
         self.calls = []
         self.version = 1
+        self.installation_id=str(uuid4());self.dataset_id=str(uuid4())
     def request(self, method, path, body):
         self.calls.append((method,path,body))
         if path == '/api/v1/info':
-            return {'api_version':self.version}
+            return {'api_version':self.version,'context_fencing':1}
+        if path=='/api/v1/migration/portable/identity':
+            return {'protocol_version':'2','archive_version':'2','financial_schema_version':'1','chunk_bytes':'262144','max_archive_bytes':'67108864',
+                'installation_id':self.installation_id,'dataset_id':self.dataset_id,'participant_epoch':'1','state':'active','operation_id':None,
+                'awaiting_sync':False,'legacy_hold':None,'can_import':False,'owner_ids':['1'],'checked_at':'1792126800'}
         if path == '/api/v1/zenmoney/accounts':
             return {'accounts':[{'id':'target-vnd','title':'Fixture VND '+'Long account title '*8,'currency':'VND','instrument':2},
                 {'id':'target-usd','title':'Fixture USD','currency':'USD','instrument':3}]}
@@ -70,7 +80,14 @@ def http_server(service):
                 self.wfile.write(json.dumps({'error':{'code':'unauthorized'}}).encode());return
             length=int(self.headers.get('Content-Length','0'))
             body=json.loads(self.rfile.read(length)) if length else None
-            try: value=service.request(self.command,self.path,body); status=200
+            try:
+                path=self.path
+                if path.startswith('/api/v1/contexts/'):
+                    parts=path.split('/',6)
+                    assert parts[4]==service.installation_id and parts[5]==service.dataset_id
+                    assert self.headers.get('X-ZenImport-Installation')==service.installation_id and self.headers.get('X-ZenImport-Dataset')==service.dataset_id
+                    path='/api/v1/'+parts[6]
+                value=service.request(self.command,path,body);status=200
             except AssertionError: value={'error':{'code':'not_found'}}; status=404
             self.send_response(status); self.send_header('Content-Type','application/json');self.end_headers();self.wfile.write(json.dumps(value).encode())
     server=ThreadingHTTPServer(('127.0.0.1',0),Handler)
@@ -82,6 +99,10 @@ def http_server(service):
 def installed(playwright, url, bank_api=None, *, bank_origin=ORIGIN, bank_html=BANK, bank_url=None):
     with tempfile.TemporaryDirectory() as temporary:
         extension=Path(temporary)/'extension';shutil.copytree('/app/dist/extension',extension)
+        # The copy-only clock module runs before the bundled worker and survives its restart.
+        # Bank MAIN/ISOLATED worlds keep real elapsed time for connector guards.
+        (extension/'fixture-clock.js').write_text('const Original=Date;const offset='+str(FIXTURE_TIME_OFFSET*1000)+';globalThis.Date=class extends Original{constructor(...args){super(...(args.length?args:[Original.now()+offset]));}static now(){return Original.now()+offset;}};')
+        background=extension/'background.js';background.write_text("import './fixture-clock.js';\n"+background.read_text())
         manifest=json.loads((extension/'manifest.json').read_text())
         # Test-only installation grants exactly these two fixture origins to
         # avoid Chrome's native install/permission prompt in headless mode.
@@ -105,8 +126,41 @@ def installed(playwright, url, bank_api=None, *, bank_origin=ORIGIN, bank_html=B
         context.close()
 
 def connect(popup,bank,url):
+    from playwright.sync_api import expect
+    expect(popup.locator('#storage-mode')).to_have_text('Browser database',timeout=15000)
+    expect(popup.locator('#connect')).to_be_enabled()
+    popup.locator('#connection-settings').evaluate('(e)=>e.open=true')
     popup.locator('#url').fill(url);popup.locator('#token').fill(TOKEN)
-    bank.bring_to_front();popup.locator('#server-form button').click()
+    bank.bring_to_front();popup.locator('#connect').click()
+    # Fresh browser storage joins explicitly. A rejected verification must remain
+    # an ordinary visible setup error, not a fabricated local/remote selection.
+    popup.wait_for_function("()=>!document.getElementById('server-candidate').hidden || document.getElementById('status').dataset.tone==='error'")
+    if popup.locator('#server-candidate').is_visible():
+        select_candidate(popup)
+
+
+def select_candidate(popup):
+    from playwright.sync_api import expect
+    expect(popup.locator('#server-candidate')).to_be_visible()
+    popup.locator('#move-data').uncheck()
+    popup.locator('#join-server').check();popup.locator('#select-server').click()
+    # Wake the real durable join driver after its native intent is committed.
+    popup.wait_for_function("async()=>!!(await chrome.alarms.get('zenimport-storage-control'))")
+    popup.evaluate("()=>chrome.alarms.create('zenimport-storage-control',{when:Date.now()+100,periodInMinutes:.5})")
+    expect(popup.locator('#storage-mode')).to_have_text('Server database',timeout=30000)
+
+
+def active_token_is(worker,token):
+    # Read the native selected reference; the old config key is not authoritative.
+    return worker.evaluate('''async token=>{
+      const ref=await new Promise((resolve,reject)=>{
+        const request=indexedDB.open('zenimport-financial');request.onerror=()=>reject(Error('fixture-db-open'));
+        request.onsuccess=()=>{const db=request.result,q=db.transaction('runtime').objectStore('runtime').get('runtime');
+          q.onsuccess=()=>{resolve(q.result.credentialRef);db.close();};};
+      });return (await chrome.storage.local.get('remoteCredential:'+ref))['remoteCredential:'+ref]?.token===token;
+    }''',token)
+
+
 
 
 def seed_application_state(worker,patch):
@@ -124,6 +178,8 @@ def seed_application_state(worker,patch):
 
 def run_clock(popup,worker):
     # Wake the real alarm listener early instead of sleeping for Chrome's 30s
-    # minimum. All collection/lease/pump logic remains the production worker.
+    # minimum. The fixture worker clock can make this an immediate past-due wake.
+    # Real scheduler/backoff deadlines are tested in the unpatched local suite.
+    # All collection/lease/pump logic remains the production worker.
     worker.evaluate("chrome.alarms.create('capture',{when:Date.now()+100})")
-    popup.wait_for_timeout(300)
+    popup.wait_for_timeout(1000)

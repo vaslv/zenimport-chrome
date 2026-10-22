@@ -68,3 +68,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, summary:focus-v
 
 #current-connection #profile-name { flex: 1; width: 0; height: 44px; margin: 0; }
 #rename-profile { margin-left: auto; }
+
+.choice { display: flex; align-items: flex-start; gap: 8px; font-size: 12px; }
+.choice input { flex: 0 0 16px; width: 16px; height: 16px; margin: 2px 0 0; }
+#local-connect, #local-remove, #select-server, #use-browser, #export-data, #import-data, #confirm-restore { width: 100%; }
+#local-remove, #archive-download, #restore-form { margin-top: 12px; }
+#storage-mode { margin: 0 0 10px; }

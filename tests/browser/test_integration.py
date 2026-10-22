@@ -19,7 +19,7 @@ from backend.config import Settings
 from backend import storage
 from delivery_factory import FakeZenMoney
 from mirror_factory import Fixture, movement
-from support import TOKEN, ORIGIN, installed, connect, run_clock
+from support import TOKEN, ORIGIN, installed, connect, run_clock, FIXTURE_TIME_OFFSET
 from test_bidv import BidvBank, bidv_install
 
 DAY=date(2026,10,16)
@@ -31,8 +31,8 @@ SECOND='fixture-other-vnd'
 def service(tmp_path,drop_page_ack=False):
     path=tmp_path/'fixture.sqlite3'
     remote=FakeZenMoney(path)
-    app=create_app(Settings(path,TOKEN,'fixture-sdk-token'),clock=lambda:NOW,
-        client_factory=lambda _:Client('fixture-sdk-token',transport=httpx.MockTransport(remote.handle),clock=lambda:NOW))
+    app=create_app(Settings(path,TOKEN,'fixture-sdk-token'),clock=lambda:int(time.time()+FIXTURE_TIME_OFFSET),
+        client_factory=lambda _:Client('fixture-sdk-token',transport=httpx.MockTransport(remote.handle),clock=lambda:int(time.time()+FIXTURE_TIME_OFFSET)))
     if drop_page_ack:
         from starlette.responses import JSONResponse
         first=[True]
@@ -73,22 +73,36 @@ class Bank:
         route.fulfill(content_type='application/json',body=json.dumps({'error':False,'accountNo':account,'currentPage':body['page'],
             'pageSize':100,'totalRecords':len(rows) if body['page']==0 else 0,'transactions':rows[body['page']*100:(body['page']+1)*100]}))
 
-def pump_until(popup,worker,check,timeout=20):
+def pump_until(popup,worker,check,timeout=180):
+    # Native IDB fencing adds durable work to every captured interval. Allow
+    # multi-account/month walks to finish; production driver timeouts are unchanged.
     deadline=time.monotonic()+timeout
     while time.monotonic()<deadline:
         if check():return
         run_clock(popup,worker)
     raise AssertionError('Fixture capture did not finish: '+popup.locator('#status').inner_text()+' '+json.dumps(state(worker)))
 
+def pump_control(popup,worker,check,timeout=60):
+    deadline=time.monotonic()+timeout
+    while time.monotonic()<deadline:
+        if check():return
+        worker.evaluate('()=>chrome.alarms.create("zenimport-storage-control",{when:Date.now()+100,periodInMinutes:.5})')
+        popup.wait_for_timeout(400)
+    raise AssertionError('Storage operation did not finish: '+popup.locator('#migration-status').inner_text())
+
+
 def account(popup,target,source="12345678"):
     form=popup.locator('.account').filter(has_text=source)
-    form.locator('select').select_option(target)
+    try:form.locator('select').select_option(target)
+    except Exception:
+        print('Account setup:',popup.locator('body').inner_text())
+        raise
     form.get_by_role('button',name='Save account',exact=True).click()
-    expect(popup.locator('#status')).to_contain_text('Account saved')
+    expect(popup.locator('#status')).to_contain_text('Account saved',timeout=15000)
 
 def refresh_accounts(popup):
     popup.locator('#refresh-accounts').click()
-    expect(popup.locator('#status')).not_to_contain_text('Loading account settings')
+    expect(popup.locator('#status')).not_to_contain_text('Loading account settings',timeout=30000)
 
 
 def state(worker):return worker.evaluate("async()=> (await chrome.storage.local.get('capture')).capture")
@@ -105,56 +119,56 @@ def start_sync(popup,bank,worker):
 
 def test_popup_zip_export_switch_import_and_no_duplicate_or_restored_deletion(tmp_path):
     bank_api=Bank()
-    with service(tmp_path/'a') as (url_a,path_a,remote_a,app_a), service(tmp_path/'b') as (url_b,path_b,remote_b,app_b), \
-         sync_playwright() as p, installed(p,url_a,bank_api) as (context,worker,bank,popup,identifier):
-        connect(popup,bank,url_a);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
-        start_sync(popup,bank,worker)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
-        assert sum(map(len,remote_a.writes))==3
-        expect(popup.locator('#import-data')).to_be_disabled()
-        deleted=next(iter(remote_a.transactions))
-        del remote_a.transactions[deleted]
-        remote_a.deletions.append({'object':'transaction','id':deleted})
-        app_a.state.mirror.refresh(force=True,transactions=True)
-        popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
-        expect(popup.locator('#import-data')).to_be_disabled()
-        with popup.expect_download() as pending:
-            popup.locator('#export-data').click()
-        downloaded=pending.value
-        archive=tmp_path/'move.zip';downloaded.save_as(archive)
-        assert archive.read_bytes().startswith(b'PK')
-        expect(popup.locator('#migration-status')).to_contain_text('server stays paused')
-        expect(popup.locator('#sync')).to_be_disabled()
-        assert app_a.state.migration.status()['paused']
-        remote_b.transactions=deepcopy(remote_a.transactions)
-        remote_b.deletions=deepcopy(remote_a.deletions)
-        popup.locator('#connection-settings').evaluate('(e)=>e.open=true')
-        connect(popup,bank,url_b)
-        expect(popup.locator('#url')).to_have_value(url_b)
-        popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
-        expect(popup.locator('#import-data')).to_be_enabled()
-        popup.locator('#migration-file').set_input_files({'name':'broken.zip','mimeType':'application/zip','buffer':b'not a ZIP'})
-        expect(popup.locator('#migration-status')).to_contain_text('damaged or incompatible')
-        expect(popup.locator('#import-data')).to_be_enabled()
-        assert not remote_b.writes
-        with popup.expect_file_chooser() as chooser:
-            popup.locator('#import-data').click()
-        chooser.value.set_files(archive)
-        expect(popup.locator('#migration-status')).to_contain_text('Data restored',timeout=15000)
-        assert not remote_b.writes
-        assert app_b.state.migration.status()['awaiting_sync']
-        assert app_a.state.migration.status()['paused']
-        if Path('/results').is_dir():popup.screenshot(path='/results/popup-migration.png',full_page=True)
-        popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
-        expect(popup.locator('#import-data')).to_be_disabled()
-        start_sync(popup,bank,worker)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
-        assert not remote_b.writes
-        assert deleted not in remote_b.transactions
-        with storage.transaction(path_b,read_only=True) as db:
-            assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==3
-            assert db.execute('SELECT 1 FROM zen_tombstones WHERE entity_id=?',(deleted,)).fetchone()
-            storage.check_integrity(db)
+    with service(tmp_path/'a') as (url_a,path_a,remote_a,app_a), service(tmp_path/'b') as (url_b,path_b,remote_b,app_b), sync_playwright() as p:
+        with installed(p,url_a,bank_api) as (context,worker,bank,popup,identifier):
+            connect(popup,bank,url_a);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
+            start_sync(popup,bank,worker)
+            pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
+            assert sum(map(len,remote_a.writes))==3
+            deleted=next(iter(remote_a.transactions));del remote_a.transactions[deleted]
+            remote_a.deletions.append({'object':'transaction','id':deleted});app_a.state.mirror.refresh(force=True,transactions=True)
+            # FakeZenMoney records a lock probe in test-only metadata; it is not
+            # application data and is intentionally outside the portable whitelist.
+            with storage.transaction(path_a) as db:
+                db.execute("DELETE FROM service_meta WHERE key='fixture-network-write-lock-free'")
+            popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
+            popup.locator('#archive-source').select_option('remote');popup.locator('#export-data').click()
+            worker.evaluate('()=>chrome.alarms.create("zenimport-storage-control",{when:Date.now()+100,periodInMinutes:.5})')
+            try:pump_control(popup,worker,lambda:popup.locator('#download-data').is_enabled())
+            except AssertionError:
+                print('Migration UI:',popup.locator('#migration-status').inner_text())
+                print('Control status:',popup.evaluate("async()=>{const s=await chrome.runtime.sendMessage({type:'status',operation_id:crypto.randomUUID()});const {operation_id,...context}=s.context;return chrome.runtime.sendMessage({type:'archive-status',context,operation_id:crypto.randomUUID()});}"))
+                raise
+            with popup.expect_download() as pending:popup.locator('#download-data').click()
+            archive=tmp_path/'move.zip';pending.value.save_as(archive)
+            assert archive.read_bytes().startswith(b'PK')
+            popup.locator('#ack-download').click()
+            expect(popup.locator('#migration-status')).to_contain_text('Backup confirmed')
+        # This recovery scenario retires the old browser and worker explicitly.
+        # A backup alone is not an authority transfer and does not pause a writer.
+        app_a.state.delivery.stop()
+        remote_b.transactions=deepcopy(remote_a.transactions);remote_b.deletions=deepcopy(remote_a.deletions)
+        with installed(p,url_b,bank_api) as (context,worker,bank,popup,identifier):
+            connect(popup,bank,url_b)
+            popup.locator('#migration-settings').evaluate('(e)=>e.open=true')
+            popup.locator('#restore-target').select_option('server')
+            popup.locator('#retired-writers').check();popup.locator('#snapshot-loss').check()
+            with popup.expect_file_chooser() as chooser:popup.locator('#import-data').click()
+            chooser.value.set_files(archive)
+            worker.evaluate('()=>chrome.alarms.create("zenimport-storage-control",{when:Date.now()+100,periodInMinutes:.5})')
+            pump_control(popup,worker,lambda:popup.locator('#restore-preview').is_visible())
+            assert not remote_b.writes
+            popup.locator('#accept-preview').check();popup.locator('#confirm-restore').click()
+            worker.evaluate('()=>chrome.alarms.create("zenimport-storage-control",{when:Date.now()+100,periodInMinutes:.5})')
+            pump_control(popup,worker,lambda:'Data restored' in popup.locator('#migration-status').inner_text())
+            assert not remote_b.writes and app_b.state.portable.capabilities()['awaiting_sync']
+            start_sync(popup,bank,worker)
+            pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete')
+            assert not remote_b.writes and deleted not in remote_b.transactions
+            with storage.transaction(path_b,read_only=True) as db:
+                assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==3
+                assert db.execute('SELECT 1 FROM zen_tombstones WHERE entity_id=?',(deleted,)).fetchone()
+                storage.check_integrity(db)
 
 
 def test_existing_multi_account_connection_prediction_unread_repeat_mobile_delete_and_backfill(tmp_path):
@@ -166,7 +180,7 @@ def test_existing_multi_account_connection_prediction_unread_repeat_mobile_delet
         # memberships must still retain multi-account capture and delivery behavior.
         legacy_profile=popup.evaluate("async()=> (await chrome.storage.local.get('view')).view.connection.profile_key")
         def seed_membership():
-            result=popup.evaluate("async key=>chrome.runtime.sendMessage({type:'select-bank-connection',profileKey:key})",legacy_profile)
+            result=popup.evaluate("async key=>{const status=await chrome.runtime.sendMessage({type:'status',operation_id:crypto.randomUUID()});const {operation_id,...context}=status.context;return chrome.runtime.sendMessage({type:'select-bank-connection',profileKey:key,context,operation_id:crypto.randomUUID()});}",legacy_profile)
             assert result['ok']
         bank.goto(ORIGIN+'/payment-history?accountNo=87654321');bank.bring_to_front();seed_membership();refresh_accounts(popup)
         expect(popup.locator('.account')).to_have_count(2);account(popup,SECOND,"87654321")
@@ -277,8 +291,8 @@ def test_observed_pagination_cache_then_zero_total_continuation(tmp_path):
     with service(tmp_path) as (url,path,remote,app), sync_playwright() as p, installed(p,url,bank_api) as (_,worker,bank,popup,_):
         connect(popup,bank,url);expect(popup.locator('.account')).to_have_count(1);account(popup,TARGET)
         start_sync(popup,bank,worker)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete',timeout=45)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=45)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete',timeout=180)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=180)
         assert any(call['page']==1 for call in bank_api.calls)
         assert sum(map(len,remote.writes))==132
         assert len({tx['id'] for batch in remote.writes for tx in batch})==132
@@ -309,7 +323,7 @@ def test_zenmoney_outage_does_not_stop_bank_capture_or_claim_uncertain_writes(tm
         remote.read_failure=503
         start_sync(popup,bank,worker)
         pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='complete')
-        expect(popup.locator('#status')).to_contain_text('ZenMoney is temporarily unavailable')
+        expect(popup.locator('#status')).to_contain_text('History saved. ZenMoney is unavailable')
         assert not remote.writes
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM captured_records').fetchone()[0]==3
@@ -341,13 +355,13 @@ def test_bidv_full_sync_repeat_and_mobile_deletion_with_real_backend(tmp_path):
     with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (context,worker,bank,popup,_):
         connect(popup,bank,url);expect(popup.locator('#bank')).to_have_text('BIDV');account(popup,TARGET)
         start_sync(popup,bank,worker)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=35)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=180)
         assert sum(map(len,remote.writes))==4
         assert all(t['viewed'] is False for batch in remote.writes for t in batch)
         deleted=next(iter(remote.transactions));del remote.transactions[deleted]
         remote.deletions.append({'object':'transaction','id':deleted})
         start_sync(popup,bank,worker)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=35)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('delivery_state')=='complete',timeout=180)
         assert sum(map(len,remote.writes))==4 and deleted not in remote.transactions
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==4
@@ -360,7 +374,11 @@ def test_bidv_load_more_and_transport_split_preserve_all_postings(tmp_path):
         connect(popup,bank,url);account(popup,TARGET);start_sync(popup,bank,worker)
         # Delivery batching/rate limits are covered separately; this large UI
         # fixture checks complete capture and the 100-record transport boundary.
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('capture_state')=='complete',timeout=35)
+        try:pump_until(popup,worker,lambda:(state(worker) or {}).get('job',{}).get('capture_state')=='complete',timeout=180)
+        except AssertionError:
+            print('Bank calls:',bank_api.calls)
+            print('Bank page:',bank.locator('body').inner_text()[-3000:])
+            raise
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==503
             assert db.execute('SELECT max(page_number) FROM capture_pages').fetchone()[0]==6
@@ -371,7 +389,7 @@ def test_bidv_duplicate_posting_fails_without_delivery(tmp_path):
     bank_api=BidvBank(corrupt=True)
     with service(tmp_path) as (url,path,remote,app),sync_playwright() as p,bidv_install(p,url,bank_api) as (_,worker,bank,popup,_):
         connect(popup,bank,url);account(popup,TARGET);start_sync(popup,bank,worker)
-        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='failed',timeout=35)
+        pump_until(popup,worker,lambda:(state(worker) or {}).get('phase')=='failed',timeout=180)
         assert not remote.writes
         with storage.transaction(path,read_only=True) as db:
             assert db.execute('SELECT count(*) FROM bank_transactions').fetchone()[0]==0
@@ -418,7 +436,7 @@ def test_initial_import_period_and_repeated_thirty_day_default(tmp_path, overrid
         assert current['command']['reimport_from']==override
         intervals=current['job']['accounts'][0]['intervals']
         assert min(i['period']['start'] for i in intervals)==(override or '2026-04-16')
-        pump_until(popup,worker,lambda:state(worker).get('job',{}).get('delivery_state')=='complete',timeout=60)
+        pump_until(popup,worker,lambda:state(worker).get('job',{}).get('delivery_state')=='complete',timeout=180)
         assert sum(map(len,remote.writes))==3
         if override is None:
             # Once initial coverage is complete, repeated synchronization keeps

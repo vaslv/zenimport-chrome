@@ -13,6 +13,7 @@
     <input id="profile-name" aria-label="Connection name" maxlength="120" autocomplete="off" required hidden>
     <button id="rename-profile" class="icon-button" type="button" aria-label="Rename connection" title="Rename connection"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" id="profile-icon" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Zm0 0L19.5 7.125"/></svg></button>
   </form>
+  <p id="storage-mode" class="muted" role="status"></p>
   <button id="sync" class="primary" type="button" disabled>Synchronize</button>
   <details id="history-settings" class="settings-section" hidden>
     <summary>Synchronization period</summary>
@@ -29,20 +30,71 @@
       <section id="accounts" aria-label="Account mapping"></section>
       <button id="refresh-accounts" type="button">Refresh account list</button>
     </details>
+    <details id="local-settings" class="settings-section"><summary>ZenMoney connection</summary>
+      <form id="local-form">
+        <label>ZenMoney token<input id="local-token" type="password" maxlength="4096" autocomplete="off" spellcheck="false" required disabled></label>
+        <button id="local-connect" type="submit" disabled>Verify token</button>
+      </form>
+      <p id="local-owner" class="muted"></p>
+      <button id="local-remove" type="button" hidden>Remove token</button>
+      <p class="muted">Data stays in this Chrome profile. Export backups regularly; there is no automatic cloud backup. Removing the token keeps your history.</p>
+    </details>
     <details id="connection-settings" class="settings-section"><summary>Server connection</summary>
-    <form id="server-form">
-      <label>Server address<input id="url" type="url" placeholder="http://localhost:18792" spellcheck="false" required></label>
-      <label>Server token<input id="token" maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
-      <button id="connect" type="submit">Connect</button>
-    </form>
+      <form id="server-form">
+        <label>Server address<input id="url" type="url" disabled placeholder="https://zenimport.example.com" spellcheck="false" required></label>
+        <label>Server token<input id="token" disabled maxlength="4096" type="password" autocomplete="off" spellcheck="false" required></label>
+        <button id="connect" type="submit" disabled>Connect</button>
+      </form>
+      <section id="server-candidate" hidden aria-label="Confirm server selection">
+        <p id="candidate-summary" class="muted"></p>
+        <label class="choice" id="move-data-label"><input id="move-data" type="checkbox" disabled>Move browser data to this empty server</label>
+        <label class="choice" id="join-server-label"><input id="join-server" type="checkbox" disabled>Connect without importing or merging. Keep my browser copy inactive. This server must already have the import history needed to prevent duplicates.</label>
+        <button id="select-server" type="button" disabled>Use this server</button>
+      </section>
+      <details id="browser-return" class="settings-section" hidden><summary>Move to this browser</summary>
+        <form id="browser-form">
+          <label>ZenMoney token for browser storage<input id="browser-token" type="password" maxlength="4096" autocomplete="off" required disabled></label>
+          <label class="choice"><input id="pause-server" type="checkbox" required disabled>Pause this shared server for everyone after the move</label>
+          <label class="choice"><input id="replace-browser" type="checkbox" disabled>Replace an inactive browser copy. I have downloaded its backup.</label>
+          <button id="use-browser" type="submit" disabled>Move to browser</button>
+        </form>
+      </details>
+      <p id="storage-help" class="muted">One active database. Moving data requires an empty destination. Existing databases are never merged.</p>
     </details>
     <details id="migration-settings" class="settings-section"><summary>Data migration</summary>
-      <p class="muted">Export pauses this server. Connect to the new server, then import before its first synchronization. The ZIP contains private financial data, not server tokens.</p>
-      <div class="shortcuts"><button id="export-data" type="button">Export data</button><button id="import-data" type="button" disabled>Import data</button></div>
-      <input id="migration-file" type="file" accept=".zip,application/zip" hidden>
+      <p class="muted">The ZIP contains private financial history, not tokens. Store it securely. Export does not move the active database.</p>
+      <label>Export source<select id="archive-source" disabled></select></label>
+      <button id="export-data" type="button" disabled>Export data</button>
+      <section id="archive-download" hidden>
+        <label>Prepared backup<select id="archive-ready"></select></label>
+        <div class="shortcuts"><button id="download-data" type="button" disabled>Download ZIP</button><button id="ack-download" type="button" disabled>I saved the ZIP</button></div>
+      </section>
+      <form id="restore-form">
+        <label>Restore destination<select id="restore-target" disabled><option value="browser">This browser</option><option value="server">Current server</option></select></label>
+        <label id="restore-token-label">ZenMoney token for this browser<input id="restore-token" type="password" maxlength="4096" autocomplete="off" disabled></label>
+        <label class="choice"><input id="retired-writers" type="checkbox" required disabled>I have stopped every previous writer for this data</label>
+        <label class="choice"><input id="snapshot-loss" type="checkbox" required disabled>I accept that newer import and deletion evidence may be absent from this backup</label>
+        <label class="choice"><input id="restore-replace" type="checkbox" disabled>Replace an inactive browser copy. I have downloaded its backup.</label>
+        <button id="import-data" type="button" disabled>Choose ZIP to restore</button>
+        <input id="migration-file" type="file" accept=".zip,application/zip" hidden>
+      </form>
+      <section id="restore-preview" hidden>
+        <p id="preview-summary"></p>
+        <label class="choice"><input id="accept-preview" type="checkbox">I reviewed this summary and want to activate the restored data</label>
+        <button id="confirm-restore" type="button" disabled>Activate restored data</button>
+      </section>
+      <form id="repair-local-form" hidden>
+        <label for="repair-local-token">Replacement ZenMoney token</label>
+        <input id="repair-local-token" type="password" autocomplete="off" required disabled>
+        <button id="repair-local" type="submit" disabled>Verify replacement ZenMoney token</button>
+      </form>
+      <form id="repair-transport-form" hidden>
+        <p id="repair-transport-target" class="muted"></p>
+        <label>Replacement server token<input id="repair-transport-token" type="password" maxlength="4096" autocomplete="off" required disabled></label>
+        <button id="repair-transport" type="submit" disabled>Verify replacement token</button>
+      </form>
       <p id="migration-status" class="migration-status" role="status" aria-live="polite"></p>
-      <button id="migration-resume" type="button" hidden>Resume this server</button>
+      <div class="shortcuts"><button id="migration-retry" type="button" hidden>Retry</button><button id="migration-cancel" type="button" hidden>Cancel</button><button id="migration-clean" type="button" hidden>Clear temporary data</button></div>
     </details>
-
 </main><script type="module" src="popup.js"></script></body>
 </html>

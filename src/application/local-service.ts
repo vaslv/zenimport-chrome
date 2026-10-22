@@ -62,7 +62,10 @@ export function localApplication(name:string,sentinel:SentinelPort,area:StorageA
       pause:(id:string,data:unknown)=>capture(value=>value.pause(id,data,now())),stop:(id:string)=>capture(value=>value.stop(id,now()))},
     reports:{discrepancies:async(id:string,query:{refresh?:boolean;from_date?:string;to_date?:string;account_id?:string})=>{
       if(query.refresh)await unit(({mirror})=>mirror.refresh({force:true,transactions:true}));
-      const value=await ReportRepository.open(name,sentinel,fence);try{return await value.build({connection_id:id,...query},now());}finally{value.close();}}},
+      // Empty popup filters mean the default range/all accounts, just as the
+      // remote adapter omits them from its query string. Never pass RPC extras.
+      const filters=Object.fromEntries((['from_date','to_date','account_id'] as const).filter(key=>query[key]).map(key=>[key,query[key]]));
+      const value=await ReportRepository.open(name,sentinel,fence);try{return await value.build({connection_id:id,...filters},now());}finally{value.close();}}},
     // Legacy format-1 transport has no local authority. The popup uses the
     // separate, explicit control owners for verified portable transfers.
     migration:{status:async()=>{throw new SyncError('unsupported_migration_version');},

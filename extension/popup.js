@@ -1,4 +1,4 @@
-import {permissionOrigin} from './backend-client.js';
+import {setupStorage,storageMessages} from './popup-storage.js';
 import {today,daysAgo,monthsAgo,validDate,syncTime} from './dates.js';
 import {setupMigration} from './popup-migration.js';
 import {setupProfiles} from './popup-profiles.js';
@@ -23,15 +23,17 @@ const messages={
   migration_busy:'A server operation is in progress. Try again shortly.',
   bank_connection_required:'Open the bank account overview to detect the current connection.',
   bank_connection_changed:'The bank session belongs to another connection. Reopen the popup to detect the current connection before synchronizing.',
+  ...storageMessages,
 };
 const status=(text,tone='neutral')=>{ $('status').textContent=text; $('status').dataset.tone=tone; $('status').setAttribute('aria-busy',String(tone==='loading')); };
 const showError=error=>{
   status(messages[error.code] || 'Could not complete the action. Try again later.','error');
+  if(['zenmoney_auth','zenmoney_wrong_owner','zenmoney_permission','zenmoney_not_configured'].includes(error.code))$('local-settings').open=true;
   if(['not_configured','unauthorized','invalid_server','unsupported_api_version'].includes(error.code)){
     $('connection-settings').open=true;
   }
 };
-let lastSyncedAt=null;
+let lastSyncedAt=null,currentMode=null,storageState=null;
 function renderLastSync(value=lastSyncedAt) {
   lastSyncedAt=value;
   const time=syncTime(value), element=$('last-sync');
@@ -39,13 +41,13 @@ function renderLastSync(value=lastSyncedAt) {
   element.textContent=time ? `Last synchronized: ${time.date} · ${time.ago}.` : '';
 }
 let connectionDraftPending=false,periodEdited=false;
-let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=false,refreshTask=null,reimportSaved='',migrationPaused=false;
+let configured=false,view=null,catalog=[],capture=null,compatible=false,busy=true,refreshTask=null,reimportSaved='',migrationPaused=false;
 function node(tag,text,attributes={}) {const value=document.createElement(tag);if(text)value.textContent=text;Object.assign(value,attributes);return value;}
 function updateButton() {
   const active=['planned','collecting'].includes(capture?.phase),working=busy || !!refreshTask;
   $('account-settings').hidden=!compatible;
   $('history-settings').hidden=!compatible || !view?.connection?.accounts.some(a=>a.selection==='enabled' && a.supported);
-  $('discrepancies').disabled=working || !compatible;
+  $('discrepancies').disabled=working || !compatible || migrationPaused;
   $('connect').disabled=working;$('refresh-accounts').disabled=working;
   $('accounts').inert=working || !compatible;
   $('url').disabled=working;$('token').disabled=working;
@@ -82,9 +84,9 @@ function progress(state) {
     status(job.delivery_state==='complete'
       ? `Done. Processed: ${d.delivered}. Suppressed: ${d.suppressed}.`
       : job.delivery_state==='blocked' ? d.uncertain
-        ? `History saved. The server is verifying delivery: ${d.uncertain}.`
-        : `History saved. ${messages[job.errors?.at(-1)?.code] || 'Delivery is paused on the server.'}`
-      : `History saved. The server is sending transactions: ${d.pending}.`,job.delivery_state==='complete'?'success':job.delivery_state==='blocked'?'error':'loading');
+        ? `History saved. Verifying uncertain delivery: ${d.uncertain}.`
+        : `History saved. ${messages[job.errors?.at(-1)?.code] || 'Delivery is paused.'}`
+      : `History saved. Sending transactions: ${d.pending}.`,job.delivery_state==='complete'?'success':job.delivery_state==='blocked'?'error':'loading');
   }
 }
 function accountNeedsSetup(account) {
@@ -175,22 +177,25 @@ async function refreshData() {
 }
 let connectionEdited=false;
 const profiles=setupProfiles({rpc,refresh,lock:value=>{busy=value;updateButton();},feedback:status,error:showError});
-const migration=setupMigration({rpc,refresh:async()=>{capture=null;view=null;await refresh();},
+const migration=setupMigration({rpc,refresh:reloadState,
   lock:value=>{busy=value;updateButton();},pause:value=>{migrationPaused=value;updateButton();}});
+const storage=setupStorage({rpc,feedback:status,changed:reloadState,lock:value=>{busy=value;updateButton();}});
+async function applyState(state,{initial=false}={}){
+  configured=state.configured;currentMode=state.storage?.mode??'remote';storageState=state.storage;
+  await storage.load(state,{initial});await migration.load(state);
+  capture=state.capture;
+  if(state.verificationError){showError({code:state.verificationError});return;}
+  if(storageState?.controls.pending||migrationPaused){$('migration-settings').open=true;status('Storage work is in progress. See Data migration.','loading');return;}
+  if(configured){await refresh();}
+  else{compatible=false;view=null;renderAccounts();await profiles.render(null);status(currentMode==='local'?messages.zenmoney_not_configured:messages.not_configured);}
+  if(capture&&(compatible||['planned','collecting'].includes(capture.phase)))progress(capture);
+}
+async function reloadState(){await applyState(await rpc({type:'status'}));}
 for(const id of ['url','token'])$(id).addEventListener('input',()=>{
   connectionEdited=true;connectionDraftPending=true;
   // Issue the write on input, before the popup can close; no debounce/unload hook.
   chrome.storage.session.set({connectionDraft:{url:$('url').value,token:$('token').value}})
     .catch(()=>status('Could not save the entered settings. Enter them again.','error'));
-});
-$('server-form').addEventListener('submit',async event=>{
-  event.preventDefault();busy=true;status('Connecting to the server…','loading');updateButton();
-  try {
-    if(!await chrome.permissions.request({origins:[permissionOrigin($('url').value)]}))throw Object.assign(Error(),{code:'invalid_server'});
-    await rpc({type:'configure',url:$('url').value,token:$('token').value});
-    $('token').value='';configured=true;connectionDraftPending=false;capture=null;
-    $('connection-settings').open=false;renderLastSync(null);await migration.refresh();await refresh();
-  } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
 $('discrepancies').addEventListener('click',async()=>{try{await rpc({type:'open-discrepancies'});}catch(error){showError(error);}});
 $('refresh-accounts').addEventListener('click',refresh);
@@ -220,23 +225,33 @@ $('sync').addEventListener('click',async()=>{
     const state=await rpc({type:'status'});progress(state.capture);await migration.refresh();
   } catch(error){showError(error);}finally{busy=false;updateButton();}
 });
+updateButton();
 try {
- const [state,{connectionDraft}]=await Promise.all([rpc({type:'status'}),chrome.storage.session.get('connectionDraft')]);
- configured=state.configured;
- if(!connectionEdited){$('url').value=connectionDraft?.url ?? state.url;$('token').value=connectionDraft?.token ?? '';}
- $('reimport').value=state.reimportFrom || daysAgo(30);
- reimportSaved=state.reimportFrom;
- connectionDraftPending=connectionEdited || !!connectionDraft;
- $('connection-settings').open=!state.configured || connectionDraftPending;
- capture=state.capture;
- if(state.configured){await migration.refresh();await refresh();}else status(messages.not_configured);
- if(capture && (compatible || ['planned','collecting'].includes(capture.phase)))progress(capture);
-} catch(error){showError(error);}
+ const [state,{connectionDraft,migrationReopen}]=await Promise.all([rpc({type:'status'}),chrome.storage.session.get(['connectionDraft','migrationReopen'])]);
+ if(!connectionEdited){$('url').value=connectionDraft?.url??state.url;$('token').value=connectionDraft?.token??'';}
+ $('reimport').value=state.reimportFrom||daysAgo(30);reimportSaved=state.reimportFrom;
+ connectionDraftPending=connectionEdited||!!connectionDraft;
+ await applyState(state,{initial:true});
+ if(connectionDraftPending)$('connection-settings').open=true;
+ if(migrationReopen){$('migration-settings').open=true;await chrome.storage.session.remove('migrationReopen');}
+} catch(error){showError(error);}finally{busy=false;updateButton();}
+let polling=false;
 setInterval(async()=>{
- try{const state=await rpc({type:'status'});const same=state.view?.connection?.id===view?.connection?.id;renderLastSync(compatible && same?state.lastSyncedAt:null);if(JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
+ if(polling||busy||refreshTask)return;polling=true;
+ try{
+  const state=await rpc({type:'status'}),wasPaused=migrationPaused;
+  storageState=state.storage;await storage.load(state);await migration.load(state);
+  if(wasPaused&&!migrationPaused&&state.configured&&!compatible){await applyState(state);return;}
+  const same=state.view?.connection?.id===view?.connection?.id;
+  renderLastSync(compatible&&same?state.lastSyncedAt:null);
+  if(!migrationPaused&&JSON.stringify(state.capture)!==JSON.stringify(capture))progress(state.capture);
   if(same){
-    if(reimportSaved && !state.reimportFrom && $('reimport').value===reimportSaved)$('reimport').value=daysAgo(30);
+    if(reimportSaved&&!state.reimportFrom&&$('reimport').value===reimportSaved)$('reimport').value=daysAgo(30);
     reimportSaved=state.reimportFrom;
   }
- }catch{}
+ }catch(error){if(error.code==='stale_context'){
+   if($('migration-settings').open)await chrome.storage.session.set({migrationReopen:true});
+   location.reload();
+  }}
+ finally{polling=false;}
 },1500);
