@@ -103,8 +103,19 @@ export class AccountSettingsOwner{
     if(op.phase==='failed')throw new CaptureError(op.error!);return op.result!;
   }
   async recover(){
-    await this.sentinel.markFinancialActivity(this.fence.installationId);
-    const held=await this.#unit('existing',async(_,dataset)=>dataset.holdId===null?null:operation((await this.db.applicationState.get(scope(dataset.holdId)))?.value,dataset.holdId,this.fence.generation));
+    // Startup is a read until a recognized settings hold is found. In particular,
+    // an imported awaitingSync copy needs no setup permit merely to be inspected.
+    const marker=await readAnchor(this.sentinel,this.fence.installationId);
+    const held=await this.db.transaction('r',this.db.runtime,this.db.datasets,this.db.participants,this.db.applicationState,async()=>{
+      const root=runtimeControl(await assertAnchor(this.db,marker)),fence=this.fence;
+      requireStorage(root.activeMode==='local'&&root.activeGeneration===fence.generation&&root.epoch===fence.epoch&&
+        (fence.credentialEpoch===undefined||root.credentialEpoch===fence.credentialEpoch)&&root.pendingSwitchId===null,'stale_epoch');
+      const dataset=datasetControl(await this.db.datasets.get(fence.generation)),participant=participantControl(await this.db.participants.get(dataset.participantId));
+      requireStorage(dataset.lifecycle==='active'&&participant.state==='active'&&participant.generation===dataset.generation&&participant.epoch===dataset.participantEpoch,'dataset_not_writable');
+      if(dataset.holdId===null)return null;
+      const value=(await this.db.applicationState.get(scope(dataset.holdId)))?.value;
+      return value===undefined?null:operation(value,dataset.holdId,fence.generation);
+    }).catch(error=>{throw storageFailure(error);});
     return held===null?null:this.run(held.accountId,held.desired,held.createdAt);
   }
   async #step(id:string):Promise<Setup>{

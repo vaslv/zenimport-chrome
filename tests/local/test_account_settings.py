@@ -107,3 +107,18 @@ def test_native_settings_resume_after_worker_death_or_quota_without_losing_hold(
         assert left['value']==right['value'] and left['value']['settings_version']=='2'
         assert call(page,'accounts-state')['result']['dataset']['holdId'] is None
         assert all(row['needs_rebuild']=='1' for row in call(page,'delivery-state')['result'])
+
+
+def test_startup_recovery_without_settings_hold_is_read_only_on_fresh_and_imported_copies(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        initial=call(worker,'init');assert initial['ok'] and not initial['root']['financialMayHaveStarted']
+        before=call(worker,'accounts-state')['result']
+        recovered=call(worker,'accounts-recover');assert recovered['ok'] and recovered['result'] is None,recovered
+        assert call(worker,'accounts-state')['result']==before
+        assert call(worker,'status')['sentinel']==initial['sentinel']
+        ready(worker);assert call(worker,'awaiting')['ok']
+        before=call(worker,'accounts-state')['result']
+        # This synthetic imported copy deliberately has no local-import-setup permit.
+        recovered=call(worker,'accounts-recover');assert recovered['ok'] and recovered['result'] is None,recovered
+        assert call(worker,'accounts-state')['result']==before
+        assert call(worker,'write-fences')['result']==['dataset_not_writable','dataset_not_writable']

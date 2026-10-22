@@ -1890,3 +1890,15 @@ Docker strict/generated checks and 271 unit/contracts passed (1754.47ms); native
 control/application/backup: 14 passed (21.77s); minimum Chrome 140 control API:
 three passed (23.71s). Product dispatch/popup and L12 remain unfinished. No live
 API/production data, push, tags or publication.
+
+### L11 review fix: read-only startup without an account settings hold
+
+Independent adversarial review found that unconditional settings recovery marked
+fresh storage as financially used and rejected imported awaitingSync copies without
+an initial-setup permit. Recovery now inspects a recognized settings hold in a
+read-only native transaction first. No hold means no activity marker, setup permit
+or write. Existing held settings still resume through the original guarded owner.
+The adversarial reread has no findings. Docker native settings/background:
+11 passed, one large unrelated case deselected (37.27s); strict/generated checks
+and 275 unit/contracts passed (1555.28ms). Minimum-browser repeat and product
+background integration remain in progress. No live API/data or publication.
