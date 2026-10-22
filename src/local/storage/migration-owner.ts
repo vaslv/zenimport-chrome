@@ -91,13 +91,13 @@ export class MigrationOwner{
     });
   }
   /** One bounded pre-hold unit; stopping a capture never invents completeness. */
-  async quiesceLocal(expected:RuntimeControl,now:string,intent?:{kind:'join'|'switch';id:string}){
+  async quiesceLocal(expected:RuntimeControl,now:string,intent?:{kind:'join'|'switch'|'backup';id:string}){
     const checkIntent=async()=>{
       if(!intent)return;participantUuid(intent.id);
-      const join=intent.kind==='join',head=join?'mode-join-head':'mode-switch-head',scope=(join?'mode-join:':'mode-switch:')+intent.id;
+      const join=intent.kind==='join',backup=intent.kind==='backup',head=backup?'backup-preparation-head':join?'mode-join-head':'mode-switch-head',scope=(backup?'backup-preparation:':join?'mode-join:':'mode-switch:')+intent.id;
       const value=(await this.#db.applicationState.get(scope))?.value;
       requireParticipant((await this.#db.applicationState.get(head))?.value.id===intent.id&&value!==undefined&&
-        (join?value.phase==='quiescing':!['complete','cancelled'].includes(value.phase as string)),'migration_busy');
+        (join||backup?value.phase==='quiescing':!['complete','cancelled'].includes(value.phase as string)),'migration_busy');
     };
     const anchor=await this.#anchor();
     const pending=await this.#db.transaction('r',this.#db.tables,async()=>{

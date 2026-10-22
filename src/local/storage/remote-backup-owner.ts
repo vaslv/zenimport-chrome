@@ -1,3 +1,4 @@
+import {assertNoBackupPreparation} from './backup-preparation.js';
 /** Snapshot coordination is not writer authority; the server owns its short hold. */
 import type {RuntimeControl,SentinelPort} from '../../control/types.js';
 import {runtimeControl} from '../../control/validation.js';
@@ -73,7 +74,7 @@ export class RemoteBackupOwner{
       requireParticipant(root.activeMode==='remote'&&root.pendingSwitchId===null&&root.credentialRef!==null,'migration_paused');
       const existing=(await this.db.applicationState.get(scope(input.id)))?.value;
       if(existing){const v=checked(existing);await this.#guard(root,v);requireParticipant(sameJournal(v.request,input));return v;}
-      await assertNoRemoteBackup(this.db);
+      await assertNoRemoteBackup(this.db);await assertNoBackupPreparation(this.db);
       for(const [pointer,prefix,terminal] of [
         ['mode-switch-head','mode-switch:',['complete','cancelled']],['mode-join-head','mode-join:',['complete','cancelled']],
         ['local-backup-head','local-backup:',['ready','cancelled','cleaned']],['archive-restore-head','archive-restore:',['activated','cancelled']],

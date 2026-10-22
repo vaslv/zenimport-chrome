@@ -1922,3 +1922,17 @@ browser restart without inventing external-download acknowledgement.
 Product background.js deliberately remains remote-only until the popup is ready.
 L11 product UI and L12 acceptance are unfinished. No live services/production data,
 push, tags or publication.
+
+### L11 review fix: durable pre-snapshot export preparation
+
+Native preparation retains the exact requested backup ID and source Root before
+bounded capture/outbox quiescence. Background steps resume it across Chrome
+restart; cancellation permanently retires that ID. Late capture stops and other
+mode/restore/export starts check the native preparation fence. Snapshot hold and
+preparation completion commit atomically. Independent API/adversarial rereads
+are clean; see reviews/l11-backup-preparation-2026-10-22.md.
+
+Docker strict/generated checks plus 279 unit/contracts passed (1295.02ms). Native
+preparation/control/archive/backup and current popup checks: 17 passed (42.87s).
+Minimum-browser repeat and remaining popup acceptance are in progress. No live
+API/production data, push, tags or publication.

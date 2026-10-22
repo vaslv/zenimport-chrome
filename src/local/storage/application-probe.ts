@@ -1,6 +1,7 @@
 /** Offline installed-worker fixtures; never included in the distributed ZIP. */
 import {installBackground} from '../../../extension/background-runtime.js';
 import type {ApplicationService} from '../../application/service.js';
+import {ModeTransfers} from '../migration/controller.js';
 import {controlCommand} from '../../application/control-api.js';
 import {ApplicationRuntime} from '../../application/runtime.js';
 import type {StorageArea} from '../../application/state.js';
@@ -45,7 +46,9 @@ export async function run(action:string,args:{name:string;patch?:Record<string,u
     let app=await runtime.current();
     if(action==='install-background'){if(!installedBackgrounds.has(name)){installBackground({runtime,standalone:true});installedBackgrounds.add(name);}return {ok:true,context:app?.context};}
     if(action==='control'){
-      const value=await controlCommand(args.data as Record<string,unknown>,runtime,app!);
+      const previous=ModeTransfers.prototype.backupRoot;
+      if(args.token==='quiescing-once')ModeTransfers.prototype.backupRoot=async()=>null;
+      let value;try{value=await controlCommand(args.data as Record<string,unknown>,runtime,app!);}finally{ModeTransfers.prototype.backupRoot=previous;}
       app=await runtime.current();return {ok:true,value,root:app?.root,context:app?.context};
     }
     if(action==='clock'){clocks.set(name,args.now!);return {ok:true};}

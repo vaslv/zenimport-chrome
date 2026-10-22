@@ -36,3 +36,9 @@ test('worker budgets are bounded and awaiting remote work keeps a periodic watch
  f.controls.step=async()=>{calls++;return {state:'progress'};};await f.driver.wake();assert.equal(calls,16);assert.equal(f.alarm().periodInMinutes,.5);
  f.controls.step=async()=>{calls++;return {state:'waiting'};};await f.driver.wake();assert.equal(calls,17);assert.ok(f.alarm());
 });
+
+test('a native backup preparation resumes the same export id before a snapshot hold exists',()=>{
+ const s=empty(),id=crypto.randomUUID();s.archives.preparation={id,generation:crypto.randomUUID(),phase:'quiescing'};
+ assert.deepEqual(nextControl(s),{type:'archive-export-step',kind:'local',id});
+ s.archives.preparation.phase='cancelled';assert.equal(nextControl(s),null);
+});

@@ -13,7 +13,7 @@ export function nextControl(storage){
   if(a.restore&&['loading','validated'].includes(a.restore.phase))return {type:'archive-import-step',target:'browser',id:a.restore.id};
   const backup=a.backup;
   if(backup&&backup.phase!=='complete'&&(backup.phase!=='ready'||backup.ackRequested||backup.cancelRequested))return {type:'archive-export-step',kind:'remote',id:backup.id};
-  const local=a.backups.find(value=>value.phase==='building');
+  const local=a.backups.find(value=>value.phase==='building')??(a.preparation?.phase==='quiescing'?a.preparation:null);
   if(local)return {type:'archive-export-step',kind:'local',id:local.id};
   return null;
 }

@@ -1,3 +1,4 @@
+import {backupPreparation,backupPreparationScope,backupPreparationHead,currentBackupPreparation,assertNoBackupPreparation} from './backup-preparation.js';
 import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Local snapshots carry facts, never peer handoff or financial write authority. */
 import Dexie from 'dexie';
@@ -70,6 +71,32 @@ export class BackupOwner{
     const rows=await this.db.applicationState.where('scope').startsWith('local-backup:').toArray();
     return rows.map(row=>structuredClone(row.value) as unknown as Backup);
   });}
+  async preparation(){return this.#unit(false,()=>currentBackupPreparation(this.db));}
+  /** Record the user's exact request before stopping capture or recovering a batch. */
+  async prepare(id:string,generation:string){
+    participantUuid(id);participantUuid(generation);
+    return this.#unit(true,async root=>{
+      requireParticipant(root.activeMode==='local'&&root.activeGeneration===generation&&root.pendingSwitchId===null,'migration_paused');
+      const previous=(await this.db.applicationState.get(backupPreparationScope(id)))?.value;
+      if(previous){const v=backupPreparation(previous);requireParticipant(v.generation===generation&&v.phase==='quiescing'&&
+        (!v.initialRoot.financialMayHaveStarted||root.financialMayHaveStarted)&&sameJournal({...root,financialMayHaveStarted:v.initialRoot.financialMayHaveStarted},v.initialRoot),'stale_context');return v;}
+      await assertNoRemoteBackup(this.db);await assertNoBackupPreparation(this.db);
+      for(const [head,prefix,terminal] of [
+        ['mode-switch-head','mode-switch:',['complete','cancelled']],['mode-join-head','mode-join:',['complete','cancelled']],
+        ['local-backup-head','local-backup:',['ready','cancelled','cleaned']],['archive-restore-head','archive-restore:',['activated','cancelled']],
+      ] as const){const key=(await this.db.applicationState.get(head))?.value.id;
+        if(typeof key==='string')requireParticipant(terminal.includes((await this.db.applicationState.get(prefix+key))?.value.phase as never),'migration_busy');}
+      const dataset=datasetControl(await this.db.datasets.get(generation)),control=participantControl(await this.db.participants.get(dataset.participantId));
+      requireParticipant(dataset.lifecycle==='active'&&dataset.holdId===null&&control.state==='active'&&!control.awaitingSync&&control.epoch===dataset.participantEpoch,'migration_paused');
+      for(const owner of dataset.ownerIds){
+        const row=await this.db.financial('zen_entities').get([generation,encodeKey([['text','user'],['text',owner]])]);
+        requireParticipant(row!==undefined&&unpackRow('zen_entities',row.row).deleted==='0','migration_incomplete');
+      }
+      const value=backupPreparation({version:'1',id,generation,initialRoot:root,phase:'quiescing'});
+      await this.db.applicationState.put({scope:backupPreparationScope(id),value:value as unknown as Record<string,unknown>});
+      await this.db.applicationState.put({scope:backupPreparationHead,value:{id}});return value;
+    });
+  }
   /** Caller quiesces first; this final transaction owns the actual snapshot hold. */
   async begin(id:string,generation:string,expected:RuntimeControl,now:string){
     participantUuid(id);participantUuid(generation);int64(now);requireParticipant(BigInt(now)>=0n&&BigInt(now)<=253402300799n);
@@ -77,7 +104,10 @@ export class BackupOwner{
       const old=(await this.db.applicationState.get(scope(id)))?.value as unknown as Backup|undefined;
       if(old){requireParticipant(old.generation===generation);return old;}
       requireParticipant(same(root,expected)&&root.pendingSwitchId===null,'migration_busy');
-      await assertNoRemoteBackup(this.db);
+      await assertNoRemoteBackup(this.db);await assertNoBackupPreparation(this.db,id);
+      const prepared=(await this.db.applicationState.get(backupPreparationScope(id)))?.value;
+      if(prepared){const v=backupPreparation(prepared);requireParticipant(v.phase==='quiescing'&&v.generation===generation&&
+        (!v.initialRoot.financialMayHaveStarted||root.financialMayHaveStarted)&&sameJournal({...root,financialMayHaveStarted:v.initialRoot.financialMayHaveStarted},v.initialRoot),'stale_context');}
       for(const head of ['mode-switch-head','mode-join-head','local-backup-head','archive-restore-head']){
         const key=(await this.db.applicationState.get(head))?.value.id;
         if(typeof key==='string'){
@@ -107,7 +137,9 @@ export class BackupOwner{
       const value:Backup={version:'1',id,generation,datasetId:dataset.datasetId,initialRoot:root,held,phase:'building',nonce:null,createdAt:now,
         archiveId:crypto.randomUUID(),sha256:null,bytes:0,chunks:0,manifest:null,acknowledgedAt:null};
       if(held){await this.db.datasets.put({...dataset,lifecycle:'held',holdId:id});await this.db.runtime.put({...root,pendingSwitchId:id,epoch:increment(root.epoch)});}
-      await this.#save(value);await this.db.applicationState.put({scope:'local-backup-head',value:{id}});return value;
+      await this.#save(value);await this.db.applicationState.put({scope:'local-backup-head',value:{id}});
+      if(prepared)await this.db.applicationState.put({scope:backupPreparationScope(id),value:{...backupPreparation(prepared),phase:'complete'}});
+      return value;
     });
   }
   async #release(root:RuntimeControl,value:Backup){
@@ -117,6 +149,11 @@ export class BackupOwner{
     await this.db.runtime.put({...root,pendingSwitchId:null,epoch:increment(root.epoch)});
   }
   async cancel(id:string){return this.#unit(true,async root=>{
+    if(!(await this.db.applicationState.get(scope(id)))){
+      const value=backupPreparation((await this.db.applicationState.get(backupPreparationScope(id)))?.value);
+      requireParticipant(value.id===id&&value.phase!=='complete','migration_paused');
+      await this.db.applicationState.put({scope:backupPreparationScope(id),value:{...value,phase:'cancelled'}});return {id,phase:'cancelled' as const};
+    }
     const value=await this.#read(id);if(value.phase==='cancelled')return value;
     requireParticipant(value.phase==='building','migration_paused');await this.#release(root,value);
     const next={...value,phase:'cancelled' as const,nonce:null};await this.#save(next);return next;

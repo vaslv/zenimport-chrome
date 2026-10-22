@@ -1,3 +1,4 @@
+import {assertNoBackupPreparation} from './backup-preparation.js';
 import {assertNoRemoteBackup} from './remote-backup-owner.js';
 /** Durable coordinator ownership. This journal never grants financial authority. */
 import {transferBudget} from './transfer-budget.js';
@@ -35,7 +36,7 @@ export class SwitchJournalRepository{
     const plan=switchPlan(input),marker=await readAnchor(this.sentinel);
     return this.db.transaction('rw',this.db.tables,async()=>{
       const root=await assertAnchor(this.db,marker);requireParticipant(sameJournal(root,expected)&&root.pendingSwitchId===null,'migration_busy');
-      await assertNoRemoteBackup(this.db);
+      await assertNoRemoteBackup(this.db);await assertNoBackupPreparation(this.db);
       const restore=(await this.db.applicationState.get('archive-restore-head'))?.value;
       if(restore)requireParticipant(['activated','cancelled'].includes((await this.db.applicationState.get('archive-restore:'+restore.id))?.value.phase as string),'migration_busy');
       const backup=(await this.db.applicationState.get('local-backup-head'))?.value;
