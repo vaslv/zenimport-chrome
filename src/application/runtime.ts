@@ -1,4 +1,8 @@
 /** Privileged service selection. A transport never selects its own dataset. */
+import {StorageControls} from './storage-controls.js';
+import {LocalArchives} from './local-archives.js';
+import {RemoteArchiveRecovery} from './remote-archive-recovery.js';
+import {RemoteArchiveBackup} from './remote-archive-backup.js';
 import {LocalDatabase} from '../local/storage/bootstrap.js';
 import {localApplication} from './local-service.js';
 import type {LocalOptions} from './local-service.js';
@@ -167,6 +171,15 @@ export class ApplicationRuntime{
     if(expected?.root.credentialRef&&expected.root.credentialRef!==saved.ref)await this.area.remove(credentialKey(expected.root.credentialRef));
     return selected;
   }
+  #controlOptions(){
+    if(!this.localOptions)throw new SyncError('local_mode_disabled');
+    return {...this.localOptions,name:this.name,sentinel:this.sentinel,persistent:this.area,
+      verifyServer:(config:{url:string;token:string})=>this.#remote(config).capabilities()};
+  }
+  controls(app:ResolvedApplication){return new StorageControls(this.#controlOptions(),app);}
+  archives(app:ResolvedApplication){const options=this.#controlOptions();return {
+    local:new LocalArchives(options,app),recovery:new RemoteArchiveRecovery(options),backup:new RemoteArchiveBackup(options,app),
+  };}
   async configureLocal(token:string,expected:ResolvedApplication){
     if(!expected.local||expected.context.mode!=='local')throw new SyncError('stale_context');
     await expected.assert();await expected.local.verify(token);return this.current();

@@ -8,7 +8,7 @@ import {datasetControl,runtimeControl} from '../../control/validation.js';
 import {FinancialDatabase} from './database.js';
 import {readAnchor,assertAnchor} from './anchor.js';
 import {HeldReader} from './held-reader.js';
-import {packRow} from './cells.js';
+import {packRow,unpackRow,encodeKey} from './cells.js';
 import {readOutbox} from './outbox-control.js';
 import {participantControl} from './participant-validation.js';
 import {participantUuid,requireParticipant} from '../../control/participant-wire.js';
@@ -87,6 +87,12 @@ export class BackupOwner{
         }
       }
       const dataset=datasetControl(await this.db.datasets.get(generation));
+      // A verified token may precede the first stored mirror. Check known
+      // owners before holding it; older fact-only copies still validate at build.
+      for(const id of dataset.ownerIds){
+        const entity=await this.db.financial('zen_entities').get([generation,encodeKey([['text','user'],['text',id]])]);
+        requireParticipant(entity!==undefined&&unpackRow('zen_entities',entity.row).deleted==='0','migration_incomplete');
+      }
       const held=root.activeMode==='local'&&root.activeGeneration===generation;
       if(held){
         // Reserve both hold/release epochs before making the source unwritable.

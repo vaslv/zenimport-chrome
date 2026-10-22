@@ -8,7 +8,7 @@ await build({entryPoints:['extension/background-runtime.js'],outfile:'.local/con
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/application/runtime.ts'],outfile:'.local/contracts/application-runtime.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
-for(const name of ['messages','rpc'])await build({entryPoints:['src/application/'+name+'.ts'],outfile:'.local/contracts/application-'+name+'.mjs',
+for(const name of ['messages','rpc','control-api','control-messages'])await build({entryPoints:['src/application/'+name+'.ts'],outfile:'.local/contracts/application-'+name+'.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 await build({entryPoints:['src/application/remote.ts'],outfile:'.local/contracts/application-remote.mjs',
   bundle:true,platform:'browser',format:'esm',target:'chrome140'});

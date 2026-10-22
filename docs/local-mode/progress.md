@@ -1875,3 +1875,18 @@ Backend complete suite: 826 passed (155.68s), existing warnings only.
 
 Product control dispatch, background/popup and L12 remain unfinished. No live
 services/production data, push, tags or publication.
+
+### L11 trusted control API checkpoint
+
+Named runtime factories and strict popup-only dispatch now expose storage, archive,
+local credential and migration controls without accepting UI authority proofs.
+Explicit browser/server recovery targets support recovery independently of the
+currently selected mode. RPC revisions reject delayed initial responses after a
+selection change; known-owner mirror checks prevent the first backup taking an
+unusable hold. Independent API review is clean; earlier control API adversarial
+reread was clean. See reviews/l11-control-api-2026-10-22.md.
+
+Docker strict/generated checks and 271 unit/contracts passed (1754.47ms); native
+control/application/backup: 14 passed (21.77s); minimum Chrome 140 control API:
+three passed (23.71s). Product dispatch/popup and L12 remain unfinished. No live
+API/production data, push, tags or publication.

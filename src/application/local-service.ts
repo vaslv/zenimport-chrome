@@ -79,7 +79,7 @@ export function localApplication(name:string,sentinel:SentinelPort,area:StorageA
       }finally{for(const owner of opened.reverse())owner.close();}
     });
   }
-  return {service,readiness:()=>unit(({mirror})=>mirror.readiness()),verify:(token:string)=>unit(({credentials})=>credentials.verify(token)),
+  return {service,recoverSettings:()=>accounts(value=>value.recoverSettings()),readiness:()=>unit(({mirror})=>mirror.readiness()),verify:(token:string)=>unit(({credentials})=>credentials.verify(token)),
     remove:()=>unit(({credentials})=>credentials.remove()),saveDraft:(token:string)=>unit(({credentials})=>credentials.saveDraft(token)),
     draft:()=>unit(({credentials})=>credentials.draft()),delivery:{next:()=>delivery(value=>value.next()),run:()=>delivery(value=>value.run())}};
 }

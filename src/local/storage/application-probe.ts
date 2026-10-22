@@ -1,5 +1,6 @@
 /** Offline installed-worker fixtures; never included in the distributed ZIP. */
 import type {ApplicationService} from '../../application/service.js';
+import {controlCommand} from '../../application/control-api.js';
 import {ApplicationRuntime} from '../../application/runtime.js';
 import type {StorageArea} from '../../application/state.js';
 import {trustedSentinel} from '../../control/sentinel.js';
@@ -40,6 +41,10 @@ export async function run(action:string,args:{name:string;patch?:Record<string,u
     if(action==='close'){runtime.close();runtimes.delete(name);return {ok:true};}
     if(action==='delete-db'){runtime.close();runtimes.delete(name);await Dexie.delete(name);return {ok:true};}
     let app=await runtime.current();
+    if(action==='control'){
+      const value=await controlCommand(args.data as Record<string,unknown>,runtime,app!);
+      app=await runtime.current();return {ok:true,value,root:app?.root,context:app?.context};
+    }
     if(action==='clock'){clocks.set(name,args.now!);return {ok:true};}
     if(action==='pause-sync-acceptance'){
       paused=false;const at=Math.floor(Date.now()/1000),put=IDBObjectStore.prototype.put,add=IDBObjectStore.prototype.add,transact=FinancialDatabase.prototype.transaction;let armed=false,intercepted=false;
