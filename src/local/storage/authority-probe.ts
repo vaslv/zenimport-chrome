@@ -278,6 +278,7 @@ export async function run(action:string,args:Arguments){
             if(args.mode==='quota-route')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('mode-join:')&&values[0]?.value?.phase==='complete')throw new DOMException('synthetic-route-quota','QuotaExceededError');return put.apply(this,values);};
             try{value=await transfer.run(args.switchId);if(args.mode==='drop-join-reply'&&(value as {state:string}).state==='complete')throw new ParticipantError('backend_unavailable');}finally{IDBObjectStore.prototype.put=put;}
           }
+          else if(action==='transfer-retry')value=await transfer.retry(args.switchId!);
           else if(action==='transfer-current')value=await transfer.current();
           else if(action==='transfer-cancel'){
             const add=IDBObjectStore.prototype.add;

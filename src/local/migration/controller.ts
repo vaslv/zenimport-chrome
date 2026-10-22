@@ -102,6 +102,21 @@ export class ModeTransfers{
     }
     return this.journal.requestCancel(id,requestId,observed);
   }
+  /** Explicitly retry one already-owned peer task; never create a new transfer. */
+  async retry(id:string){
+    participantUuid(id);this.#expected((await this.owner.current()).root);
+    const join=await this.routes.current();if(join?.id===id&&join.phase==='quiescing')return this.run(id);
+    const value=await this.journal.current();requireParticipant(value?.plan.id===id&&!['complete','cancelled'].includes(value.phase),'migration_invalid');
+    if((await this.journal.cancellation(id))?.state==='requested')return this.run(id);
+    const plan=value.plan,peerId=plan.direction==='local-to-remote'?plan.destinationId!:plan.sourceId;
+    const client=await this.serverCredentials.client(plan.remoteCredentialRef),peer=new ServerParticipant(client,peerId),state=await peer.status(id);
+    const task=state.work.find(work=>work.state==='blocked');
+    if(!task)return this.run(id);
+    this.#expected((await this.owner.current()).root);
+    const retried=await client.retry(participantUuid(task.id));
+    requireParticipant(retried.switch_id===id&&retried.kind===task.kind,'migration_invalid');
+    return {state:'waiting' as const,phase:value.phase};
+  }
   async run(expectedId?:string){
     this.#expected((await this.owner.current()).root);
     if(expectedId!==undefined)participantUuid(expectedId);

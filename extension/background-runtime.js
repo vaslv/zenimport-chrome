@@ -124,7 +124,7 @@ async function popup(data,app) {
   if(standalone&&controlCommands.has(data.type)){
     if(!app)throw new SyncError('not_configured');
     if(!['storage-status','archive-status','archive-upload-status','archive-export-chunk','local-draft'].includes(data.type))await controls.arm();
-    if(['storage-step','storage-cancel','archive-import-retry','archive-import-cancel','archive-export-retry','archive-export-cancel','local-configure'].includes(data.type))await controls.retry();
+    if(['storage-step','storage-retry','storage-cancel','archive-import-retry','archive-import-cancel','archive-export-retry','archive-export-cancel','local-configure'].includes(data.type))await controls.retry();
     const value=await controlCommand(data,runtime,app);
     return {...value,...(value.storage?{controlPause:await controls.pause()}: {})};
   }

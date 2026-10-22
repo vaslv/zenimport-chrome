@@ -54,6 +54,7 @@ export class StorageControls{
       return owner.toBrowser(candidate.ref,consent);
     });
   }
+  async retry(id:string){await this.app.assert(true);return this.#unit(owner=>owner.retry(id));}
   async step(id:string){await this.app.assert(true);return this.#unit(owner=>owner.run(id));}
   async cancel(id:string,requestId:string){
     await this.app.assert(true);return this.#unit(async owner=>{

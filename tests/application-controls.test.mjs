@@ -70,3 +70,10 @@ test('explicit snapshot retry invokes remote retry instead of polling a blocked 
  assert.deepEqual(await controlCommand({type:'archive-export-retry',id,kind:'remote'},runtime,app),{result:{state:'waiting'}});assert.deepEqual(calls,[id]);
  assert.deepEqual(await controlCommand({type:'archive-export-retry',id,kind:'local'},runtime,app),{result:{phase:'ready'}});
 });
+
+test('explicit mode retry delegates to the saved transfer retry rather than starting a new one',async()=>{
+ const id=crypto.randomUUID(),calls=[],runtime={controls:()=>({retry:async value=>{calls.push(value);return {state:'waiting'};}}),archives:()=>({})};
+ assert.equal(message(command('storage-retry',{id}),'popup').type,'storage-retry');
+ assert.deepEqual(await controlCommand({type:'storage-retry',id},runtime,{assert:async()=>{}}),{result:{state:'waiting'}});
+ assert.deepEqual(calls,[id]);
+});

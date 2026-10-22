@@ -1936,3 +1936,15 @@ Docker strict/generated checks plus 279 unit/contracts passed (1295.02ms). Nativ
 preparation/control/archive/backup and current popup checks: 17 passed (42.87s).
 Minimum-browser repeat and remaining popup acceptance are in progress. No live
 API/production data, push, tags or publication.
+
+### L11 review follow-up: explicit retry of existing peer migration work
+
+A visible Retry now has a strict named storage-retry command. It authenticates the
+saved physical peer/transfer, retries one existing blocked task ID, and checks the
+returned task kind and switch. It never creates a new transfer. A requested cancel
+continues through the ordinary cancellation runner. Independent API review is clean.
+Docker strict/generated checks and 280 unit/contracts passed (1211.84ms). Actual
+Python/native blocked-validation→same-task retry→same-transfer completion passed
+(4.91s), with no financial SDK writes. Logs:
+/tmp/zenimport-l11-popup-{unit,transfer-retry}.log. Product popup acceptance remains
+in progress. No live API/production data, push, tags or publication.

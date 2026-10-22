@@ -524,3 +524,35 @@ def test_installed_archive_gateway_downloads_server_backup_and_recovers_browser_
                 assert not __import__('test_authority').call(worker,'write','target')['ok']
     finally:
         if harness is not None:harness.close()
+
+
+def test_explicit_transfer_retry_requeues_the_same_blocked_peer_work_without_new_transfer(tmp_path):
+    from test_authority import ok,FIXTURE
+    from backend import storage
+    harness=DeliveryHarness(tmp_path/'retry-peer.sqlite3')
+    try:
+        with server(harness) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+            ok(worker,'create');ok(worker,'seed',fixture=FIXTURE);ok(worker,'transfer-credential')
+            candidate=ok(worker,'transfer-candidate',url=url,token=TOKEN)
+            started=ok(worker,'transfer-to-server',credentialRef=candidate['ref']);id=started['plan']['id']
+            task_id=None
+            # The real worker stays stopped so the queued validation is controlled.
+            for _ in range(200):
+                result=ok(worker,'transfer-step',switchId=id);assert result['state']!='blocked',result
+                with storage.transaction(harness.path,read_only=True) as db:
+                    task=db.execute("SELECT id FROM migration_work WHERE switch_id=? AND kind='validate'",(id,)).fetchone()
+                if task:task_id=task[0];break
+            assert task_id
+            with storage.transaction(harness.path) as db:db.execute("UPDATE migration_work SET state='blocked',error_code='zenmoney_unavailable' WHERE id=?",(task_id,))
+            assert ok(worker,'transfer-step',switchId=id)['state']=='blocked'
+            retried=ok(worker,'transfer-retry',switchId=id);assert retried['state']=='waiting',retried
+            with storage.transaction(harness.path,read_only=True) as db:
+                assert db.execute('SELECT state FROM migration_work WHERE id=?',(task_id,)).fetchone()[0]=='queued'
+                assert db.execute("SELECT count(*) FROM migration_work WHERE switch_id=? AND kind='validate'",(id,)).fetchone()[0]==1
+            for _ in range(200):
+                harness.app.state.portable.run_once();result=ok(worker,'transfer-step',switchId=id)
+                assert result['state']!='blocked',result
+                if result['state']=='complete':break
+            assert result['state']=='complete' and ok(worker,'transfer-current')['plan']['id']==id
+            assert not harness.remote.writes
+    finally:harness.close()

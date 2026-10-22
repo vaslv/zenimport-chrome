@@ -43,6 +43,7 @@ export async function controlCommand(data:Record<string,unknown>,runtime:Applica
     const result=await controls.toBrowser(text(data.token),{pauseSharedServer:flag(data.pauseSharedServer),replaceInactiveLocalCopy:flag(data.replaceInactiveLocalCopy)});
     return {id:result.plan.id,phase:result.phase};
   }
+  if(type==='storage-retry')return {result:await controls.retry(participantUuid(data.id))};
   if(type==='storage-step')return {result:await controls.step(participantUuid(data.id))};
   if(type==='storage-cancel')return {result:await controls.cancel(participantUuid(data.id),participantUuid(data.requestId))};
   const id=participantUuid(data.id);
