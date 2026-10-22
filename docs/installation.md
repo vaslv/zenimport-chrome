@@ -1,5 +1,7 @@
 # Install and update ZenImport Chrome
 
+For the unpublished 0.3.0 standalone candidate, use the [browser/server operation guide](local-mode/operation-guide.md). The instructions below describe the earlier server-only releases.
+
 These instructions describe published **0.2.1**. See [release status](release-0.2.1.md).
 
 ## Requirements

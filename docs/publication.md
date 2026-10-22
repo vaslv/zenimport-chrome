@@ -19,7 +19,10 @@ and the build writes `dist/SHA256SUMS` and prints SHA256. Verify it with
 `(cd dist && shasum -a 256 -c SHA256SUMS)` on macOS or `sha256sum` on Linux.
 
 `.github/workflows/ci.yml` uses Docker with synthetic services, no real bank/ZenMoney,
-and retains the ZIP and checksum file. CI never uploads to the Store, creates tags, or creates GitHub
+and retains the ZIP and checksum file. The local-storage matrix runs current and
+minimum-browser checks without the Python backend: Python parity/controller modules
+and explicit interop phases are skipped there. Complete actual-Python and archive
+exchange acceptance remains a separate gate with both checkouts. CI never uploads to the Store, creates tags, or creates GitHub
 Releases. Backend integration acceptance is separate:
 `./scripts/test-integration.sh ../ZenImportBackend`; this needs both checkouts,
 whereas the finished extension build needs only this repository.
@@ -37,5 +40,9 @@ itself publishes nothing.
 `ghcr.io/vaslv/zenimport-backend:0.2.0` with that pinned SDK dependency; the extension
 connects to the backend HTTPS address and API_TOKEN. The joint Docker checks install
 the SDK from the backend's hash-locked PyPI requirement, not a sibling SDK checkout.
-Never enter a ZenMoney token into the extension.
+For published 0.2.1, configure the ZenMoney token on the server only. The local
+0.3.0 candidate accepts a ZenMoney token in **ZenMoney connection** for browser
+mode; **Server connection** still takes only the backend API token.
+Publish compatible backend 0.3.0 migration support before extension 0.3.0.
+Neither candidate is published by these preparation steps.
 Data details: [PRIVACY.md](../PRIVACY.md).

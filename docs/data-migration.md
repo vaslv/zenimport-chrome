@@ -1,5 +1,7 @@
 # Move data to another backend (0.2.0)
 
+For the unpublished 0.3.0 standalone candidate, use the [browser/server operation guide](local-mode/operation-guide.md). The instructions below describe the earlier server-only releases.
+
 Both backends and the extension must support migration (0.2.0+). The earlier 0.1.9
 ZIP does not contain the buttons. Upgrade both servers and the extension first.
 Backend 0.2.1 accepts verified archives from 0.2.0 (schema 6) and current schema 7;
