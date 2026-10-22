@@ -11,7 +11,7 @@ const pausedCapture=()=>({phase:'paused',error:'unauthorized',bank:'vietinbank',
   command:{connection_id:'fixture-connection',request_id:'fixture-command',reimport_from:null},
   job:{id:'fixture-job',capture_state:'paused',accounts:[]},driver:null,lease:null});
 
-async function fixture(t,capture,{fetcher}={}) {
+async function fixture(t,capture,{fetcher,standalone=false,verificationError}={}) {
   const previous={chrome:globalThis.chrome,fetch:globalThis.fetch};
   let listener;
   const local={config:{url:server,token:'fixture-old'},capture:structuredClone(capture),view:{connection:capture.connection}};
@@ -26,7 +26,7 @@ async function fixture(t,capture,{fetcher}={}) {
   globalThis.chrome={storage:{local:area(local),session:area(session)},
     runtime:{id:popupSender.id,getURL:path=>'chrome-extension://fixture-extension/'+path,
       onMessage:{addListener:handler=>{listener=handler;}},onStartup:{addListener:()=>{}}},
-    alarms:{onAlarm:{addListener:()=>{}},get:async()=>({name:'capture'})},
+    alarms:{onAlarm:{addListener:()=>{}},get:async()=>({name:'capture'}),clear:async()=>true,create:async()=>{}},
     tabs:{onRemoved:{addListener:()=>{}},get:async()=>({url:'https://ipay.vietinbank.vn/payment-history?accountNo=12345678'}),sendMessage:async()=>{}},
   };
   globalThis.fetch=async(url,options)=>{
@@ -35,7 +35,13 @@ async function fixture(t,capture,{fetcher}={}) {
   };
   t.after(()=>{globalThis.chrome=previous.chrome;globalThis.fetch=previous.fetch;});
   const {installBackground}=await import('../.local/contracts/background.mjs?fixture='+crypto.randomUUID());
-  const runtime=new ApplicationRuntime(chrome.storage.local,{},'unit-control',memoryControl());installBackground({runtime});
+  const runtime=new ApplicationRuntime(chrome.storage.local,{},'unit-control',memoryControl());
+  if(standalone){
+    runtime.verifySelected=async()=>{throw Object.assign(Error('synthetic verification failure'),{code:verificationError});};
+    runtime.controls=()=>({status:async()=>({transfer:null,join:null})});
+    runtime.archives=()=>({local:{status:async()=>({backups:[],restore:null})},recovery:{current:async()=>null},backup:{current:async()=>null}});
+  }
+  installBackground({runtime,standalone});
   const send=(data,sender=popupSender)=>new Promise(resolve=>listener(data,sender,resolve));
   await send({type:'status'}); // Drain initial state restoration before assertions.
   return {local,session,calls,send,setCapture:async value=>(await runtime.current()).state.set({capture:value})};
@@ -177,4 +183,11 @@ test('automatic primary-account creation survives a lost response without creati
   assert.equal(f.records.length,2);
   f.live.account='12345678';assert.equal((await f.send({type:'inspect'})).connection.id,'connection-a');
   f.live.account='87654321';assert.equal((await f.send({type:'inspect'})).connection.id,result.connection.id);
+});
+
+for(const code of ['zenmoney_unavailable','unsupported_migration_version'])test(`standalone legacy status preserves setup when identity fails with ${code}`,async t=>{
+ const capture=pausedCapture(),f=await fixture(t,capture,{standalone:true,verificationError:code});
+ const result=await f.send({type:'status'});
+ assert.equal(result.ok,true);assert.equal(result.configured,true);assert.equal(result.url,server);assert.equal(result.verificationError,code);
+ assert.deepEqual(result.capture,capture);assert.equal(f.session.connectionDraft.token,'fixture-new');assert.equal(f.calls.length,0);
 });

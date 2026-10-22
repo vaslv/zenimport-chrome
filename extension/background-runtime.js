@@ -3,8 +3,29 @@ import {Coordinator} from './coordinator.js';
 import {connectorFor,connectorById} from './connectors/index.js';
 import {bankName,profileStorageKey,resolveProfile,automaticProfile,canAttach,accountSignature} from './bank-profiles.js';
 import {message,assertMessageContext} from '../src/application/messages.ts';
+import {controlCommands,adoptsControlContext} from '../src/application/control-messages.ts';
+import {controlCommand,controlStatus} from '../src/application/control-api.ts';
+import {DeliveryAlarms,DELIVERY_ALARM} from '../src/local/delivery/alarms.ts';
+import {ControlAlarms,CONTROL_ALARM} from './background-controls.js';
 
-export function installBackground({runtime}) {
+export function installBackground({runtime,standalone=false}) {
+const controls=standalone?new ControlAlarms(runtime,chrome.storage.local,chrome.alarms):null;
+const delivery=standalone?new DeliveryAlarms(chrome.alarms,async()=>{
+  const app=await runtime.current();
+  if(!app?.local||app.root.pendingSwitchId!==null||app.awaitingSync)return null;
+  const readiness=await app.local.readiness();
+  return readiness.configured?app.local.delivery:null;
+}):null;
+async function restoreWakeups(){
+  if(controls)await controls.restore();
+  if(delivery)await delivery.restore();
+}
+async function recoverSettings(app){
+  // A failed account settings recovery must not suppress independent migration
+  // watchdogs. Native holds still block ordinary financial work on failure.
+  try{if(app?.local&&app.root.pendingSwitchId===null)await app.local.recoverSettings();}
+  finally{await restoreWakeups();}
+}
 
 const secureStorage = Promise.all(['local','session'].map(area =>
   chrome.storage[area].setAccessLevel({accessLevel:'TRUSTED_CONTEXTS'})));
@@ -100,6 +121,14 @@ async function requireView(app,connectionId) {
   return view;
 }
 async function popup(data,app) {
+  if(standalone&&controlCommands.has(data.type)){
+    if(!app)throw new SyncError('not_configured');
+    if(!['storage-status','archive-status','archive-upload-status','archive-export-chunk','local-draft'].includes(data.type))await controls.arm();
+    if(['storage-step','storage-cancel','archive-import-retry','archive-import-cancel','archive-export-retry','archive-export-cancel','local-configure'].includes(data.type))await controls.retry();
+    const value=await controlCommand(data,runtime,app);
+    return {...value,...(value.storage?{controlPause:await controls.pause()}: {})};
+  }
+  if(standalone&&data.type.startsWith('migration-'))throw new SyncError('unsupported_migration_version');
   if(!['status','configure'].includes(data.type))requireApplication(app);
   if(data.type==='migration-status')return requireApplication(app).service.migration.status();
   if(data.type==='migration-prepare-export'){
@@ -116,7 +145,8 @@ async function popup(data,app) {
   if(data.type==='migration-resume')return requireApplication(app).service.migration.resume();
   if (data.type === 'status') {
     const config=app?.config,{view,capture,syncHistory={}} = app ? await app.state.get(['view','capture','syncHistory']) : {};
-    return {configured:!!config?.token,url:config?.url || '',view,capture,reimportFrom:await savedReimport(app,view),
+    return {...(standalone&&app?{storage:await controlStatus(runtime,app),controlPause:await controls.pause()}:{}),
+      configured:!!config?.token,url:app?.context.mode==='local'?'':config?.url || '',view,capture,reimportFrom:await savedReimport(app,view),
       lastSyncedAt:config && view?.connection ? syncHistory[config.url+'|'+view.connection.id] || null : null};
   }
   if (data.type === 'configure') {
@@ -226,7 +256,7 @@ async function recover(error,app) {
   }
 }
 async function tick(app) {
-  if(!app)return;
+  if(!app||standalone&&app.root.pendingSwitchId!==null)return;
   await secureStorage;
   try {
     const state = await (await coordinator(app)).pump();
@@ -245,7 +275,7 @@ async function tick(app) {
 }
 chrome.runtime.onMessage.addListener((data,sender,reply) => {
   serial(async()=>{
-    let app;
+    let app,verificationError=null;
     try {
       await secureStorage;
       if (sender.id !== chrome.runtime.id) throw new SyncError('unauthorized');
@@ -253,11 +283,23 @@ chrome.runtime.onMessage.addListener((data,sender,reply) => {
       const isReport=sender.url?.split('?')[0]===chrome.runtime.getURL('discrepancies.html');
       data=message(data,isPopup?'popup':isReport?'report':'capture');
       app=await runtime.current(data.operation_id);
+      if(standalone&&data.type==='status'){
+        // Read-only verification strengthens old remote bindings; failure must
+        // still expose setup and same-server token repair in the popup.
+        try{app=await runtime.verifySelected(app);}catch(error){
+          if(!['unauthorized','backend_unavailable','permission_required','unsupported_api_version','unsupported_migration_version','invalid_response','zenmoney_unavailable'].includes(error.code))throw error;
+          verificationError=error.code;
+        }
+      }
       assertMessageContext(data.type==='status'?undefined:data.context,app?.context??null);
       const value = await (isPopup ? popup(data,app) : isReport ? discrepancyReport(data,sender,app) : captured(data,sender,app));
-      const selected=data.type==='configure'?await runtime.current(data.operation_id):app;
+      const selected=(data.type==='configure'||standalone&&adoptsControlContext.has(data.type))?await runtime.current(data.operation_id):app;
       if(selected)await selected.assert(true);
-      return {ok:true,...value,...(data.operation_id&&selected?{context:selected.context}:{})};
+      if(standalone){
+        if(data.type==='configure')await controls.retry();
+        await restoreWakeups();
+      }
+      return {ok:true,...value,...(verificationError?{verificationError}:{}),...(data.operation_id&&selected?{context:selected.context}:{})};
     } catch(error) {
       const current=app ? await store.get(app).catch(()=>null) : null;
       const ownsCapture=current?.driver?.runId===data?.runId && current?.tabId===sender.tab?.id && current?.driver?.documentId===sender.documentId;
@@ -269,23 +311,33 @@ chrome.runtime.onMessage.addListener((data,sender,reply) => {
   }).then(reply,()=>reply({ok:false,error:'internal_error'}));
   return true;
 });
-chrome.alarms.onAlarm.addListener(alarm => { if (alarm.name === 'capture') serial(async()=>tick(await runtime.current())); });
+chrome.alarms.onAlarm.addListener(alarm => {
+  serial(async()=>{
+    await secureStorage;
+    if(standalone&&alarm.name===CONTROL_ALARM){await controls.wake();await delivery.restore();}
+    else if(standalone&&alarm.name===DELIVERY_ALARM)await delivery.wake(alarm.name);
+    else if(alarm.name==='capture'){await tick(await runtime.current());if(delivery)await delivery.restore();}
+  }).catch(()=>{});
+});
 chrome.runtime.onStartup.addListener(()=>serial(async()=>{
   await secureStorage;
-  const app=await runtime.current(),state=app ? await store.get(app) : null;
+  const app=await runtime.current();await recoverSettings(app);
+  const state=app ? await store.get(app) : null;
   if(state && ['planned','collecting'].includes(state.phase)) {
     await chrome.alarms.create('capture',{periodInMinutes:.5}); await tick(app);
   }
 }));
 chrome.tabs.onRemoved.addListener(tabId=>serial(async()=>{
   const app=await runtime.current(),state=app ? await store.get(app) : null;
+  if(app?.root.pendingSwitchId!==null&&standalone)return;
   if(state?.tabId===tabId && ['planned','collecting'].includes(state.phase)) await (await coordinator(app)).pause('bank_login_required');
 }));
 // Alarms are not guaranteed to survive every Chrome update/restart. Restore
 // only previously authorized work; never start a new job on page load.
 serial(async()=>{
   await secureStorage;
-  const app=await runtime.current(),state=app ? await store.get(app) : null;
+  const app=await runtime.current();await recoverSettings(app);
+  const state=app ? await store.get(app) : null;
   if(state && (['planned','collecting'].includes(state.phase) ||
       (state.phase==='complete' && ['waiting','running'].includes(state.job?.delivery_state))) &&
       !await chrome.alarms.get('capture')) await chrome.alarms.create('capture',{periodInMinutes:.5});

@@ -62,3 +62,11 @@ test('parallel replies in an unchanged established context remain valid',async()
   :{ok:true,context:{...current,operation_id:data.operation_id}});
  await rpc({type:'status'});const slow=rpc({type:'catalog',slow:true});await rpc({type:'storage-status'});release();await slow;
 });
+
+test('explicit snapshot retry invokes remote retry instead of polling a blocked task',async()=>{
+ const id=crypto.randomUUID(),calls=[],app={assert:async()=>{}};
+ const runtime={controls:()=>({}),archives:()=>({backup:{retry:async value=>{calls.push(value);return {state:'waiting'};}},local:{backupStep:async()=>({phase:'ready'})}})};
+ assert.equal(message(command('archive-export-retry',{id,kind:'remote'}),'popup').type,'archive-export-retry');
+ assert.deepEqual(await controlCommand({type:'archive-export-retry',id,kind:'remote'},runtime,app),{result:{state:'waiting'}});assert.deepEqual(calls,[id]);
+ assert.deepEqual(await controlCommand({type:'archive-export-retry',id,kind:'local'},runtime,app),{result:{phase:'ready'}});
+});

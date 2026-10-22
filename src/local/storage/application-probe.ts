@@ -1,4 +1,5 @@
 /** Offline installed-worker fixtures; never included in the distributed ZIP. */
+import {installBackground} from '../../../extension/background-runtime.js';
 import type {ApplicationService} from '../../application/service.js';
 import {controlCommand} from '../../application/control-api.js';
 import {ApplicationRuntime} from '../../application/runtime.js';
@@ -10,6 +11,7 @@ import {FirstSyncOwner} from './first-sync-owner.js';
 import {FinancialDatabase} from './database.js';
 import Dexie from 'dexie';
 const native=()=> (globalThis as unknown as {chrome:{storage:{local:StorageArea}}}).chrome.storage.local;
+const installedBackgrounds=new Set<string>();
 const runtimes=new Map<string,ApplicationRuntime>();let reads=0,paused=false;let resume:(()=>void)|undefined;let pending:Promise<unknown>|undefined;const clocks=new Map<string,number>();
 function area(name:string):StorageArea{
   const prefix='l5-runtime:'+name+':',source=native();return {
@@ -41,6 +43,7 @@ export async function run(action:string,args:{name:string;patch?:Record<string,u
     if(action==='close'){runtime.close();runtimes.delete(name);return {ok:true};}
     if(action==='delete-db'){runtime.close();runtimes.delete(name);await Dexie.delete(name);return {ok:true};}
     let app=await runtime.current();
+    if(action==='install-background'){if(!installedBackgrounds.has(name)){installBackground({runtime,standalone:true});installedBackgrounds.add(name);}return {ok:true,context:app?.context};}
     if(action==='control'){
       const value=await controlCommand(args.data as Record<string,unknown>,runtime,app!);
       app=await runtime.current();return {ok:true,value,root:app?.root,context:app?.context};

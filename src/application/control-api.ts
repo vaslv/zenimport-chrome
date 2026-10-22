@@ -54,6 +54,7 @@ export async function controlCommand(data:Record<string,unknown>,runtime:Applica
     case 'archive-upload-discard':return {result:await archives.local.discardUpload(id)};
     case 'archive-export-begin':return {result:exportKind(data.kind)==='local'?await archives.local.backupBegin(id,participantUuid(data.generation)):await archives.backup.begin(id)};
     case 'archive-export-step':return {result:exportKind(data.kind)==='local'?await archives.local.backupStep(id):await archives.backup.step(id)};
+    case 'archive-export-retry':return {result:exportKind(data.kind)==='local'?await archives.local.backupStep(id):await archives.backup.retry(id)};
     case 'archive-export-chunk':return {base64:base64(exportKind(data.kind)==='local'?await archives.local.backupChunk(id,index(data.number)):await archives.backup.chunk(id,index(data.number)))};
     case 'archive-export-ack':return {result:exportKind(data.kind)==='local'?await archives.local.backupAcknowledge(id,participantDigest(data.sha256)):await archives.backup.acknowledge(id,participantDigest(data.sha256))};
     case 'archive-export-cancel':return {result:exportKind(data.kind)==='local'?await archives.local.backupCancel(id):await archives.backup.cancel(id)};

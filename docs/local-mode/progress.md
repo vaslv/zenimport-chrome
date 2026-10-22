@@ -1902,3 +1902,23 @@ The adversarial reread has no findings. Docker native settings/background:
 11 passed, one large unrelated case deselected (37.27s); strict/generated checks
 and 275 unit/contracts passed (1555.28ms). Minimum-browser repeat and product
 background integration remain in progress. No live API/data or publication.
+
+### L11 opt-in background dispatch and wakeups checkpoint
+
+The trusted background now accepts named storage/local/archive controls in opt-in
+mode and restores durable delivery/control wakeups. Explicit confirmations and
+first synchronization remain manual. Control work is bounded and can durably pause
+with a stable error; explicit export retry retains the same snapshot request.
+Legacy identity verification failure keeps server setup usable. Independent API
+and adversarial rereads are clean after fixes. See
+reviews/l11-background-controls-2026-10-22.md for exact evidence and limitations.
+
+Docker strict/generated checks plus 278 unit/contracts passed (5968.11ms); native
+background/settings: 11 passed, one large case deselected (37.27s); minimum Chrome
+140 critical background/startup: three passed (165.69s) before final additive
+legacy-error/retry dispatch changes. A real alarm resumes a backup after full
+browser restart without inventing external-download acknowledgement.
+
+Product background.js deliberately remains remote-only until the popup is ready.
+L11 product UI and L12 acceptance are unfinished. No live services/production data,
+push, tags or publication.
