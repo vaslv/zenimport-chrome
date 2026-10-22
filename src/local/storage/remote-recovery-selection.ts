@@ -99,9 +99,17 @@ export class RemoteRecoverySelection{
     if(number<value.uploaded)return value;
     const next={...value,uploaded:number+1,lastError:null};await this.#save(next);return next;
   });}
-  async showPreview(id:string,input:ArchivePreview){
+  async showPreview(id:string,input:ArchivePreview,expectedPreview:string|null){
     return this.#unit(true,async root=>{const value=await this.#read(id);await this.#held(root,value);
-      const preview=archivePreview(input,value.request.archive_sha256),next={...value,preview,lastError:null};await this.#save(next);return next;});
+      const preview=archivePreview(input,value.request.archive_sha256);
+      requireParticipant(!value.cancelRequested,'migration_paused');
+      requireParticipant((value.preview?.id??null)===expectedPreview,'stale_context');
+      // Only a fresh authenticated server preview can retire the previous grant.
+      // Finalize serializes with activation and permanently replaces its ID.
+      const changed=value.preview?.id!==preview.id;
+      if(!changed)requireParticipant(sameJournal(value.preview,preview),'migration_invalid');
+      const next={...value,preview,lastError:null,...(changed?{acceptedPreview:null,activationPreview:null}:{})};
+      await this.#save(next);return next;});
   }
   async previewConsent(id:string,previewId:string|null){
     if(previewId!==null)participantUuid(previewId);

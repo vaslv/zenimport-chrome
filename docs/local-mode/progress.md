@@ -2047,3 +2047,15 @@ writer holds remain unchanged. Native regression tests verify all three entry
 paths and the resulting archive's owner, 1000 movements and unchanged retired Root.
 Independent source review: no findings. Docker integration build/typecheck passed;
 backup/projection/local-archive suites: 14 passed (36.56s), synthetic data only.
+
+### Pre-release correction 2 — expired server recovery previews (2026-10-23)
+
+Consent uses the authenticated server clock. An expired summary is rebuilt with
+new consent; a failed dispatched activation retains its grant until a new server
+preview proves the old ID was retired. Existing exclusive finalize provides this
+fence without a new backend endpoint. Native preview publication compares its
+previous ID to reject late callbacks. Retry resolves an already activated outcome
+forward, including lost replies. Independent read-only review: no findings.
+Docker integration build/typecheck passed; remote archive/controller/native route
+suites: 29 passed (44.25s), including expiry before consent and after dispatch,
+late/revoked activation, unknown success and server-token repair. Synthetic only.

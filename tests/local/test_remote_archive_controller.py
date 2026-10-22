@@ -171,13 +171,45 @@ def test_unknown_activation_cannot_revoke_its_dispatch_and_is_recovered_forward(
             ok(worker,'remote-recovery-accept',NAME,requestId=id,peerId=summary['preview']['id'])
             lost=ok(worker,'remote-recovery-step',NAME,requestId=id,mode='lose-activate')
             assert lost['state']=='blocked' and target.app.state.archives.status(id)['phase']=='activated'
-            denied=authority_call(worker,'remote-recovery-retry',NAME,requestId=id,mode='refresh-preview')
-            assert not denied['ok'] and denied['code']=='migration_paused'
+            recovered=ok(worker,'remote-recovery-retry',NAME,requestId=id,mode='refresh-preview')
+            assert recovered['phase']=='activated'
             # A cancellation requested after the unknown committed activation can
             # only recover the permanent outcome forward, never undo the import.
             result=ok(worker,'remote-recovery-cancel',NAME,requestId=id);assert result['phase']=='activated'
             assert advance(worker,page,id,'complete')['phase']=='activated'
             assert ok(worker,'remote-recovery-ordinary',NAME)['accounts'] and not target.remote.writes
+    finally:target.close()
+
+
+@pytest.mark.parametrize('expiry',['before-consent','after-dispatch'])
+def test_expired_preview_rebuilds_without_reupload_and_requires_new_consent(tmp_path,expiry):
+    raw=archive(tmp_path);target=DeliveryHarness(tmp_path/'target.sqlite3');target.app.state.archives.start()
+    try:
+        with server(target) as url,sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile',hosts=('http://127.0.0.1/*',)) as (_,worker,page,_):
+            id,_,_=prepare(worker,url,raw);summary=advance(worker,page,id,'preview');old=summary['preview']['id']
+            if expiry=='after-dispatch':
+                ok(worker,'remote-recovery-accept',NAME,requestId=id,peerId=old)
+                target.now+=301
+                blocked=ok(worker,'remote-recovery-step',NAME,requestId=id)
+                assert blocked['state']=='blocked' and blocked['error']=='migration_wrong_account'
+                assert ok(worker,'remote-recovery-current',NAME)['activationStarted']
+                ok(worker,'remote-recovery-retry',NAME,requestId=id)
+            else:
+                target.now+=301
+                ok(worker,'remote-recovery-accept',NAME,requestId=id,peerId=old)
+                assert not ok(worker,'remote-recovery-current',NAME)['activationStarted']
+            fresh=advance(worker,page,id,'preview')
+            assert fresh['preview']['id']!=old and fresh['awaitingConfirmation'] and not fresh['activationStarted']
+            assert target.app.state.archives.status(id)['phase']=='preview'
+            assert ok(worker,'current',NAME)['root']['pendingSwitchId']==id
+            # A late callback carrying the retired preview cannot activate it.
+            rejected=target.client.post('/api/v1/migration/archives/'+id+'/activate',json=dict(preview_id=old,accept_summary=True))
+            assert rejected.status_code==409
+            ok(worker,'remote-recovery-accept',NAME,requestId=id,peerId=fresh['preview']['id'])
+            assert advance(worker,page,id,'complete')['phase']=='activated'
+            with storage.transaction(target.path,read_only=True) as db:
+                assert db.execute("SELECT count(*) FROM archive_records WHERE kind='recovery'").fetchone()[0]==1
+            assert not target.remote.writes
     finally:target.close()
 
 

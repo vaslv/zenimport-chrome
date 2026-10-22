@@ -106,9 +106,9 @@ export class RemoteArchiveRecovery{
         await client.archiveAction(id,'finalize');return {state:'waiting',...this.#view(value)};
       }
       if(status.phase==='preview'){
-        if(value.acceptedPreview===null){
-          const preview=await client.archivePreview(id,value.request.archive_sha256);
-          const shown=await this.#selection(owner=>owner.showPreview(id,preview));
+        const preview=await client.archivePreview(id,value.request.archive_sha256);
+        if(value.acceptedPreview===null||preview.id!==value.preview?.id){
+          const shown=await this.#selection(owner=>owner.showPreview(id,preview,value.preview?.id??null));
           return {state:shown.cancelRequested?'working':'preview',...this.#view(shown)};
         }
         const grant=await this.#selection(owner=>owner.dispatchActivation(id,value.acceptedPreview!));
@@ -138,13 +138,27 @@ export class RemoteArchiveRecovery{
   }
   async accept(id:string,previewId:string){
     const value=await this.#selection(owner=>owner.pending(id));requireParticipant(value.phase==='pending','migration_paused');
+    requireParticipant(value.preview?.id===previewId,'migration_incomplete');
+    const peer=await (await this.#client(value)).identity();
+    requireParticipant(peer.installation_id===value.request.installation_id,'migration_invalid');
+    // Use the authenticated server clock, not the browser's wall clock.
+    const age=BigInt(peer.checked_at)-BigInt(value.preview.checked_at);
+    if(age<0n||age>300n)return this.retry(id,true);
     // Consent is durable before dispatch; lost replies resume this exact ID.
     return this.#view(await this.#selection(owner=>owner.previewConsent(id,previewId)));
   }
   async retry(id:string,refreshPreview=false){
     const value=await this.#selection(owner=>owner.pending(id));requireParticipant(value.phase==='pending','migration_paused');
     const client=await this.#client(value);
-    if(refreshPreview){await this.#selection(owner=>owner.previewConsent(id,null));await client.archiveAction(id,'finalize');}
+    // A lost successful activation is permanent; always resolve it forward.
+    try{if((await client.archiveStatus(id)).phase==='activated')return this.step(id);}
+    catch(error){if((error as {code?:string}).code==='not_found')return this.step(id);throw error;}
+    if(refreshPreview||value.lastError==='migration_wrong_account'){
+      // The server's exclusive finalize invalidates the old preview before any
+      // local grant is replaced. A lost reply safely resumes by reading status.
+      if(value.activationPreview===null)await this.#selection(owner=>owner.previewConsent(id,null));
+      await client.archiveAction(id,'finalize');
+    }
     else{try{await client.archiveAction(id,'retry');}catch(error){if((error as {code?:string}).code!=='not_found')throw error;}}
     return this.step(id);
   }
