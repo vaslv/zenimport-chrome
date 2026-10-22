@@ -1948,3 +1948,13 @@ Python/native blocked-validation→same-task retry→same-transfer completion pa
 (4.91s), with no financial SDK writes. Logs:
 /tmp/zenimport-l11-popup-{unit,transfer-retry}.log. Product popup acceptance remains
 in progress. No live API/production data, push, tags or publication.
+
+### L11 review follow-up: clear unverified token drafts
+
+Deleting all text in the local token field now removes its session-only draft
+instead of rejecting the empty input and restoring the old draft on reopening.
+The verified credential is unchanged. The named control keeps type/size and Root
+checks. Native control coverage includes save, clear and readback; the Docker
+17-case archive/control/product run passed (42.87s), including this assertion.
+The Chrome 140 critical repeat passed 6 cases (77.36s). Product UI integration
+and held-operation credential repair remain unfinished. No publication.

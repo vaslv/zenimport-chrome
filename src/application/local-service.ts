@@ -80,6 +80,6 @@ export function localApplication(name:string,sentinel:SentinelPort,area:StorageA
     });
   }
   return {service,recoverSettings:()=>accounts(value=>value.recoverSettings()),readiness:()=>unit(({mirror})=>mirror.readiness()),verify:(token:string)=>unit(({credentials})=>credentials.verify(token)),
-    remove:()=>unit(({credentials})=>credentials.remove()),saveDraft:(token:string)=>unit(({credentials})=>credentials.saveDraft(token)),
+    remove:()=>unit(({credentials})=>credentials.remove()),saveDraft:(token:string)=>unit(({credentials})=>token===''?credentials.cancelDraft():credentials.saveDraft(token)),
     draft:()=>unit(({credentials})=>credentials.draft()),delivery:{next:()=>delivery(value=>value.next()),run:()=>delivery(value=>value.run())}};
 }

@@ -21,6 +21,8 @@ def test_fresh_control_status_token_setup_and_removal_keep_the_same_native_datas
         original=initial['root']['activeGeneration']
         control(worker,'local-draft',token='synthetic-draft-only')
         assert control(worker,'local-draft')['value']['token']=='synthetic-draft-only'
+        control(worker,'local-draft',token='')
+        assert control(worker,'local-draft')['value']['token'] is None
         verified=control(worker,'local-configure',token='synthetic-verified-only')
         assert verified['root']['activeGeneration']==original and verified['root']['credentialRef']
         configured=control(worker,'storage-status')['value']['storage']

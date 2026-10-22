@@ -29,7 +29,8 @@ export async function controlCommand(data:Record<string,unknown>,runtime:Applica
   if(type==='local-draft'){
     requireParticipant(app.local!==undefined&&app.context.mode==='local','stale_context');
     if(data.token===undefined)return {token:await app.local.draft()};
-    await app.assert();await app.local.saveDraft(text(data.token));return {};
+    requireParticipant(typeof data.token==='string'&&data.token.length<=4096,'validation_error');
+    await app.assert();await app.local.saveDraft(data.token);return {};
   }
   if(type==='local-configure'){await runtime.configureLocal(text(data.token),app);return {configured:true};}
   if(type==='local-remove'){requireParticipant(app.local!==undefined,'stale_context');await app.assert();await app.local.remove();return {configured:false};}
