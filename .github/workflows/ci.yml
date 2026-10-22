@@ -15,8 +15,6 @@ jobs:
           persist-credentials: false
       - name: Unit and browser checks with synthetic services
         run: ./scripts/test-docker.sh
-      - name: Offline local storage and SDK probes in current and minimum Chrome
-        run: sh scripts/test-local-runtime.sh
       - name: Reproducible extension archive
         run: |
           sh scripts/build-docker.sh
@@ -32,3 +30,17 @@ jobs:
             dist/SHA256SUMS
           if-no-files-found: error
           retention-days: 14
+
+  local-storage:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [local-runtime-tests, local-chrome140]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Offline native storage and SDK acceptance
+        run: sh scripts/test-local-runtime.sh '${{ matrix.target }}'

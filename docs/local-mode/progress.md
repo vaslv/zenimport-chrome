@@ -2014,3 +2014,26 @@ keyboard/manifest checks on Chrome 140 (60.54s). Full native suite: 514 passed,
 popup and write-boundary reviews have no remaining findings. Incognito is explicitly
 disabled by the manifest as required by the design. Version 0.3.0 is a local candidate.
 L12 release evidence/documentation follows; no production data, push or tags.
+
+### L12 complete — isolated acceptance and local candidate
+
+Required offline gates passed. Backend final suite: 826 tests; strict TypeScript,
+generated schema checks and unit suite: 280; full actual-Python/native local suite:
+514 passed with four explicit interop cases completed by their separate runners.
+Shared contracts/Unicode/exact arithmetic, 49-table codec exchange, financial and
+write-authority interop passed, including minimum Chrome 140. Critical minimum
+crash/transfer/recovery/quota checks passed (12 cases) and the real product flow
+passed separately. Final ZIP UI: 19 current + 3 minimum. All 14 actual-backend
+integration scenarios passed across the documented focused runs.
+
+Independent review fixed the compatibility wording: Chrome 0.3.0 needs backend
+0.3.0 for all remote calls. Existing mode/configuration is preserved but the backend
+must be upgraded first. Candidate docs explain setup, protected tokens, portable
+backup/recovery, explicit transfers, old SQLite archive conversion, profile loss
+and read-only reports. Complete runtime dependency licenses are included.
+
+Candidate 0.3.0 ZIP is reproducible; SHA256 is in release-acceptance.md. Backend
+candidate image is local amd64 at revision 533c8f6; image-only deployment tests
+passed on amd64 and arm64. No production data, new live financial API calls,
+push, Git tags, GitHub Release or registry publication. Optional live write/mobile
+acceptance remains explicitly deferred, not silently considered passed.

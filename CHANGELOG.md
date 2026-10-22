@@ -1,5 +1,15 @@
 # Changelog
 
+## 0.3.0 — unreleased
+
+- Add a browser database and direct ZenMoney access using pinned zenmoney-typescript 0.1.0; retain optional server mode and existing remote installations.
+- Persist capture, matching, category evidence and delivery journals across worker/browser restarts. Preserve mobile edits and deletions.
+- Add verified token setup, portable backups, explicit browser/server transfers, recovery previews and held-operation credential repair. Only one selected database can dispatch.
+- Keep the compact popup and read-only discrepancies; normalize empty filters identically in both modes.
+- Require Chrome 140+ for protected persistent extension storage. All server operation requires backend 0.3.0 with context fencing. Existing remote mode/settings are retained, but upgrade the backend before the extension.
+
+This is a local release candidate, not a published release. See [operation guide](docs/local-mode/operation-guide.md) and [acceptance record](docs/local-mode/release-acceptance.md).
+
 ## 0.2.1 — 2026-10-19
 
 - Add BIDV VND payment-account capture, with bounded date windows and strict
