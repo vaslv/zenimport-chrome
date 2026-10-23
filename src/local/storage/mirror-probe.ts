@@ -1,3 +1,4 @@
+import {forgetSource} from './source-cache.js';
 import {DeliveryAlarms,DELIVERY_ALARM} from '../delivery/alarms.js';
 import type {DeliveryAlarmPort} from '../delivery/alarms.js';
 import {DeliveryScheduleRepository} from './delivery-schedule-repository.js';
@@ -61,7 +62,8 @@ function area(name:string,session=false):StorageArea{
 }
 export async function run(action:string,args:{name:string;now?:number;raw?:string;token?:string;status?:number;permission?:boolean;lease?:MirrorLease;root?:RuntimeControl;force?:boolean;quota?:boolean;delay?:number;summary?:boolean;mode?:string;size?:number;data?:unknown;id?:string;accountId?:string;label?:string;version?:string;intervalId?:string;number?:number}){
   const storage=area(args.name),sentinel=trustedSentinel(storage),now=args.now??1000;let store:MirrorRepository|undefined,calls=0,maxTransactionMs=0;
-  const nativeTransaction=IDBDatabase.prototype.transaction;
+  const nativeTransaction=IDBDatabase.prototype.transaction,nativeScan=RepositoryOwner.prototype.scan;
+  const sourceReads={pages:0,rows:0};RepositoryOwner.prototype.scan=new Proxy(nativeScan,{async apply(target,owner,values){const page=await Reflect.apply(target,owner,values);sourceReads.pages++;sourceReads.rows+=page.rows.length;return page;}});
   IDBDatabase.prototype.transaction=function(...values:Parameters<IDBDatabase['transaction']>){
     const start=performance.now(),tx=nativeTransaction.apply(this,values);
     const finished=()=>{maxTransactionMs=Math.max(maxTransactionMs,performance.now()-start);};
@@ -207,6 +209,15 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       const {root}=await store.context(),reports=await ReportRepository.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       try{result=await reports.build(args.data as ReportRequest,String(now));}finally{reports.close();}
     }
+    if(action==='source-cache-read'||action==='source-cache-compare'){
+      const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
+      try{
+        const start=performance.now(),warm=await readSource(owner),warmReads={...sourceReads};
+        if(action==='source-cache-compare'){forgetSource();const cold=await readSource(owner);const mismatch=Object.keys(warm.rows).filter(name=>JSON.stringify(warm.rows[name as keyof typeof warm.rows])!==JSON.stringify(cold.rows[name as keyof typeof cold.rows]));if(JSON.stringify(warm.stamp)!==JSON.stringify(cold.stamp)||mismatch.length){result={mismatch};return {ok:true,result};}}
+        result={warmReads,rows:Object.values(warm.rows).reduce((n,rows)=>n+rows.length,0),elapsedMs:performance.now()-start};
+      }finally{owner.close();}
+    }
+    if(action==='source-cache-forget')forgetSource();
     if(action==='source-facts'){
       const {root}=await store.context(),owner=await RepositoryOwner.open(args.name,sentinel,{installationId:root.installationId,generation:root.activeGeneration!,epoch:root.epoch});
       try{const source=await readSource(owner),facts=sourceFacts(source);result={stamp:source.stamp,banks:[...facts.banks],revisions:[...facts.revisions],transactions:[...facts.transactions],blockingTransactions:[...facts.blockingTransactions],reviewed:[...facts.reviewed],tags:[...facts.tags],instruments:[...facts.instruments]};}finally{owner.close();}
@@ -393,10 +404,10 @@ export async function run(action:string,args:{name:string;now?:number;raw?:strin
       const tables:Record<string,unknown>={};for(const name of ['zen_mirror_state','zen_entities','zen_movements','zen_sync_runs','zen_tags','zen_tombstones','zen_deletions'] as TableName[])
         tables[name]=args.summary?await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).count():
           (await db.financial(name).where('generation').equals(isMirrorTable(name)?projection:generation).toArray()).map(row=>unpackRow(name,row.row));
-      return {ok:true,result,root,projection,readiness:await mirror.readiness(),tables,calls,maxTransactionMs,sentinel:await sentinel.read(),
+      return {ok:true,result,root,projection,readiness:await mirror.readiness(),tables,calls,maxTransactionMs,sourceReads,sentinel:await sentinel.read(),
         participants:await db.participants.toArray(),predictionCount:await db.financial('category_predictions').where('generation').equals(generation).count(),
         versions:(await db.applicationState.toArray()).filter(row=>row.scope.startsWith('mirror-view:')).map(row=>({scope:row.scope,state:row.value.state})),
         credentialCount:Object.keys(await storage.get(null)).filter(key=>key.startsWith('localCredential:')).length};
     }finally{db.close();}
-  }catch(error){return {ok:false,code:(error as {code?:string}).code??'fixture_failure',calls};}finally{store?.close();IDBDatabase.prototype.transaction=nativeTransaction;}
+  }catch(error){return {ok:false,code:(error as {code?:string}).code??'fixture_failure',calls};}finally{store?.close();IDBDatabase.prototype.transaction=nativeTransaction;RepositoryOwner.prototype.scan=nativeScan;}
 }

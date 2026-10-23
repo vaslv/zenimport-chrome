@@ -14,6 +14,15 @@ export class OutboxRepository{
   private constructor(private name:string,private sentinel:SentinelPort,private owner:RepositoryOwner){}
   static async open(name:string,sentinel:SentinelPort,fence:ContextFence){return new OutboxRepository(name,sentinel,await RepositoryOwner.open(name,sentinel,fence));}
   async status(){return this.owner.outbox();}
+  async observed(id:string){
+    const control=await this.owner.outbox();
+    return this.owner.read(async view=>{
+      if(control?.id!==id||control.phase!=='settled')return false;
+      for(const item of control.items)if(!await view.get('zen_entities',[text('transaction'),text(item.zen_id)])&&
+        !await view.get('zen_tombstones',[text('transaction'),text(item.zen_id)]))return false;
+      return true;
+    });
+  }
   async recover(now:string){
     int64(now);let recovered=0;
     await this.owner.recoverOutbox(now,async(view,control)=>{

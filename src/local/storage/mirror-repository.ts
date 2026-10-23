@@ -1,3 +1,4 @@
+import {sourcePublication} from './source-publication.js';
 import {finishAttempts} from './outbox-write.js';
 import {readOutbox,outboxActive,outboxValue} from './outbox-control.js';
 /** Named mirror repository; all Root, lease, cursor and projection commits are atomic. */
@@ -39,11 +40,13 @@ export class MirrorRepository{
   }
   async #transaction<T>(expected:RuntimeControl|undefined,operation:(view:RepositorySession,root:RuntimeControl)=>Promise<T>){
     const marker=await readAnchor(this.sentinel);
-    return this.db.transaction('rw',this.db.tables,async()=>{
+    let publish:(()=>void)|undefined;
+    const result=await this.db.transaction('rw',this.db.tables,async()=>{
       await assertAnchor(this.db,marker);const {root}=await this.#contextInTransaction(expected);
       const view=new RepositorySession(this.db,root.activeGeneration!,Dexie.currentTransaction!,await mirrorScope(this.db,root.activeGeneration!));
-      try{return await operation(view,root);}finally{view.close();}
+      try{const publication=await sourcePublication(this.db,root,view),result=await operation(view,root);if(publication)publish=await publication();return result;}finally{view.close();}
     });
+    publish?.();return result;
   }
   // The independent marker is read before a native transaction, never awaited
   // through Chrome storage while IDB owns a transaction.
@@ -188,6 +191,7 @@ export class MirrorRepository{
         const previous=(await this.db.applicationState.get('mirror-view:'+source.scope))?.value??{generation:root.activeGeneration,createdAt:now};
         await this.db.applicationState.put({scope:'mirror-view:'+source.scope,value:{...previous,state:'retired',retiredAt:now}});
       }else{await view.insert('zen_sync_runs',run);await writeMirror(this.db,scope,writes);}
+      view.sourceChanges.mirror(batch);
       await view.replace('zen_mirror_state',one,{...state,cursor:batch.cursor,generation:int64(String(BigInt(state.generation)+1n)),needs_full:int64('0'),ready:int64('1'),refreshed_at:int64(now),error_code:null});
       await put(view,'dataset_metadata',[text('zenmoney_refreshed_at')],{key:'zenmoney_refreshed_at',value:now});
       await this.#saveControl(root,initial(staged?scope:source.control.projectionGeneration));

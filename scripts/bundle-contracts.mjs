@@ -47,3 +47,5 @@ await build({entryPoints:['src/local/migration/credentials.ts'],outfile:'.local/
 await build({entryPoints:['src/local/migration/runner.ts'],outfile:'.local/contracts/migration-runner.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
 
 await build({entryPoints:['extension/background-controls.js'],outfile:'.local/contracts/background-controls.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});
+
+await build({entryPoints:['src/local/storage/source-cache.ts'],outfile:'.local/contracts/source-cache.mjs',bundle:true,platform:'browser',format:'esm',target:'chrome140'});

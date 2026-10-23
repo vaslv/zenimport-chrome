@@ -57,6 +57,7 @@ export class RepositoryOwner{
   async #unchanged(view:RepositorySession,expected:FinancialSnapshot){
     requireStorage(JSON.stringify(await this.#stamp(view))===JSON.stringify(expected),'stale_epoch');
   }
+  get sourceCacheKey(){return JSON.stringify([this.db.name,this.fence.installationId]);}
   async snapshot(){return this.read(view=>this.#stamp(view));}
   async scan<K extends TableName>(table:K,stamp:FinancialSnapshot,after:string|null=null){
     requireStorage(!isDerivedCache(table),'schema_unsupported');

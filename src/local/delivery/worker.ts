@@ -32,10 +32,11 @@ export class DeliveryWorker{
       if(batch){
         await this.schedule.progress(lease.id,now(),'sending');
         const reply=await this.sender.send(batch.id);sent=true;
-        // A successful exchange can omit some creates. Fetch the collection
-        // explicitly; unknown absence is never permission to resend.
+        // A complete response already supplied these UUIDs. Use the normal diff
+        // then; an omitted or unknown result still requires the collection.
+        // Neither presence nor absence here grants permission to resend.
         await this.schedule.progress(lease.id,now(),'verifying',reply.error);
-        await this.mirror.refresh({force:true,transactions:true});
+        await this.mirror.refresh({force:true,transactions:reply.outcome!=='response_applied'||!await this.outbox.observed(batch.id)});
       }
       await this.schedule.renew(lease.id,now());
       await this.reconciliation.run([],now());

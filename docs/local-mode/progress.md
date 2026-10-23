@@ -2092,3 +2092,22 @@ loads do not rewrite unchanged live-region text. Independent source/UI review:
 no findings. Docker build/typecheck passed; 4 built-product popup tests and all
 285 unit tests passed, including two completed background polls after invalid ZIP,
 lost acknowledgement and lost cleanup replies. Synthetic data only.
+
+### Pre-release correction 6 — bounded source reuse (2026-10-23)
+
+A single disposable worker cache now follows exact native snapshot receipts after
+commit. Generic writes, bulk capture plans, cascading removals and logical mirror
+publication update source rows; aborts never publish. Unknown revisions, changed
+authority/credentials, restart or exceeded row/text/delta budgets require cold
+reads. Old snapshots remain immutable and primary-key ordered. Oversized mirror
+responses stop before inspecting rows inside the final write transaction. A
+complete SDK response permits the ordinary diff; omitted/unknown creates still
+force the transaction collection and never authorize a repeated create.
+
+Independent review found and resolved unnecessary work after the delta limit;
+final review: no findings. Docker typecheck/build passed; 291 unit tests, 4 native
+cache/volume tests (148.11s) and 92 delivery/mirror/snapshot/reconciliation tests
+(343.98s) passed. One existing Starlette test-client deprecation warning remains.
+At 100k retained transactions, three real cycles sending 41 new transactions read
+82 processing rows each, took 15–16s per cycle and peaked at 2.19GB container-wide.
+See performance.md for exact scope, limits and measurements. Synthetic data only.

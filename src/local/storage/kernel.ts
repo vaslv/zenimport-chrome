@@ -1,3 +1,5 @@
+import {SourceChanges} from './source-cache.js';
+import {sourcePublication} from './source-publication.js';
 import {assertSetup} from './setup-permit.js';
 import {markJobRefresh} from './job-refresh.js';
 /** Internal repository transaction owner. Never import from application handlers. */
@@ -26,6 +28,7 @@ const same=(a:readonly string[],b:readonly string[])=>a.length===b.length && a.e
 
 /** A view cannot outlive its native transaction or open an implicit writer. */
 export class RepositorySession{
+  readonly sourceChanges=new SourceChanges();
   #db:FinancialDatabase;
   #generation:string;
   #owner:Transaction;
@@ -98,7 +101,7 @@ export class RepositorySession{
       const rows=await this.findMany('deliveries',['bank_id'],bankIds.map(id=>[['text',id]]));
       const values=rows.filter((row):row is RowByTable['deliveries']=>row!==null&&row.state==='prepared'&&row.ever_attempted==='0'&&(row.needs_rebuild!=='1'||row.authorized_job_id!==null))
         .map(row=>envelope(this.#generation,'deliveries',packRow('deliveries',{...row,needs_rebuild:'1' as RowByTable['deliveries']['needs_rebuild'],authorized_job_id:null})));
-      if(values.length){await this.#changed('deliveries');await this.#db.financial('deliveries').bulkPut(values);}
+      if(values.length){await this.#changed('deliveries');await this.#db.financial('deliveries').bulkPut(values);for(const value of values)this.sourceChanges.upsert('deliveries',value.key,unpackRow('deliveries',value.row));}
     });
   }
 
@@ -139,7 +142,7 @@ export class RepositorySession{
         if(!checked.has(key)){const snapshot=await this.get('job_accounts',[['text',row.job_id],['text',row.account_id]]);requireStorage(snapshot!==null&&snapshot.settings_version===row.settings_version,'invariant_violation');checked.add(key);}
         values.push(envelope(this.#generation,'capture_intervals',packRow('capture_intervals',row)));
       }
-      if(values.length){await this.#changed('capture_intervals');await this.#db.financial('capture_intervals').bulkAdd(values);}
+      if(values.length){await this.#changed('capture_intervals');await this.#db.financial('capture_intervals').bulkAdd(values);for(const value of values)this.sourceChanges.upsert('capture_intervals',value.key,unpackRow('capture_intervals',value.row));}
     });
   }
 
@@ -235,7 +238,7 @@ export class RepositorySession{
       this.#writeScope(table,table==='dataset_metadata'?[['text',(fields as RowByTable['dataset_metadata']).key]]:undefined);
       const value=envelope(this.#scope(table),table,packRow(table,fields));
       await this.#foreignKeys(table,value.row);await this.#inserting(table,value.row);
-      await this.#changed(table);this.#assert();await this.#db.financial(table).add(value);
+      await this.#changed(table);this.#assert();await this.#db.financial(table).add(value);this.sourceChanges.upsert(table,value.key,fields);
     });
   }
 
@@ -248,7 +251,7 @@ export class RepositorySession{
       requireStorage(old!==null,'constraint_violation');
       await this.#changing(table,old,value.row);await this.#foreignKeys(table,value.row);
       if(JSON.stringify(old)===JSON.stringify(value.row))return;
-      await this.#changed(table);this.#assert();await this.#db.financial(table).put(value);
+      await this.#changed(table);this.#assert();await this.#db.financial(table).put(value);this.sourceChanges.upsert(table,value.key,fields);
     });
   }
 
@@ -273,7 +276,7 @@ export class RepositorySession{
           }else requireStorage(await dependants.first()===undefined,'constraint_violation');
         }
       }
-      await this.#changed(table);this.#assert();await this.#db.financial(table).delete([this.#scope(table),key]);
+      await this.#changed(table);this.#assert();await this.#db.financial(table).delete([this.#scope(table),key]);this.sourceChanges.remove(table,key);
     });
   }
 }
@@ -301,11 +304,11 @@ export async function writeExplicitSyncTransaction<T>(db:FinancialDatabase,senti
 }
 
 async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:ContextFence,operation:(view:RepositorySession,releasing:boolean)=>Promise<T>,mirrorOnly:boolean,setup:boolean,explicit?:{requestId:string;clock:()=>number}):Promise<T>{
-  const scope={...fence};
+  const scope={...fence};let publish:(()=>void)|undefined;
   try{
     await sentinel.markFinancialActivity(scope.installationId);
     const marker=await readAnchor(sentinel,scope.installationId,true);
-    return await db.transaction('rw',db.tables,async()=>{
+    const result=await db.transaction('rw',db.tables,async()=>{
       const runtime=await assertAnchor(db,marker);
       const dataset=datasetControl(await db.datasets.get(scope.generation));
       requireStorage(runtime.installationId===scope.installationId && runtime.activeMode==='local' && runtime.activeGeneration===scope.generation &&
@@ -327,13 +330,16 @@ async function transact<T>(db:FinancialDatabase,sentinel:SentinelPort,fence:Cont
       const owner=Dexie.currentTransaction;requireStorage(owner!==undefined,'storage_corrupt');
       const view=new RepositorySession(db,scope.generation,owner,await mirrorScope(db,scope.generation),mirrorOnly,setup&&authority.awaitingSync);
       try{
+        const publication=await sourcePublication(db,runtime,view);
         const result=await operation(view,releasing);
         if(releasing){
           const at=String(fresh());await db.applicationState.put({scope:'local-first-sync:'+scope.generation,value:{requestId:explicit!.requestId,at,epoch:runtime.epoch,credentialEpoch:runtime.credentialEpoch}});
           fresh();
         }
+        if(publication)publish=await publication();
         return result;
       }finally{view.close();}
     });
+    publish?.();return result;
   }catch(error){throw storageFailure(error);}
 }
