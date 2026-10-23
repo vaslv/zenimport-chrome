@@ -4,7 +4,7 @@ import type {DiscoverConnection} from '../../application/dto.generated.js';
 import type {RepositorySession} from './kernel.js';
 import {RepositoryOwner} from './repository-owner.js';
 import {int64} from './types.js';
-import {discovery,name,text as validText} from '../capture/validation.js';
+import {discovery,name,settings,text as validText} from '../capture/validation.js';
 import {CaptureError,requireCapture} from '../capture/errors.js';
 import {text,get,invalidateAccounts,canonicalSupport} from './capture-policy.js';
 import {canonicalDto} from '../../domain/codec.js';
@@ -75,6 +75,15 @@ export class AccountRepository{
   async configure(id:string,input:unknown,now:string){
     validText(id);const setup=await AccountSettingsOwner.open(this.name,this.sentinel,this.fence);
     try{return await setup.run(id,input,now);}finally{setup.close();}
+  }
+  async needsCatalog(id:string,input:unknown){
+    validText(id);const data=settings(input);
+    return this.owner.read(async view=>{
+      const account=await get(view,'bank_accounts',id);
+      return data.selection==='enabled'&&data.expected_version===account.settings_version&&
+        JSON.stringify([data.selection,data.zenmoney_account_id,data.import_start])!==
+        JSON.stringify([account.selection,account.zenmoney_account_id,account.import_start]);
+    });
   }
   async recoverSettings(){
     const setup=await AccountSettingsOwner.open(this.name,this.sentinel,this.fence);

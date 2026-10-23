@@ -54,7 +54,10 @@ export function localApplication(name:string,sentinel:SentinelPort,area:StorageA
       rename:(id:string,data:{label:string})=>accounts(value=>value.rename(id,data.label)),
       unlink:(id:string,account:string)=>accounts(value=>value.unlink(id,account,now()))},
     accounts:{catalog:()=>unit(({store,credentials,mirror})=>new LocalCatalog(store,credentials,mirror,clock).get()),
-      configure:async(id:string,data:unknown)=>{await setup(undefined,true);return accounts(value=>value.configure(id,data,now()));}},
+      configure:async(id:string,data:unknown)=>{
+        await setup();
+        if(await accounts(value=>value.needsCatalog(id,data)))await unit(({mirror})=>mirror.refresh());
+        return accounts(value=>value.configure(id,data,now()));}},
     capture:{start:async(data:{request_id:string})=>{await setup(data.request_id);return capture(value=>value.start(data,now(),true,clock));},
       get:(id:string)=>capture(value=>value.get(id,now())),lease:(id:string,data:unknown)=>capture(value=>value.lease(id,data,now())),
       page:(id:string,interval:string,number:number,data:unknown)=>capture(value=>value.page(id,interval,number,data,now())),

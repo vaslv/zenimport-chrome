@@ -2059,3 +2059,14 @@ forward, including lost replies. Independent read-only review: no findings.
 Docker integration build/typecheck passed; remote archive/controller/native route
 suites: 29 passed (44.25s), including expiry before consent and after dispatch,
 late/revoked activation, unknown success and server-token repair. Synthetic only.
+
+### Pre-release correction 3 — offline account disabling (2026-10-23)
+
+The local facade now requests a fresh catalog only for a changed enabled mapping
+with the current expected version. Disable and idempotent settings requests do
+not require a ZenMoney network request. Imported first-sync setup and transactional
+version/catalog/dispatch guards remain authoritative. Native regressions verify
+401/503, no extra reads, retained settings version and rejection of a new enabled
+mapping without a valid catalog. Independent source review: no findings.
+Docker build/typecheck and facade/account-settings/SDK-dispatch suites passed:
+37 tests (150.53s), using synthetic data and no external runtime network.

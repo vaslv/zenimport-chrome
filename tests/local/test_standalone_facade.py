@@ -1,5 +1,6 @@
 """Standalone selection through the actual facade and installed native storage."""
 from uuid import uuid4
+from datetime import datetime,timezone,timedelta
 import pytest
 from playwright.sync_api import sync_playwright
 from test_runtime import installed
@@ -49,6 +50,34 @@ def test_named_local_facade_discovers_and_saves_accounts_without_financial_http(
         result=ok(worker,'local-settings',id=account,data=dict(expected_version='0',selection='enabled',zenmoney_account_id='a',import_start='2026-10-01'))
         assert result['root']['activeMode']=='local'
         assert result['state']['capture'] is None
+
+
+@pytest.mark.parametrize('status',[401,503])
+def test_local_settings_can_disable_or_repeat_without_a_live_catalog(tmp_path,status):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        ok(worker,'current');ok(worker,'verify-local')
+        ok(worker,'local-discover',data=discovery(keys=('primary',)))
+        account=worker.evaluate("""()=>new Promise(resolve=>{const r=indexedDB.open('standalone-facade');r.onsuccess=()=>{
+          const db=r.result,t=db.transaction('f_bank_accounts'),q=t.objectStore('f_bank_accounts').getAll();
+          q.onsuccess=()=>resolve(q.result[0].row[0][1]);t.oncomplete=()=>db.close();};})""")
+        start=(datetime.now(timezone.utc)-timedelta(days=30)).date().isoformat()
+        enabled=dict(expected_version='0',selection='enabled',zenmoney_account_id='a',import_start=start)
+        saved=ok(worker,'local-settings',id=account,data=enabled)
+        now=worker.evaluate('()=>Math.floor(Date.now()/1000)');ok(worker,'clock',now=now+301)
+        worker.evaluate("status=>{Response.json=()=>new Response('{}',{status});}",status)
+        repeated=ok(worker,'local-settings',id=account,data=enabled)
+        assert repeated['reads']==saved['reads']
+        ignored=dict(expected_version='1',selection='ignored',zenmoney_account_id=None,import_start=None)
+        disabled=ok(worker,'local-settings',id=account,data=ignored)
+        assert disabled['reads']==saved['reads']
+        assert ok(worker,'local-settings',id=account,data=ignored)['reads']==saved['reads']
+        values=worker.evaluate("""()=>new Promise(resolve=>{const r=indexedDB.open('standalone-facade');r.onsuccess=()=>{
+          const db=r.result,t=db.transaction('f_bank_accounts'),q=t.objectStore('f_bank_accounts').getAll();
+          q.onsuccess=()=>resolve(q.result[0].row);t.oncomplete=()=>db.close();};})""")
+        assert ['text','ignored'] in values and ['integer','2'] in values
+        # A new enabled mapping still needs a fresh verified catalog.
+        denied=call(worker,'local-settings',id=account,data=enabled|dict(expected_version='2'))
+        assert not denied['ok'] and denied['code']==('zenmoney_auth' if status==401 else 'zenmoney_unavailable'),denied
 
 
 def replace_local_generation(worker):
