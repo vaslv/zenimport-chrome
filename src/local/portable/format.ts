@@ -146,3 +146,22 @@ export class TableScanner{
     'table_integrity_mismatch');return item;
   }
 }
+
+/** Verify structured database rows without serializing and reparsing JSON. */
+export class StoredTableScanner{
+  #previous:string|null=null;#count=0;#size=0;#hash=sha256.create();#closed=false;
+  constructor(readonly table:TableName){}
+  push(input:unknown):string{
+    requirePortable(!this.#closed);
+    const {key,bytes}=rowBytes(this.table,input);
+    requirePortable(this.#previous===null||this.#previous<key,'duplicate_or_unordered_key');
+    this.#size+=bytes.length;requirePortable(this.#size<=LIMITS.uncompressed_bytes,'dataset_too_large');
+    this.#previous=key;this.#count++;this.#hash.update(bytes);return key;
+  }
+  finish(expected:TableDescriptor):void{
+    requirePortable(!this.#closed,'invalid_row');this.#closed=true;
+    requirePortable(expected.name===this.table&&expected.filename==='tables/'+this.table+'.ndjson'&&
+      equalList(expected.columns,SCHEMA[this.table].columns.map(column=>column.name))&&
+      expected.rows===this.#count&&expected.bytes===this.#size&&expected.sha256===bytesToHex(this.#hash.digest()),'table_integrity_mismatch');
+  }
+}

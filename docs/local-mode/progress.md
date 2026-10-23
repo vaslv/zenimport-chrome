@@ -2188,3 +2188,15 @@ failures. Full CI remains the publication gate; the release tag is unchanged.
 Independent review also required retiring closed targets from the observer and
 selecting the latest matching live worker, so an idle initial target cannot hide
 the fresh worker which actually replied to the wake message.
+
+### Restore performance release correction
+
+Stored-row scans now validate and hash canonical cells directly, avoiding an
+encode/parse/encode roundtrip through the raw archive parser. Raw ZIP validation,
+per-page authority checks, stored key/envelope validation and independent graph
+proofs remain unchanged. Each full scan recomputes its digest.
+
+Offline Docker verification: 21 restore tests plus the new scanner corruption
+test passed on current Chromium; 22 passed on Chrome 140. Three graph tests
+passed. The original 180-second restore and 3 GiB gates remain in force.
+Independent review: no findings. Full CI remains required before publication.

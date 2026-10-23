@@ -99,3 +99,23 @@ def test_native_stored_capture_keeps_unicode_ascii_expansion_separate_from_wire_
           return {wire:portableProbe.utf8.encode(JSON.stringify(raw)).length,stored:bytes.length,hash:portableProbe.digest(bytes),wireGuard};
         }''',vector)
         assert result==dict(wire=vector['wire_bytes'],stored=vector['stored_bytes'],hash=vector['stored_sha256'],wireGuard=True)
+
+
+def test_stored_scanner_preserves_integrity_and_rejects_corruption(tmp_path):
+    with sync_playwright() as p,installed(p,tmp_path/'extension',tmp_path/'profile') as (_,worker,_,_):
+        assert worker.evaluate(r"""async()=>{
+          const P=portableProbe,table='dataset_metadata',row=[['text','a'],['text','value']];
+          const raw=new P.TableScanner(table,async()=>{});await raw.push(P.canonical(row));const expected=raw.finish();
+          const good=new P.StoredTableScanner(table);good.push(row);good.finish(expected);
+          let rejected=0;
+          function fail(fn){try{fn();}catch{rejected++;return;}throw Error('corruption accepted');}
+          for(const bad of [[['text','a'],['text','\ud800']], [['text','a'],['integer','1']],
+              [['text','a'],['text','x'.repeat(P.LIMITS.row_bytes)]]]){
+            fail(()=>new P.StoredTableScanner(table).push(bad));
+          }
+          for(const key of ['a','0']){const s=new P.StoredTableScanner(table);s.push(row);fail(()=>s.push([['text',key],['text','value']]));}
+          for(const change of [{rows:2},{bytes:0},{sha256:'0'.repeat(64)},{columns:[]},{filename:'wrong'},{name:'wrong'}]){
+            const s=new P.StoredTableScanner(table);s.push(row);fail(()=>s.finish({...expected,...change}));
+          }
+          fail(()=>good.push(row));fail(()=>good.finish(expected));return rejected;
+        }""")==13

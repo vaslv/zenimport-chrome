@@ -12,7 +12,7 @@ import {envelope} from './envelope.js';
 import {stageRecord} from './stage-types.js';
 import type {FinancialDatabase,FinancialEnvelope} from './database.js';
 import type {PortableManifest} from '../portable/format.js';
-import {parseJson,validateManifest,TableScanner,rowBytes} from '../portable/format.js';
+import {parseJson,validateManifest,StoredTableScanner} from '../portable/format.js';
 import {readAnchor} from './anchor.js';
 import {assertImportScope,scopeTables} from './import-scope.js';
 import type {ImportPermit} from './import-scope.js';
@@ -64,7 +64,7 @@ export class StageGraphReader implements GraphReader{
     requireStorage(primaryPrefix.length<=SCHEMA[table].primary.length&&primaryPrefix.every(value=>value[0]!=='null'),'schema_unsupported');
     const prefix=primaryPrefix.length?encodeKey(primaryPrefix):null,whole=primaryPrefix.length===SCHEMA[table].primary.length;
     const lower=prefix===null?Dexie.minKey:prefix+(whole?'':'/'),upper=prefix===null?Dexie.maxKey:prefix+(whole?'':'/\uffff');
-    const scanner=prefix===null?new TableScanner(table,async()=>{}):null;let after:string|null=null;
+    const scanner=prefix===null?new StoredTableScanner(table):null;let after:string|null=null;
     while(true){
       await this.#marker();
       const values=await this.#db.transaction('r',[...scopeTables(this.#db),this.#db.stages,this.#db.financial(table)],async()=>{
@@ -72,7 +72,7 @@ export class StageGraphReader implements GraphReader{
         return this.#db.financial(table).where('[generation+key]').between([this.#id,after??lower],[this.#id,upper],after===null,true).limit(500).toArray();
       });
       if(!values.length)break;
-      for(const value of values){const row=this.#row(table,value);if(scanner)await scanner.push(rowBytes(table,value.row).bytes);yield row;}
+      for(const value of values){const row=this.#row(table,value);if(scanner)scanner.push(value.row);yield row;}
       after=values[values.length-1].key;
     }
     scanner?.finish(expected);

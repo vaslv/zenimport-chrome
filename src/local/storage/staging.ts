@@ -4,10 +4,10 @@ import {restoreIntent,restoreScope} from './restore-control.js';
 import type {ContextFence,SentinelPort,RuntimeControl,DatasetSentinel} from '../../control/types.js';
 import {runtimeControl,datasetControl} from '../../control/validation.js';
 import {readArchive} from '../portable/zip.js';
-import {canonical,parseJson,validateManifest,TableScanner} from '../portable/format.js';
+import {canonical,parseJson,validateManifest,StoredTableScanner} from '../portable/format.js';
 import type {PortableManifest} from '../portable/format.js';
 import type {TableName} from './schema.generated.js';
-import {rowBytes,portableFailure} from '../portable/format.js';
+import {portableFailure} from '../portable/format.js';
 import {envelope} from './envelope.js';
 import {int64,requireStorage,storageFailure} from './types.js';
 import type {StageRecord,StageSummary} from './stage-types.js';
@@ -121,7 +121,7 @@ export async function stageArchive(db:FinancialDatabase,sentinel:SentinelPort,fe
 
 async function verifyStoredFormat(db:FinancialDatabase,fence:ContextFence,id:string,writerId:string,manifest:PortableManifest,markerFence:()=>Promise<void>,anchor:()=>DatasetSentinel,permit?:ImportPermit):Promise<void>{
   for(const entry of manifest.tables){
-    let after:string|null=null;const scanner=new TableScanner(entry.name,async()=>{});
+    let after:string|null=null;const scanner=new StoredTableScanner(entry.name);
     while(true){
       await markerFence();
       const values=await db.transaction('r',[...scopeTables(db),db.stages,db.financial(entry.name)],async()=>{
@@ -130,8 +130,8 @@ async function verifyStoredFormat(db:FinancialDatabase,fence:ContextFence,id:str
       });
       if(!values.length)break;
       for(const value of values){
-        requireStorage(value.generation===id,'storage_corrupt');const row=rowBytes(entry.name,value.row);
-        requireStorage(row.key===value.key,'storage_corrupt');await scanner.push(row.bytes);
+        requireStorage(value.generation===id,'storage_corrupt');const key=scanner.push(value.row);
+        requireStorage(key===value.key,'storage_corrupt');
       }
       after=values[values.length-1].key;
     }
