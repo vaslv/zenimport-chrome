@@ -143,3 +143,13 @@ Two final builds were identical: 32 files, 344,741 bytes. Manifest remains Chrom
 files, source maps, fixture transport or synthetic credentials. The prior hash
 above is historical. No push, Git tag, registry publication or remote CI run was
 performed for these corrections.
+
+## Publication CI harness correction — 2026-10-23
+
+Cold GitHub runners revealed premature evaluations of probe workers and a
+suite-wide memory peak polluted by earlier disposable profiles. The test helper
+now waits for the probe's actual message acknowledgment before direct evaluation.
+The Docker runner performs complete collection and runs every collected module
+in its own offline 3 GiB cgroup, preserving all existing assertions and declared
+interop skips. This changes test infrastructure only; the product ZIP is unchanged.
+Successful complete matrix reruns remain required before publishing the extension.

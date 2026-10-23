@@ -75,11 +75,18 @@ def installed(p,path,profile, *, hosts=(),known_id=None):
             # Explicitly wake the persisted worker through a genuine extension
             # message before waiting for Playwright's worker event.
             page=context.new_page();page.goto(f'chrome-extension://{known_id}/probe.html')
+            page.wait_for_function('()=>typeof globalThis.chrome?.runtime?.sendMessage==="function"')
             page.evaluate('()=>Promise.race([chrome.runtime.sendMessage({type:"probe-wake"}),new Promise((_,reject)=>setTimeout(()=>reject(Error("worker_wake_timeout")),10000))])')
         worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker')
         identifier=worker.url.split('/')[2]
         if page is None:
             page=context.new_page();page.goto(f'chrome-extension://{identifier}/probe.html')
+        # A serviceworker event exposes the target before its module graph and
+        # extension bindings have necessarily finished loading. Require a real
+        # message reply before allowing direct probe evaluations on cold CI hosts.
+        page.wait_for_function('()=>typeof globalThis.chrome?.runtime?.sendMessage==="function"')
+        ready=message(page,{'type':'probe-wake'})
+        assert ready.get('boot')==worker.evaluate('globalThis.boot')
         yield context,worker,page,identifier
     finally:context.close()
 

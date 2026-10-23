@@ -2140,3 +2140,16 @@ Two ZIP rebuilds were identical; inspection passed for 32 files / 344,741 bytes,
 SHA256 abf2be069f55774b95bce1d97e165573ae7ccf0f6d6b1a967dafc4ab49af79ad.
 All seven corrections are complete locally. Production data/containers were not
 changed. No push, tags, publication, live bank calls or live SDK writes occurred.
+
+### Publication CI follow-up — 2026-10-23
+
+The initial publication CI exposed two test-harness assumptions on cold runners:
+the serviceworker target could be evaluated before its probe module graph was
+ready, and a suite-wide cgroup peak included cached profiles from earlier tests.
+The probe installation now requires a genuine `probe-wake` reply from the same
+worker boot. The runtime runner collects the whole catalog first, fails on
+collection errors and executes every collected module in a fresh offline Docker
+container. The 3 GiB limit and existing memory assertions remain unchanged.
+Backend-only import skips remain explicit in the collection log. Independent
+review found no dropped tests, weakened assertions or product-code changes.
+Publication remains gated on successful reruns of the complete runtime matrix.
