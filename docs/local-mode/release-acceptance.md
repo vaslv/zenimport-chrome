@@ -159,3 +159,10 @@ genuine message to wake first-install workers as well as reopened profiles befor
 waiting for their Playwright target. The helper asserts the actual extension ID
 and boot acknowledgment. This avoids relying on an already-missed cold-start
 event; it does not retry financial tests or modify the product manifest/archive.
+
+The restore benchmark now prepares its existing input archive once before timing
+the actual restore pipeline. Previous measurement included creating a synthetic
+ZIP twice, which a real restore does not do. All real verification, load/staging,
+graph validation, preview, activation and the 180 s gate remain; setup and total
+wall times are recorded separately. The 3 GiB memory gate still includes fixture
+preparation. No distributed product code is changed by this probe-only correction.

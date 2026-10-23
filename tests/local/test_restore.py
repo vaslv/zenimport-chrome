@@ -136,22 +136,29 @@ def test_complete_large_recovery_stays_bounded_and_keeps_explicit_sync_fence(tmp
     from pathlib import Path
     import time,json,os
     with sync_playwright() as p,installed(p,tmp_path/'ext',tmp_path/'profile') as (_,worker,_,_):
-        initial=ok(worker,'create','target')['root'];id=str(uuid4());started=time.monotonic();timings={}
-        decision=ok(worker,'restore-begin','target',requestId=id,credentialRef=str(uuid4()),fixture=FIXTURE,count=count)
-        timings['reserved_seconds']=time.monotonic()-started;print('restore resource',count,'reserved',timings['reserved_seconds'],flush=True)
-        assert ok(worker,'restore-load','target',requestId=id,fixture=FIXTURE,count=count)['phase']=='validated'
-        timings['validated_seconds']=time.monotonic()-started;print('restore resource',count,'validated',timings['validated_seconds'],flush=True)
-        preview=ok(worker,'restore-preview','target',requestId=id,fixture=FIXTURE)
-        assert preview['preview']['bankTransactions']==str(len(FIXTURE['rows']['bank_transactions']))
-        ok(worker,'restore-activate','target',requestId=id,peerId=preview['preview']['id'])
-        assert not call(worker,'write','target')['ok']
-        assert ok(worker,'current','target')['root']['activeGeneration']!=initial['activeGeneration']
-        peak=int(Path('/sys/fs/cgroup/memory.peak').read_text());assert 0<peak<3*1024**3
-        timings.update(count=count,elapsed_seconds=time.monotonic()-started,cgroup_peak_bytes=peak,user_agent=worker.evaluate('navigator.userAgent'))
-        Path('/results').mkdir(exist_ok=True);label='chrome140' if os.getenv('CHROME_EXECUTABLE') else 'chromium'
-        Path('/results',f'l10-restore-{label}-{count}.json').write_text(json.dumps(timings))
-        print('restore resource result',json.dumps(timings),flush=True)
-        assert timings['elapsed_seconds']<180
+        initial=ok(worker,'create','target')['root'];id=str(uuid4());setup_started=time.monotonic()
+        # Import starts with an existing ZIP. Do not time creation of synthetic
+        # input files as restoration, or regenerate that file between begin/load.
+        file=ok(worker,'fixture-restore-prepare','target',requestId=id,fixture=FIXTURE,count=count)
+        started=time.monotonic();timings={'fixture_setup_seconds':started-setup_started,'archive_bytes':file['bytes']}
+        try:
+            decision=ok(worker,'restore-begin','target',requestId=id,credentialRef=str(uuid4()),fixture=FIXTURE,count=count,mode='prepared-file')
+            timings['reserved_seconds']=time.monotonic()-started;print('restore resource',count,'reserved',timings['reserved_seconds'],flush=True)
+            assert ok(worker,'restore-load','target',requestId=id,fixture=FIXTURE,count=count,mode='prepared-file')['phase']=='validated'
+            timings['validated_seconds']=time.monotonic()-started;print('restore resource',count,'validated',timings['validated_seconds'],flush=True)
+            preview=ok(worker,'restore-preview','target',requestId=id,fixture=FIXTURE)
+            assert preview['preview']['bankTransactions']==str(len(FIXTURE['rows']['bank_transactions']))
+            ok(worker,'restore-activate','target',requestId=id,peerId=preview['preview']['id'])
+            assert not call(worker,'write','target')['ok']
+            assert ok(worker,'current','target')['root']['activeGeneration']!=initial['activeGeneration']
+            peak=int(Path('/sys/fs/cgroup/memory.peak').read_text());assert 0<peak<3*1024**3
+            timings.update(count=count,elapsed_seconds=time.monotonic()-started,combined_elapsed_seconds=time.monotonic()-setup_started,
+                           cgroup_peak_bytes=peak,user_agent=worker.evaluate('navigator.userAgent'))
+            Path('/results').mkdir(exist_ok=True);label='chrome140' if os.getenv('CHROME_EXECUTABLE') else 'chromium'
+            Path('/results',f'l10-restore-{label}-{count}.json').write_text(json.dumps(timings))
+            print('restore resource result',json.dumps(timings),flush=True)
+            assert timings['elapsed_seconds']<180
+        finally:assert ok(worker,'fixture-restore-release','target',requestId=id) is True
 
 
 def test_changed_manifest_text_never_reuses_cached_identity_or_activation_proof(tmp_path):

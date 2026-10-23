@@ -47,6 +47,7 @@ const owners=new Map<string,MigrationOwner>(),peers=new Map<string,MigrationOwne
 const externalPeers=new Map<string,PeerStatus>();
 const remotePeers=new Map<string,{client:RemoteParticipant;adapter:ServerParticipant}>();
 const modes=new Map<string,string>(),restoreClocks=new Map<string,string>();let checkpoint=false;
+const restoreFixtureFiles=new Map<string,{blob:Blob;count:number;fixture:string}>();
 let release:(()=>void)|undefined;
 function port(name:string){
   const prefix='l4-authority:'+name+':',area=native();
@@ -80,7 +81,14 @@ interface Arguments{
 export async function run(action:string,args:Arguments){
   try{
     let value:unknown;const now='1792540800';
-    if(action==='create'){
+    if(action==='fixture-restore-prepare'){
+      const key=args.name+':'+args.requestId;
+      if(!args.requestId||!args.fixture||!args.count||restoreFixtureFiles.has(key))throw Error('invalid_fixture_file');
+      const blob=await fixtureArchive({golden:args.fixture as Parameters<typeof fixtureArchive>[0]['golden'],count:args.count,mode:'valid-graph'});
+      restoreFixtureFiles.set(key,{blob,count:args.count,fixture:JSON.stringify(args.fixture)});value={bytes:blob.size,count:args.count};
+    }else if(action==='fixture-restore-release'){
+      value=restoreFixtureFiles.delete(args.name+':'+args.requestId);
+    }else if(action==='create'){
       const db=await LocalDatabase.open(args.name,port(args.name),now);db.close();value=await open(args.name);
     }else if(action==='create-remote'){
       const control=await RemoteControl.open(args.name,port(args.name),args.credentialRef!,{url:args.url!,contextId:args.peerId!,legacy:false});control.close();value=await open(args.name);
@@ -233,7 +241,14 @@ export async function run(action:string,args:Arguments){
         const put=IDBObjectStore.prototype.put;
         if(args.mode==='quota-activate'||args.mode==='quota-validated')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&String(values[0]?.scope).startsWith('archive-restore:')&&values[0]?.value?.phase===(args.mode==='quota-activate'?'activated':'validated'))throw new DOMException('synthetic-restore-quota','QuotaExceededError');return put.apply(this,values);};
         if(args.mode==='expire-after-restore-write')IDBObjectStore.prototype.put=function(...values:Parameters<IDBObjectStore['put']>){if(this.name==='application_state'&&values[0]?.value?.phase==='activated')restoreClocks.set(args.name,String(BigInt(values[0].value.preview.checkedAt)+301n));return put.apply(this,values);};
-        const blob=async()=>args.count?fixtureArchive({golden:args.fixture! as Parameters<typeof fixtureArchive>[0]['golden'],count:args.count,mode:'valid-graph'}):new Blob([Uint8Array.from(atob(args.base64!),char=>char.charCodeAt(0))]);
+        const blob=async()=>{
+          if(args.mode==='prepared-file'){
+            const file=restoreFixtureFiles.get(args.name+':'+args.requestId);
+            if(!file||file.count!==args.count||file.fixture!==JSON.stringify(args.fixture))throw Error('missing_fixture_file');
+            return file.blob;
+          }
+          return args.count?fixtureArchive({golden:args.fixture! as Parameters<typeof fixtureArchive>[0]['golden'],count:args.count,mode:'valid-graph'}):new Blob([Uint8Array.from(atob(args.base64!),char=>char.charCodeAt(0))]);
+        };
         try{
           if(action==='restore-begin')value=await restore.begin(args.requestId!,await blob(),args.credentialRef!,{formerWritersRetired:args.mode!=='no-retirement',acceptPostSnapshotEvidenceLoss:args.mode!=='no-loss-consent',replaceInactiveLocalCopy:args.mode==='replace-copy'});
           else if(action==='restore-current')value=await restore.current();

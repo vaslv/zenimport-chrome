@@ -2160,3 +2160,20 @@ probe manifest now uses a stable public development key (no private key is kept)
 so both fresh installs and reopened profiles can explicitly wake the worker via
 `probe.html` before discovering its Playwright target. Matching worker ID and boot
 acknowledgment remain mandatory; no financial assertion or runtime code changes.
+
+The intermediate Chrome 140 CI also exposed a benchmark boundary error: the
+100k restore measurement (200.2 s against 180 s) included generating its source
+ZIP twice. Recovery of an existing archive does not perform either export. The
+probe now explicitly prepares one immutable input Blob outside the restore timer,
+binds it to the request/fixture/count and refuses missing or mismatched inputs.
+Real begin/load/preview/activation and all integrity/write-fence assertions remain
+timed under 180 s. Setup and combined times are reported separately; the 3 GiB
+memory peak still includes setup. Independent review confirmed the boundary error
+before implementation; complete CI remains required for publication.
+
+The corrected restore module passed all 21 cases in both local Docker browsers.
+The 100k pipeline took 89.87 s on Chromium 145 and 138.79 s on Chrome 140; setup
+and combined timings are recorded in `performance.md`. A separate negative probe
+confirmed that missing/mismatched prepared inputs cannot reserve a restore, and
+the matching file follows the real verified pipeline. TypeScript compilation,
+independent diff review and final product ZIP hash checks passed; ZIP unchanged.

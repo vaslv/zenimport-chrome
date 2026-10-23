@@ -40,3 +40,29 @@ asserted below the 180-second cycle lease. These are fixture measurements on thi
 machine, not deployment latency guarantees. Domain reconciliation still traverses
 in-memory history; this correction removes repeated whole-history IndexedDB reads
 and unnecessary full transaction fetches, not all history-dependent CPU work.
+
+## Restore benchmark input boundary
+
+Archive recovery starts with an existing input ZIP. The native restore benchmark
+prepares one synthetic Blob before its restore timer, then passes that exact Blob
+to the real `RestoreOwner.begin` and `load` methods. Full archive verification,
+hashing, IndexedDB staging, graph validation, preview and activation remain inside
+the unchanged 180-second restore budget. The private probe rejects a missing or
+mismatched prepared file instead of silently regenerating it.
+
+The result records `fixture_setup_seconds`, `elapsed_seconds` for restoration and
+`combined_elapsed_seconds` for setup plus restoration. The unchanged 3 GiB cgroup
+peak includes setup too; it is not reset before restoration. This measures the
+RestoreOwner pipeline, not popup upload/file staging or live network latency.
+Earlier results timed two synthetic ZIP generations inside restoration and are
+not directly comparable to this corrected restore-only measurement.
+
+Isolated Docker results on 2026-10-23 (100,000 retained entities; the complete
+21-test restore module passed in each browser):
+
+| Browser | Fixture setup | Restore pipeline | Combined wall time | Container peak |
+|---|---:|---:|---:|---:|
+| Chromium 145 | 5.48 s | 89.87 s | 95.35 s | 1,187,106,816 bytes |
+| Chrome 140 | 8.91 s | 138.79 s | 147.70 s | 1,518,985,216 bytes |
+
+These are measurements on the local Docker host, not guarantees for other CPUs.
