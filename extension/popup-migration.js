@@ -8,11 +8,16 @@ const encode=bytes=>{let text='';for(let i=0;i<bytes.length;i+=32768)text+=Strin
 const decode=text=>Uint8Array.from(atob(text),value=>value.charCodeAt(0));
 const item=(value,label)=>Object.assign(document.createElement('option'),{value,textContent:label});
 export function setupMigration({rpc,refresh,lock,pause}){
-  let state=null,working=false,active=null,ready=[],downloaded=null,previewKey=null;
-  const feedback=(text,tone='neutral')=>{const e=$('migration-status');e.textContent=text;e.dataset.tone=tone;};
+  let state=null,working=false,active=null,ready=[],downloaded=null,previewKey=null,actionError=null,includeFileProgress=false;
+  // Uploading a file does not prove that its restore succeeded. Only durable
+  // operation progress may replace the error from the user's whole action.
+  const progressKey=(includeFile=false)=>JSON.stringify({controls:state?.storage?.controls,archives:{...state?.storage?.archives,file:includeFile?state?.storage?.archives.file:undefined},
+    awaitingSync:state?.storage?.awaitingSync,pause:state?.controlPause});
+  const display=(text,tone='neutral')=>{const e=$('migration-status');if(e.textContent!==text)e.textContent=text;e.dataset.tone=tone;};
+  const feedback=(text,tone='neutral')=>{if(tone==='error')actionError={text,includeFile:includeFileProgress,key:progressKey(includeFileProgress)};display(text,tone);};
   const selected=()=>ready.find(value=>value.id===$('archive-ready').value);
-  async function action(operation){
-    if(working||!state?.storage)return;working=true;lock(true);render();
+  async function action(operation,{includeFile=false}={}){
+    if(working||!state?.storage)return;actionError=null;includeFileProgress=includeFile;working=true;lock(true);render();
     try{await operation();}catch(error){feedback(storageMessages[error.code]||'The result could not be confirmed. Reopen Data migration before retrying.','error');}
     finally{working=false;lock(false);await load({keepMessage:true}).catch(()=>{});render();}
   }
@@ -87,7 +92,10 @@ export function setupMigration({rpc,refresh,lock,pause}){
   async function load({keepMessage=false,value}={}){
     state=value??await rpc({type:'archive-status'});
     const saved=(await chrome.storage.session.get('archiveDownloaded')).archiveDownloaded;
-    downloaded=saved??null;render();if(!keepMessage)feedback(description(),state.controlPause&&state.controlPause.id===active?.id?'error':'neutral');
+    downloaded=saved??null;render();
+    if(keepMessage&&(!actionError||actionError.key===progressKey(actionError.includeFile)))return;
+    if(actionError&&actionError.key===progressKey(actionError.includeFile)){display(actionError.text,'error');return;}
+    actionError=null;display(description(),state.controlPause&&state.controlPause.id===active?.id?'error':'neutral');
   }
   $('migration-settings').addEventListener('toggle',()=>{if($('migration-settings').open&&!working)load().catch(()=>feedback('Could not read migration status.','error'));});
   $('archive-ready').addEventListener('change',render);
@@ -195,6 +203,6 @@ export function setupMigration({rpc,refresh,lock,pause}){
       if(!complete){feedback('Temporary data partly cleared. Click again to continue.');return;}
     }
     feedback('Temporary data cleared. Financial history was kept.','success');
-  }));
+  },{includeFile:true}));
   return {refresh:load,load:value=>load({value})};
 }

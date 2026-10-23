@@ -118,3 +118,22 @@ def test_committed_local_token_recovers_after_first_catalog_failure_without_reop
         expect(page.locator('.account select')).to_contain_text('Synthetic VND',timeout=15000)
         assert len(worker.evaluate('syntheticSdkCalls'))>=3
         assert page.locator('#local-token').input_value()==''
+
+
+def test_product_migration_error_survives_successful_unchanged_status_polling(tmp_path):
+    with sync_playwright() as p,product(p,tmp_path) as (_,worker,page,_):
+        page.locator('#local-token').fill('synthetic-verified');page.locator('#local-connect').click()
+        expect(page.locator('#local-settings')).not_to_have_attribute('open','',timeout=15000)
+        page.locator('#migration-settings > summary').click()
+        page.locator('#retired-writers').check();page.locator('#snapshot-loss').check()
+        page.evaluate("""()=>{globalThis.completedStatusPolls=0;const actual=chrome.runtime.sendMessage.bind(chrome.runtime);
+          chrome.runtime.sendMessage=async(...args)=>{const result=await actual(...args);
+            if(args[0].type==='status')completedStatusPolls++;return result;};}""")
+        page.locator('#migration-file').set_input_files({'name':'invalid.zip','mimeType':'application/zip','buffer':b'not a zip'})
+        expect(page.locator('#migration-status')).to_have_attribute('data-tone','error')
+        message=page.locator('#migration-status').inner_text()
+        assert message
+        before=page.evaluate('completedStatusPolls')
+        page.wait_for_function('before=>completedStatusPolls>=before+2',arg=before)
+        expect(page.locator('#migration-status')).to_have_text(message)
+        expect(page.locator('#migration-status')).to_have_attribute('data-tone','error')

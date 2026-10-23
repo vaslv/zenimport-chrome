@@ -2081,3 +2081,14 @@ credential codes. The private test adapter now preserves LocalZenMoneyError code
 instead of misreporting them as corruption. Independent source/UI review: no
 findings. Docker build/typecheck passed; restore/facade/product-popup suites:
 28 passed (207.44s); unit suite: 281 passed. Synthetic data only, no SDK writes.
+
+### Pre-release correction 5 — persistent migration feedback (2026-10-23)
+
+Migration errors now survive unchanged polling and unrelated readiness timestamps.
+A new user action or confirmed durable operation progress replaces the error;
+intermediate ZIP upload is not restore success. Cleanup separately observes file
+progress, including a successful discard whose reply was lost. Repeated status
+loads do not rewrite unchanged live-region text. Independent source/UI review:
+no findings. Docker build/typecheck passed; 4 built-product popup tests and all
+285 unit tests passed, including two completed background polls after invalid ZIP,
+lost acknowledgement and lost cleanup replies. Synthetic data only.
