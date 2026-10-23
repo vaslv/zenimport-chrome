@@ -70,9 +70,15 @@ def prepare_extension(path, *, hosts=()):
 def installed(p,path,profile, *, hosts=(),known_id=None):
     if not (path/'manifest.json').exists():prepare_extension(path,hosts=hosts)
     options={'executable_path':os.environ['CHROME_EXECUTABLE']} if os.getenv('CHROME_EXECUTABLE') else {'channel':'chromium'}
+    # Load cold probes after the debugger attaches; persisted profiles retain
+    # their original startup and data. The debugging grant is also required
+    # when Chrome reopens an extension initially installed through DevTools.
+    cold=not profile.exists() and known_id is None
+    extension_args=['--enable-unsafe-extension-debugging']
+    if not cold:extension_args += [f'--disable-extensions-except={path}',f'--load-extension={path}']
     context=p.chromium.launch_persistent_context(str(profile),headless=False,
         ignore_default_args=['--disable-extensions'],
-        args=[f'--disable-extensions-except={path}',f'--load-extension={path}','--no-sandbox',
+        args=[*extension_args,'--no-sandbox',
               '--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run'],**options)
     try:
         if known_id:assert known_id==PROBE_ID
@@ -88,6 +94,12 @@ def installed(p,path,profile, *, hosts=(),known_id=None):
             candidate.on('close',closed)
         context.on('serviceworker',observe_worker)
         for candidate in context.service_workers:observe_worker(candidate)
+        if cold:
+            session=context.browser.new_browser_cdp_session()
+            try:
+                result=session.send('Extensions.loadUnpacked',{'path':str(path)})
+                assert result['id']==PROBE_ID
+            finally:session.detach()
         # Explicitly wake fresh and persisted workers alike. Waiting only for a
         # startup event can miss a worker which has already become idle.
         page=context.new_page();page.goto(f'chrome-extension://{PROBE_ID}/probe.html')

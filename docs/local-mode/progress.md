@@ -2200,3 +2200,17 @@ Offline Docker verification: 21 restore tests plus the new scanner corruption
 test passed on current Chromium; 22 passed on Chrome 140. Three graph tests
 passed. The original 180-second restore and 3 GiB gates remain in force.
 Independent review: no findings. Full CI remains required before publication.
+
+### Deterministic cold probe installation
+
+New isolated test profiles now load the probe through Extensions.loadUnpacked
+after Playwright has attached and registered its worker observer. Persisted
+profiles retain startup loading and the same profile; the DevTools debugging
+grant is retained because Chrome requires it for that installation provenance.
+No worker restart, financial retry, data reset or readiness bypass is used.
+This is test instrumentation, not a claim about normal installation without
+debugging flags. Product archives do not include this helper.
+
+Docker checks passed: 22 targeted tests on current Chromium (3 startup/background
+and 19 reconciliation/delivery tests), and the same 22 on Chrome 140. Independent
+review found no issues. Full CI is required before release publication.
