@@ -22,25 +22,34 @@ SDK_STUB='''()=>{
 
 
 @contextmanager
-def product(p,tmp_path,with_bank=False,sdk_url=None):
-    extension=tmp_path/'extension';shutil.copytree('/app/dist/extension',extension)
-    manifest=json.loads((extension/'manifest.json').read_text())
-    manifest['host_permissions']=['https://api.zenmoney.ru/*']+(['https://ipay.vietinbank.vn/*'] if with_bank else [])+(['http://127.0.0.1/*'] if sdk_url else [])
-    (extension/'manifest.json').write_text(json.dumps(manifest))
+def product(p,tmp_path,with_bank=False,sdk_url=None,open_popup=True):
+    extension=tmp_path/'extension'
+    if not extension.exists():
+        shutil.copytree('/app/dist/extension',extension)
+        manifest=json.loads((extension/'manifest.json').read_text())
+        manifest['host_permissions']=['https://api.zenmoney.ru/*']+(['https://ipay.vietinbank.vn/*'] if with_bank else [])+(['http://127.0.0.1/*'] if sdk_url else [])
+        (extension/'manifest.json').write_text(json.dumps(manifest))
+        if sdk_url:
+            # Fixture-only transport redirection survives real worker/browser
+            # restart. Financial/application code is the final built product.
+            (extension/'fixture-network.js').write_text('const actual=globalThis.fetch;\n'
+                'globalThis.fetch=(target,options)=>actual(String(target).startsWith("https://api.zenmoney.ru/")?'
+                +json.dumps(sdk_url)+':target,options);\n')
+            entry=extension/manifest['background']['service_worker']
+            entry.write_text("import './fixture-network.js';\n"+entry.read_text())
     options={'executable_path':os.environ['CHROME_EXECUTABLE']} if os.getenv('CHROME_EXECUTABLE') else {'channel':'chromium'}
     browser=p.chromium.launch_persistent_context(str(tmp_path/'profile'),headless=False,ignore_default_args=['--disable-extensions'],
         args=[f'--disable-extensions-except={extension}',f'--load-extension={extension}','--no-sandbox','--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run'],**options)
     try:
         worker=browser.service_workers[0] if browser.service_workers else browser.wait_for_event('serviceworker')
-        if sdk_url:
-            worker.evaluate('url=>{const actual=globalThis.fetch;globalThis.fetch=(target,options)=>actual(String(target).startsWith("https://api.zenmoney.ru/")?url:target,options);}',sdk_url)
-        else:worker.evaluate(SDK_STUB)
+        if not sdk_url:worker.evaluate(SDK_STUB)
         identifier=worker.url.split('/')[2]
         bank=None
         if with_bank:
             browser.route('https://ipay.vietinbank.vn/**',lambda route:route.fulfill(content_type='text/html',body=Path('/app/tests/browser/bank.html').read_text()))
             bank=browser.new_page();bank.goto('https://ipay.vietinbank.vn/payment-history?accountNo=12345678')
-        page=browser.new_page();page.goto(f'chrome-extension://{identifier}/popup.html')
+        page=browser.new_page()
+        if open_popup:page.goto(f'chrome-extension://{identifier}/popup.html')
         if bank:bank.bring_to_front()
         yield browser,worker,page,identifier
     finally:browser.close()

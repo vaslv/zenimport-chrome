@@ -2111,3 +2111,32 @@ cache/volume tests (148.11s) and 92 delivery/mirror/snapshot/reconciliation test
 At 100k retained transactions, three real cycles sending 41 new transactions read
 82 processing rows each, took 15–16s per cycle and peaked at 2.19GB container-wide.
 See performance.md for exact scope, limits and measurements. Synthetic data only.
+
+### Pre-release correction 7 — independent committed-write restart acceptance (2026-10-23)
+
+The final built product now has an acceptance scenario with a separate HTTP fake
+that commits an actual SDK create, retains it across a forced worker stop and
+complete Chrome/profile restart, and withholds the response until Chrome is gone.
+Before termination the native outbox is dispatching and its immutable attempted
+payload equals the server's UUID/payload; after restart the same dispatching items
+and attempted payload must still exist. The persisted fixture transport is the
+only network substitution; no probe financial owner is installed in the product.
+
+Capture alone is accelerated before the fault. Product delivery alarms are never
+manually created before or during recovery. After restart there is no popup or
+status RPC; read-only storage observation waits for the native watchdog. The
+original request reaches delivered=1, pending/suppressed/uncertain=0, and a fresh
+explicit sync still leaves exactly one creating POST and one remote transaction.
+Independent adversarial review found and resolved an artificial alarm and status
+polling that could mask missing wakeup restoration; final review: no findings.
+
+Docker build/typecheck passed. Product sync/popup suite: 6 passed (298.41s).
+Stronger forced-stop rerun: 1 passed, 1 deselected (227.27s), recovered automatically
+in 180.97s with the dispatching grant still present on restart and exactly one
+create. Additional backup/recovery/account/first-sync/authorization/UI regression:
+63 passed (372.13s), with one existing Starlette deprecation warning. The current
+291 unit tests and 96 focused native source/delivery/mirror cases passed in step 6.
+Two ZIP rebuilds were identical; inspection passed for 32 files / 344,741 bytes,
+SHA256 abf2be069f55774b95bce1d97e165573ae7ccf0f6d6b1a967dafc4ab49af79ad.
+All seven corrections are complete locally. Production data/containers were not
+changed. No push, tags, publication, live bank calls or live SDK writes occurred.

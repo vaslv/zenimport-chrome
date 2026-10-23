@@ -110,3 +110,36 @@ run is claimed because no push occurred.
 Backend image ID: `sha256:4f1c6a78d8a2bedbc51b49935be8b4ee64b29e7e5cd7d649d19e1a2b388837e4`.
 Bank HTML fixture SHA256: `336f42d6b32593b20c874faec33ac7748b1c42a497780ef914a99c7f314124ef`.
 BIDV HTML fixture SHA256: `8d237d0b40786b124be18fbee4b226f6cbfd14fbc2a39fb5104556ab5e6d1267`.
+
+## Pre-release corrections — 2026-10-23
+
+The earlier tables and ZIP hash describe the original acceptance snapshot. Seven
+subsequent corrections are recorded individually in progress.md with local
+commits, Docker checks and independent source review. Backend source remains at
+533c8f6; no new backend-wide test run is claimed for these Chrome-only changes.
+
+The corrections cover published mirror backup ownership, expired recovery
+previews, offline account disabling, credential repair for held browser restores,
+persistent migration errors, bounded source reuse and built-product recovery after
+an independently committed create loses its reply. Performance measurements in
+performance.md concern retained ZenMoney mirror history and 41 newly captured bank
+transactions; they do not measure delivery of 100,000 new bank transactions.
+
+Current Docker evidence: 291 unit tests, 4 native cache/volume cases, 92 focused
+mirror/delivery/reconciliation cases, 63 additional backup/recovery/settings/UI
+cases and 6 built-product popup/sync cases passed. The product restart scenario
+also forcibly terminates the exact service worker while the independent synthetic
+HTTP server holds its successful reply. The restarted profile must still contain
+the dispatching grant and attempted immutable payload before native recovery;
+no popup, status RPC or hand-created delivery alarm participates in recovery.
+A fresh explicit synchronization must preserve the single creating POST.
+The forced-stop rerun and its measured outcome are recorded in progress.md.
+Independent review of the final changes: no findings. These runs use only synthetic
+data and isolated profiles; production data/containers were not changed.
+
+Revised ZIP SHA256: `abf2be069f55774b95bce1d97e165573ae7ccf0f6d6b1a967dafc4ab49af79ad`.
+Two final builds were identical: 32 files, 344,741 bytes. Manifest remains Chrome
+140 minimum and incognito not_allowed. Artifact inspection found no test/probe
+files, source maps, fixture transport or synthetic credentials. The prior hash
+above is historical. No push, Git tag, registry publication or remote CI run was
+performed for these corrections.
