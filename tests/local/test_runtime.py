@@ -14,6 +14,10 @@ import pytest
 from playwright.sync_api import sync_playwright
 
 RESULTS = Path('/results')
+# Public key for the disposable probe only; the private key was discarded.
+# A stable development ID lets a real extension message wake even a cold worker.
+PROBE_PUBLIC_KEY = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAwRxWFATq7e2HanW4taTjR4N6DmtY0gfFy5FXrgCsYu2ZGhjh7sfns/9ax/0L5t+z0KaUnwl2IUrZGVYy1AfKQLzJO30EysXsJsPTyThJyXYRuRmUQib4hZHM4dUzCUo0z3Ygbxr5xzeiP5RvRjxt71QVvxmfdHoH3U6uxWxtrnMhYZNqFULGfeWvGVU5ohnDLmwwNV2TLAT6ktSViYBFHACcs84NQkaTJQOA+kiSEWDCHv18YItjk0Novk3A5JNCO9PmTr9dKWUezdnsp8xXiutNtf0N5On93pVSFt8birXrHVtc0WIp3W8CXLtBJmIQdVTlhLn1oLBnjY7JCPQ+4QIDAQAB'
+PROBE_ID = 'hpolhbkbgmbedllffljgjodpopneempe'
 WORKER = """import * as probe from './feasibility.mjs';
 import * as domain from './domain.mjs';globalThis.domain=domain;
 import * as storageProbe from './storage.mjs';globalThis.storageProbe=storageProbe;
@@ -47,6 +51,7 @@ def prepare_extension(path, *, hosts=()):
     manifest=json.loads((path/'manifest.json').read_text())
     # Probe entry/host grants exist only in this disposable test installation.
     manifest['background']['service_worker']='probe-worker.mjs'
+    manifest['key']=PROBE_PUBLIC_KEY
     manifest['host_permissions']=list(hosts)
     (path/'manifest.json').write_text(json.dumps(manifest))
     (path/'probe-worker.mjs').write_text(WORKER)
@@ -70,22 +75,18 @@ def installed(p,path,profile, *, hosts=(),known_id=None):
         args=[f'--disable-extensions-except={path}',f'--load-extension={path}','--no-sandbox',
               '--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run'],**options)
     try:
-        page=None
-        if known_id:
-            # Explicitly wake the persisted worker through a genuine extension
-            # message before waiting for Playwright's worker event.
-            page=context.new_page();page.goto(f'chrome-extension://{known_id}/probe.html')
-            page.wait_for_function('()=>typeof globalThis.chrome?.runtime?.sendMessage==="function"')
-            page.evaluate('()=>Promise.race([chrome.runtime.sendMessage({type:"probe-wake"}),new Promise((_,reject)=>setTimeout(()=>reject(Error("worker_wake_timeout")),10000))])')
+        if known_id:assert known_id==PROBE_ID
+        # Explicitly wake fresh and persisted workers alike. Waiting only for a
+        # startup event can miss a worker which has already become idle.
+        page=context.new_page();page.goto(f'chrome-extension://{PROBE_ID}/probe.html')
+        page.wait_for_function('()=>typeof globalThis.chrome?.runtime?.sendMessage==="function"')
+        ready=message(page,{'type':'probe-wake'})
         worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker')
         identifier=worker.url.split('/')[2]
-        if page is None:
-            page=context.new_page();page.goto(f'chrome-extension://{identifier}/probe.html')
         # A serviceworker event exposes the target before its module graph and
         # extension bindings have necessarily finished loading. Require a real
         # message reply before allowing direct probe evaluations on cold CI hosts.
-        page.wait_for_function('()=>typeof globalThis.chrome?.runtime?.sendMessage==="function"')
-        ready=message(page,{'type':'probe-wake'})
+        assert identifier==PROBE_ID
         assert ready.get('boot')==worker.evaluate('globalThis.boot')
         yield context,worker,page,identifier
     finally:context.close()

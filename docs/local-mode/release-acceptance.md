@@ -153,3 +153,9 @@ The Docker runner performs complete collection and runs every collected module
 in its own offline 3 GiB cgroup, preserving all existing assertions and declared
 interop skips. This changes test infrastructure only; the product ZIP is unchanged.
 Successful complete matrix reruns remain required before publishing the extension.
+
+The probe-only manifest also has a stable public development key, allowing a
+genuine message to wake first-install workers as well as reopened profiles before
+waiting for their Playwright target. The helper asserts the actual extension ID
+and boot acknowledgment. This avoids relying on an already-missed cold-start
+event; it does not retry financial tests or modify the product manifest/archive.

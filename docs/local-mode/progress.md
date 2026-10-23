@@ -2153,3 +2153,10 @@ container. The 3 GiB limit and existing memory assertions remain unchanged.
 Backend-only import skips remain explicit in the collection log. Independent
 review found no dropped tests, weakened assertions or product-code changes.
 Publication remains gated on successful reruns of the complete runtime matrix.
+
+A subsequent cold-runner timeout occurred before the delivery test entered any
+financial code: an initial worker startup event was not observed. The disposable
+probe manifest now uses a stable public development key (no private key is kept),
+so both fresh installs and reopened profiles can explicitly wake the worker via
+`probe.html` before discovering its Playwright target. Matching worker ID and boot
+acknowledgment remain mandatory; no financial assertion or runtime code changes.
