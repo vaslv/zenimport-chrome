@@ -1,4 +1,5 @@
 import {TransportRepairOwner} from './transport-repair.js';
+import {LocalZenMoneyError} from '../zenmoney/errors.js';
 /** Disposable offline authority fixtures and fault injection, never distributed. */
 import Dexie from 'dexie';
 import {SyncError} from '../../../extension/backend-client.js';
@@ -128,6 +129,7 @@ export async function run(action:string,args:Arguments){
           permission:async()=>true,serverPermission:async()=>false,clock:()=>Number(args.now??now),
           fetch:async(_input:RequestInfo|URL,init?:RequestInit)=>{
             const body=JSON.parse(String(init?.body));if(body.transaction||body.deletion)throw Error('fixture_financial_write_forbidden');
+            if(args.mode==='revoked-local-token')return new Response('{}',{status:401});
             const raw=args.fixture?.rows.zen_sync_runs[0].at(-1)?.[1] as string|undefined;
             return raw?new Response(raw,{headers:{'Content-Type':'application/json'}}):Response.json({serverTimestamp:1792540800,user:[{id:args.mode==='wrong-owner'?2:1}],instrument:[{id:2,shortTitle:'VND'}],account:[],tag:[],transaction:[]});
           }};
@@ -147,6 +149,7 @@ export async function run(action:string,args:Arguments){
           else if(action==='local-archive-restore-begin')value=await files.restoreBegin(args.requestId!,args.token??null,{formerWritersRetired:true,acceptPostSnapshotEvidenceLoss:true});
           else if(action==='local-archive-restore-step')value=await files.restoreStep(args.requestId!);
           else if(action==='local-archive-restore-preview')value=await files.restorePreview(args.requestId!);
+          else if(action==='local-archive-restore-repair')value=await files.restoreRepair(args.requestId!,args.token!);
           else if(action==='local-archive-restore-accept')value=await files.restoreAccept(args.requestId!,args.peerId!);
           else if(action==='local-archive-restore-cancel')value=await files.restoreCancel(args.requestId!);
           else if(action==='local-archive-restore-clean')value=await files.restoreClean(args.requestId!);
@@ -514,5 +517,5 @@ export async function run(action:string,args:Arguments){
       }else throw Error('unsupported_private_probe');
     }
     return {ok:true,value};
-  }catch(error){return {ok:false,code:error instanceof ParticipantError||error instanceof PortableError||error instanceof SyncError?error.code:storageFailure(error).code};}
+  }catch(error){return {ok:false,code:error instanceof ParticipantError||error instanceof PortableError||error instanceof SyncError||error instanceof LocalZenMoneyError?error.code:storageFailure(error).code};}
 }

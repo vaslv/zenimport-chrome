@@ -2070,3 +2070,14 @@ version/catalog/dispatch guards remain authoritative. Native regressions verify
 mapping without a valid catalog. Independent source review: no findings.
 Docker build/typecheck and facade/account-settings/SDK-dispatch suites passed:
 37 tests (150.53s), using synthetic data and no external runtime network.
+
+### Pre-release correction 4 — browser restore credential repair (2026-10-23)
+
+A held local ZIP restore now accepts a replacement token only for the same verified
+owner. Its operation/archive/generation remain unchanged; a fresh nonce revokes
+old callbacks and the old summary must be refreshed before activation. The popup
+exposes this repair for browser restores, and control pauses retain actionable
+credential codes. The private test adapter now preserves LocalZenMoneyError codes
+instead of misreporting them as corruption. Independent source/UI review: no
+findings. Docker build/typecheck passed; restore/facade/product-popup suites:
+28 passed (207.44s); unit suite: 281 passed. Synthetic data only, no SDK writes.

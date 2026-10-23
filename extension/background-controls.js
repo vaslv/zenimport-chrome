@@ -51,5 +51,5 @@ export class ControlAlarms{
     }finally{await this.restore();}
   }
 }
-const errors=new Set(['migration_busy','migration_paused','migration_not_empty','migration_invalid','migration_wrong_account','migration_incomplete','zenmoney_unavailable','backend_unavailable','unauthorized','permission_required','zenmoney_permission','quota_exceeded','recovery_required']);
+const errors=new Set(['migration_busy','migration_paused','migration_not_empty','migration_invalid','migration_wrong_account','migration_incomplete','zenmoney_unavailable','zenmoney_auth','zenmoney_not_configured','zenmoney_wrong_owner','backend_unavailable','unauthorized','permission_required','zenmoney_permission','quota_exceeded','recovery_required']);
 function stableControlError(code){return errors.has(code)?code:'migration_invalid';}

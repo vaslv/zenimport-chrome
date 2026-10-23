@@ -10,6 +10,7 @@ import {ModeTransfers} from '../local/migration/controller.js';
 import {CredentialCandidates} from '../local/zenmoney/candidates.js';
 import {mirrorReader} from '../local/zenmoney/reader.js';
 import {prepareMirror} from '../local/zenmoney/projection.js';
+import {validateManifest,parseJson} from '../local/portable/format.js';
 import {requireParticipant,participantUuid} from '../control/participant-wire.js';
 
 export type LocalArchiveOptions=Omit<StorageControlOptions,'verifyServer'>;
@@ -115,6 +116,14 @@ export class LocalArchives{
     return this.#restoreView(current);
   }
   async restorePreview(id:string){return this.#restoreView(await this.#restore(owner=>owner.preview(id)));}
+  async restoreRepair(id:string,token:string){
+    participantUuid(id);await this.app.assert(true);
+    const current=await this.#restore(owner=>owner.current());
+    requireParticipant(current?.id===id&&['loading','validated','preview'].includes(current.phase),'migration_paused');
+    const owners=validateManifest(parseJson(new TextEncoder().encode(current.manifest))).zenmoney_identity.owner_ids;
+    const candidate=await this.credentials.verifyToken(token,owners);
+    return this.#restoreView(await this.#restore(owner=>owner.replaceCredential(id,candidate.ref)));
+  }
   async restoreAccept(id:string,previewId:string){return this.#restoreView(await this.#restore(owner=>owner.activate(id,previewId,true)));}
   async restoreCancel(id:string){return this.#restoreView(await this.#restore(owner=>owner.cancel(id)));}
   restoreClean(id:string){return this.#restore(owner=>owner.cleanCancelled(id,true));}

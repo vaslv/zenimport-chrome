@@ -136,6 +136,24 @@ export class RestoreOwner{
       fresh();const next={...await this.#read(id),phase:'preview' as const,preview:summary};await this.#save(next);fresh();return next;
     });
   }
+  async replaceCredential(id:string,credentialRef:string){
+    participantUuid(credentialRef);
+    const before=await this.#unit(false,async(_root,marker)=>{
+      const value=await this.#read(id);await this.#guard(value,marker);return value;
+    });
+    const proof=await this.ports.verify(credentialRef);
+    const owners=validateManifest(parseJson(new TextEncoder().encode(before.manifest))).zenmoney_identity.owner_ids;
+    requireParticipant(same(proof.ownerIds,owners),'migration_wrong_account');
+    return this.#unit(true,async(_root,marker)=>{
+      await this.#guard(before,marker);const current=await this.#read(id);
+      requireParticipant(current.nonce===before.nonce,'migration_busy');
+      // Revoke old loading/preview callbacks. The archive and staged generation
+      // stay the same; an already loaded graph only needs a fresh preview.
+      const next={...current,credentialRef,nonce:crypto.randomUUID(),preview:null,
+        phase:current.phase==='loading'?'loading' as const:'validated' as const};
+      await this.#save(next);return next;
+    });
+  }
   async activate(id:string,previewId:string,acceptSummary:boolean){
     participantUuid(previewId);requireParticipant(acceptSummary===true,'migration_paused');
     const value=await this.#unit(false,()=>this.#read(id));if(value.phase==='activated'){requireParticipant(value.preview?.id===previewId);return value;}

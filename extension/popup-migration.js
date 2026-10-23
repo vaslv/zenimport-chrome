@@ -20,10 +20,10 @@ export function setupMigration({rpc,refresh,lock,pause}){
     if(!state)return;
     const s=state.storage,a=s.archives,t=s.controls.transfer,r=a.recovery;
     const pending=!!s.controls.pending;
-    active=t&&(!['complete','cancelled'].includes(t.phase)||t.finishingRepair)?{kind:'move',id:t.id,canCancel:t.canCancel,error:t.error,repairKind:t.finishingRepair?null:'move',serverUrl:t.serverUrl,localRepair:t.direction==='remote-to-local'}
+    active=t&&(!['complete','cancelled'].includes(t.phase)||t.finishingRepair)?{kind:'move',id:t.id,canCancel:t.canCancel,error:t.error,repairKind:t.finishingRepair?null:'move',serverUrl:t.serverUrl,localRepair:t.direction==='remote-to-local'?'local':null}
       :s.controls.join?.phase==='quiescing'?{kind:'move',id:s.controls.join.id,canCancel:true}
       :r&&(r.phase==='pending'||r.cleaning)?{kind:'restore',target:'server',id:r.id,canCancel:r.canCancel,error:r.error,preview:r.awaitingConfirmation?r.preview:null,repairKind:!r.remoteCleaned?'recovery':null,serverUrl:r.serverUrl}
-      :a.restore&&['loading','validated','preview'].includes(a.restore.phase)?{kind:'restore',target:'browser',id:a.restore.id,canCancel:true,preview:a.restore.preview}
+      :a.restore&&['loading','validated','preview'].includes(a.restore.phase)?{kind:'restore',target:'browser',id:a.restore.id,canCancel:true,preview:a.restore.preview,localRepair:'restore'}
       :a.backup&&a.backup.phase!=='complete'?{kind:'export',kindValue:'remote',id:a.backup.id,canCancel:true,error:a.backup.error}
       :a.backups.some(value=>value.phase==='building')?{kind:'export',kindValue:'local',id:a.backups.find(value=>value.phase==='building').id,canCancel:true}
       :a.preparation?.phase==='quiescing'?{kind:'export',kindValue:'local',id:a.preparation.id,canCancel:true}:null;
@@ -163,7 +163,7 @@ export function setupMigration({rpc,refresh,lock,pause}){
       if(!granted)return feedback('Allow access to ZenMoney to verify this token.','error');
       action(async()=>{
         if(!active?.localRepair)throw new SyncError('migration_paused');
-        await rpc({type:'storage-repair',id:active.id,kind:'local',token:$('repair-local-token').value.trim()});
+        await rpc({type:'storage-repair',id:active.id,kind:active.localRepair,token:$('repair-local-token').value.trim()});
         $('repair-local-token').value='';await refresh();feedback('ZenMoney token verified. Retry the saved operation.','success');
       });
     });

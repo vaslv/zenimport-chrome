@@ -36,7 +36,8 @@ export async function controlCommand(data:Record<string,unknown>,runtime:Applica
   if(type==='local-remove'){requireParticipant(app.local!==undefined,'stale_context');await app.assert();await app.local.remove();return {configured:false};}
   const controls=runtime.controls(app),archives=runtime.archives(app);
   if(type==='storage-repair'){
-    requireParticipant(data.kind==='move'||data.kind==='recovery'||data.kind==='local','validation_error');
+    requireParticipant(data.kind==='move'||data.kind==='recovery'||data.kind==='local'||data.kind==='restore','validation_error');
+    if(data.kind==='restore')return {result:await archives.local.restoreRepair(participantUuid(data.id),text(data.token))};
     return {result:await (data.kind==='local'?controls.repairLocal(participantUuid(data.id),text(data.token)):data.kind==='move'?controls.repairServer(participantUuid(data.id),text(data.token)):archives.recovery.repairServer(app,participantUuid(data.id),text(data.token)))};
   }
   if(type==='storage-candidate')return {candidate:await controls.serverCandidate({url:text(data.url),token:text(data.token)})};

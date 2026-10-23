@@ -31,6 +31,13 @@ test('a blocked control is durably paused until explicit retry and exposes only 
  const restarted=new ControlAlarms(f.runtime,f.area,f.alarms);await restarted.wake();assert.equal(f.events.filter(x=>x==='failed').length,1);
  f.controls.step=async()=>{f.storage.controls.transfer=null;return {state:'complete'};};await restarted.retry();await restarted.wake();assert.equal(f.alarm(),undefined);
 });
+test('held controls retain actionable ZenMoney credential errors',async()=>{
+ for(const code of ['zenmoney_auth','zenmoney_not_configured','zenmoney_wrong_owner']){
+  const f=fixture(),id=crypto.randomUUID();f.storage.controls.transfer={id,phase:'importing'};
+  f.controls.step=async()=>{throw Object.assign(Error('private response'),{code});};
+  await f.driver.wake();assert.deepEqual(await f.driver.pause(),{id,error:code});
+ }
+});
 test('worker budgets are bounded and awaiting remote work keeps a periodic watchdog',async()=>{
  const f=fixture(),id=crypto.randomUUID();f.storage.controls.transfer={id,phase:'importing'};let calls=0;
  f.controls.step=async()=>{calls++;return {state:'progress'};};await f.driver.wake();assert.equal(calls,16);assert.equal(f.alarm().periodInMinutes,.5);

@@ -81,3 +81,29 @@ def test_local_restore_cancellation_retains_original_upload_and_cleans_only_unac
         assert ok(worker,'current','target')['root']['activeGeneration']==initial['activeGeneration']
         while not ok(worker,'local-archive-discard','target',requestId=id)['complete']:pass
         assert ok(worker,'local-archive-status','target')['file']['phase']=='cleaned'
+
+
+def test_local_restore_replaces_revoked_same_owner_token_after_restart_and_revokes_old_preview(tmp_path):
+    ext,profile=tmp_path/'ext',tmp_path/'profile'
+    with sync_playwright() as p:
+        with installed(p,ext,profile) as (_,worker,_,identifier):
+            raw,_,_=source_archive(worker);initial=ok(worker,'create','target')['root'];id=upload(worker,'target',raw)
+            ok(worker,'local-archive-restore-begin','target',requestId=id,token='synthetic-recovery-only',fixture=FIXTURE)
+            ok(worker,'local-archive-restore-step','target',requestId=id,fixture=FIXTURE)
+            old=ok(worker,'local-archive-restore-preview','target',requestId=id,fixture=FIXTURE)
+            denied=call(worker,'local-archive-restore-preview','target',requestId=id,mode='revoked-local-token')
+            assert denied['code']=='zenmoney_auth',denied
+        with installed(p,ext,profile,known_id=identifier) as (_,worker,_,_):
+            ok(worker,'open','target');held=ok(worker,'current','target')['root']
+            wrong=call(worker,'local-archive-restore-repair','target',requestId=id,token='synthetic-other-owner',mode='wrong-owner')
+            assert wrong['code']=='zenmoney_wrong_owner',wrong
+            assert ok(worker,'current','target')['root']==held
+            repaired=ok(worker,'local-archive-restore-repair','target',requestId=id,token='synthetic-replacement',fixture=FIXTURE)
+            assert repaired['id']==id and repaired['phase']=='validated' and repaired['preview'] is None
+            assert ok(worker,'current','target')['root']==held
+            assert call(worker,'local-archive-restore-accept','target',requestId=id,peerId=old['preview']['id'])['code']=='migration_incomplete'
+            fresh=ok(worker,'local-archive-restore-preview','target',requestId=id,fixture=FIXTURE)
+            assert fresh['preview']['id']!=old['preview']['id']
+            assert ok(worker,'local-archive-restore-accept','target',requestId=id,peerId=fresh['preview']['id'])['phase']=='activated'
+            selected=ok(worker,'current','target')['root'];assert selected['activeGeneration']!=initial['activeGeneration']
+            assert selected['pendingSwitchId'] is None
