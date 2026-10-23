@@ -76,12 +76,29 @@ def installed(p,path,profile, *, hosts=(),known_id=None):
               '--disable-background-networking','--disable-component-update','--disable-sync','--no-first-run'],**options)
     try:
         if known_id:assert known_id==PROBE_ID
+        # Subscribe before any navigation/message can create the target. A
+        # snapshot followed by wait_for_event can miss an event queued between
+        # those two synchronous Playwright calls on a busy browser.
+        observed=[]
+        def observe_worker(candidate):
+            if candidate in observed:return
+            observed.append(candidate)
+            def closed(*_):
+                if candidate in observed:observed.remove(candidate)
+            candidate.on('close',closed)
+        context.on('serviceworker',observe_worker)
+        for candidate in context.service_workers:observe_worker(candidate)
         # Explicitly wake fresh and persisted workers alike. Waiting only for a
         # startup event can miss a worker which has already become idle.
         page=context.new_page();page.goto(f'chrome-extension://{PROBE_ID}/probe.html')
         page.wait_for_function('()=>typeof globalThis.chrome?.runtime?.sendMessage==="function"')
         ready=message(page,{'type':'probe-wake'})
-        worker=context.service_workers[0] if context.service_workers else context.wait_for_event('serviceworker')
+        deadline=time.monotonic()+30;worker=None
+        while worker is None and time.monotonic()<deadline:
+            worker=next((candidate for candidate in reversed(observed) if candidate.url.startswith(f'chrome-extension://{PROBE_ID}/')),None)
+            if worker is None:page.wait_for_timeout(20)
+        assert worker is not None,'Ready probe worker was not observed by Playwright'
+        context.remove_listener('serviceworker',observe_worker)
         identifier=worker.url.split('/')[2]
         # A serviceworker event exposes the target before its module graph and
         # extension bindings have necessarily finished loading. Require a real

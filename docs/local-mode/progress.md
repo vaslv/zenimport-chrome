@@ -2177,3 +2177,14 @@ and combined timings are recorded in `performance.md`. A separate negative probe
 confirmed that missing/mismatched prepared inputs cannot reserve a restore, and
 the matching file follows the real verified pipeline. TypeScript compilation,
 independent diff review and final product ZIP hash checks passed; ZIP unchanged.
+
+The next Chrome 140 CI exposed a remaining observer race before reconciliation:
+the probe replied to its wake message, but Playwright's target event could arrive
+between reading its worker snapshot and subscribing with `wait_for_event`.
+The helper now subscribes before navigation/wake, includes already-known workers
+and pumps pending events for a bounded interval before requiring the matching
+worker ID/boot. It does not repeat financial operations or suppress readiness
+failures. Full CI remains the publication gate; the release tag is unchanged.
+Independent review also required retiring closed targets from the observer and
+selecting the latest matching live worker, so an idle initial target cannot hide
+the fresh worker which actually replied to the wake message.
