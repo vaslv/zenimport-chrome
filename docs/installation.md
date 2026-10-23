@@ -1,19 +1,19 @@
-# Install and update ZenImport Chrome
+# Install and update ZenImport Chrome 0.3.0
 
-For the unpublished 0.3.0 standalone candidate, use the [browser/server operation guide](local-mode/operation-guide.md). The instructions below describe the earlier server-only releases.
-
-These instructions describe published **0.2.1**. See [release status](release-0.2.1.md).
+See [release notes](release-0.3.0.md) and the [browser/server operation guide](local-mode/operation-guide.md).
 
 ## Requirements
 
-- Desktop Google Chrome 120 or newer with permission to load unpacked extensions.
-- ZenImportBackend 0.2.1 or newer, API v1, running at an address this computer can reach.
-- The backend's `API_TOKEN`. The ZenMoney token is configured on the server only.
+- Desktop Google Chrome 140 or newer with permission to load unpacked extensions.
+- For browser mode: your ZenMoney API token. No backend is required.
+- For optional server mode: ZenImportBackend 0.3.0+ at a reachable address and its
+  `API_TOKEN`. The server stores its own ZenMoney token; never enter a server token
+  in the browser-mode ZenMoney field.
 - An authenticated VietinBank VND current-account history or BIDV English VND
   payment-account page.
 
-The published backend image is `ghcr.io/vaslv/zenimport-backend:0.2.1`.
-Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.2.1.md)
+The backend image for this release is `ghcr.io/vaslv/zenimport-backend:0.3.0`.
+Use its [deployment and verification guide](https://github.com/vaslv/zenimport-backend/blob/main/docs/container-release-0.3.0.md)
 for Docker configuration, HTTPS, persistent data, and backups. A remote backend
 requires HTTPS with a certificate trusted by Chrome. Local HTTP is allowed for
 `http://localhost:18792` and `http://127.0.0.1:18792`.
@@ -25,7 +25,7 @@ not a Chrome Web Store installation; managed browsers may prohibit Developer mod
 ## Download and install
 
 1. Open [Releases](https://github.com/vaslv/zenimport-chrome/releases) and download
-   `zenimport-chrome-0.2.1.zip` and `SHA256SUMS` from the same release.
+   `zenimport-chrome-0.3.0.zip` and `SHA256SUMS` from the same release.
 2. Verify the ZIP before extraction. On macOS, run the following from the directory
    containing both files:
 
@@ -49,11 +49,14 @@ The steps follow Chrome's [unpacked extension instructions](https://developer.ch
 
 1. Sign in to the supported bank yourself and open transaction history for the desired
    account. The extension does not log in or extend an expired bank session.
-2. Open ZenImport's popup. Expand **Server connection** if necessary. Enter the
-   backend's root address, such as `https://your-server.example`, and its
-   **Server token** (`API_TOKEN`). Do not append `/api/v1` to the address.
-3. Click **Connect** and approve Chrome's request for access to that server.
-   Connecting verifies access but does not start synchronization.
+2. Open ZenImport's popup. A new installation uses **Browser database**. In
+   **ZenMoney connection**, enter your ZenMoney token and choose **Verify token**;
+   approve API access. This verifies the owner without starting synchronization.
+3. For optional server mode, expand **Server connection**, enter its root address
+   (without `/api/v1`) and **Server token**, then **Connect** and approve access.
+   Choose explicitly between moving history to an empty server and joining an
+   existing server without import. The [operation guide](local-mode/operation-guide.md)
+   explains both choices and the reverse transfer. Only the selected database sends.
 4. For each discovered bank account, choose the corresponding ZenMoney account or
    **Do not import**. Select the first import date and click **Save account**.
    The default is 30 days ago; **6 months** and a custom date are available.
@@ -81,7 +84,10 @@ Resolve financial edits in ZenMoney.
 
 ## Update without losing settings
 
-1. Finish an active synchronization before updating. Download and verify the new
+1. Finish an active synchronization and keep a verified private backup. In server
+   mode, upgrade the backend to 0.3.0 first, retaining its data volume and journal.
+   Existing server mode/settings remain selected after the extension update.
+   Download and verify the new
    release's ZIP and checksum.
 2. Extract into a temporary directory, then replace the extension files in the
    **same permanent directory originally loaded in Chrome**. Remove obsolete
@@ -97,21 +103,24 @@ identity or remove local settings. Successful connection/account settings and
 capture checkpoints are stored locally; unfinished server/token input is only a
 session draft and is cleared by extension reload. Updates from GitHub are manual.
 
-## Switch backends safely
+## Move data safely
 
-Extension/backend 0.2.0 add a browser-driven move using **Data migration**:
-[export/import instructions](data-migration.md). These buttons are not included in
-the earlier 0.1.9 ZIP or 0.1.0 backend image. The snapshot guidance below also applies
-when using the manual backend procedure.
+Use [browser/server transfers and portable backups](local-mode/operation-guide.md).
+A direct transfer verifies the destination, pauses the source and hands off write
+authority. Moving to an empty destination preserves receipts and deletion history;
+joining an already used server never merges data. A server outage never silently
+activates the inactive browser copy.
 
-Complete any unfinished capture before changing servers. Use the new address and
-the **new backend token** in Connection settings; verify account mappings again.
-Keep the old backend's database and delivery journal backed up. The server can
-match records still present in ZenMoney by bank day and signed amount, but an empty
-database cannot know which imported records you previously deleted. Starting
-with an empty database may recreate those deleted records; preserving deletion
-history requires transferring the journal. See the backend's deployment guide
-before choosing a cutover method.
+For recovery from a backup, stop all former writers, restore onto an eligible
+empty destination, review the fresh preview and explicitly activate. Restore does
+not send transactions; Synchronize is a separate subsequent action. The archive
+excludes credentials and cannot reconstruct changes made after its snapshot.
+Keep it private. Legacy format-1 SQLite archives need backend conversion to
+portable format 2 before browser restore.
+
+An empty database alone cannot know which imported records were deleted in
+ZenMoney. Preserve the delivery journal instead of relying only on day/amount
+matching. Do not run two independent writers from copies of the same database.
 
 ## Troubleshooting and privacy
 

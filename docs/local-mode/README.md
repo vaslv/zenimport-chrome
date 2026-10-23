@@ -1,6 +1,6 @@
 # Phase 2: standalone ZenImport with an optional backend
 
-Date: 2026-10-20. Status: **APPROVED — staged implementation in progress**.
+Date: 2026-10-20. Status: **COMPLETE — released as 0.3.0**.
 Prepared using the office-hours design workflow, building on previously approved
 product decisions. The user authorized sequential implementation with checks and
 local commits on 2026-10-20. See [progress](progress.md) for completed work and gates.

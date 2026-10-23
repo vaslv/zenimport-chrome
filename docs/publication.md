@@ -1,9 +1,9 @@
 # Publishing ZenImport Chrome on GitHub
 
 Repository: https://github.com/vaslv/zenimport-chrome. MIT license.
-Version 0.2.1 is published as a GitHub Release with ZIP and SHA256SUMS; no Chrome
-Web Store publication. [Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.2.1).
-[Verified publication: 0.2.1](release-0.2.1.md).
+Version 0.3.0 uses a GitHub Release with ZIP and SHA256SUMS; no Chrome
+Web Store publication. [Release](https://github.com/vaslv/zenimport-chrome/releases/tag/v0.3.0).
+[Release notes and upgrade requirements](release-0.3.0.md).
 Local origin points to the created repository; its original license is preserved.
 
 ```sh
@@ -36,13 +36,13 @@ supported bank and minimum backend/browser versions, and disclose deferred mobil
 acceptance. This document
 itself publishes nothing.
 
-`zenmoney-python==0.7.0` is published on PyPI. Backend 0.2.0 is published at
-`ghcr.io/vaslv/zenimport-backend:0.2.0` with that pinned SDK dependency; the extension
+`zenmoney-python==0.7.0` is published on PyPI. Backend 0.3.0 is distributed at
+`ghcr.io/vaslv/zenimport-backend:0.3.0` with that pinned SDK dependency; the extension
 connects to the backend HTTPS address and API_TOKEN. The joint Docker checks install
 the SDK from the backend's hash-locked PyPI requirement, not a sibling SDK checkout.
-For published 0.2.1, configure the ZenMoney token on the server only. The local
-0.3.0 candidate accepts a ZenMoney token in **ZenMoney connection** for browser
-mode; **Server connection** still takes only the backend API token.
+Server mode keeps its ZenMoney token on the server. Version 0.3.0 accepts a
+ZenMoney token in **ZenMoney connection** for browser mode; **Server connection**
+still takes only the backend API token.
 Publish compatible backend 0.3.0 migration support before extension 0.3.0.
-Neither candidate is published by these preparation steps.
+These build/check commands do not publish either project by themselves.
 Data details: [PRIVACY.md](../PRIVACY.md).

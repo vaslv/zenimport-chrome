@@ -1,8 +1,8 @@
 # Browser and server operation
 
-This guide describes the unreleased 0.3.0 standalone candidate. The last published
-0.2.1 extension remains server-only. Never load a development build into a profile
-containing your only copy of financial history without a verified backup.
+This guide describes ZenImport 0.3.0 with browser storage and optional server mode.
+Earlier 0.2.1 installations remain server-only until upgraded. Keep a verified
+backup before updating an installation containing financial history.
 
 ## First setup
 
@@ -102,7 +102,7 @@ limited: transaction corrections remain in the official ZenMoney application.
 
 | Extension | Chrome | Storage/backend |
 |---|---|---|
-| 0.3.0 candidate | 140+ | Browser by default; backend 0.3.0+ for all server operation |
+| 0.3.0 | 140+ | Browser by default; backend 0.3.0+ for all server operation |
 | Existing 0.2.1 configuration upgraded in place | 140+ | Mode/settings retained; upgrade the backend to 0.3.0 before the extension |
 | Published 0.2.1 | 120+ | Server-only; backend 0.2.1+ |
 
